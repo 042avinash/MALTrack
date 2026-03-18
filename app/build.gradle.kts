@@ -41,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     lint {
         // Temporary workaround for a known AndroidX lint crash with Kotlin analysis API.
