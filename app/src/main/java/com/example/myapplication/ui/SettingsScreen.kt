@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
@@ -304,7 +305,7 @@ fun SettingsScreen(
                         modifier = Modifier.height(48.dp).padding(bottom = 8.dp)
                     )
                     Text(
-                        text = "MALTrack v1.0",
+                        text = "MALTrack v${BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
