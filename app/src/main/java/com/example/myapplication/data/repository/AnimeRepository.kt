@@ -8,6 +8,7 @@ import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.AnimeResponse
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.MangaDetailsResponse
+import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MangaResponse
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.MyMangaListStatus
@@ -25,7 +26,9 @@ import com.example.myapplication.data.remote.JikanReviewsResponse
 import com.example.myapplication.data.remote.JikanStreamingResponse
 import com.example.myapplication.data.remote.JikanThemesResponse
 import com.example.myapplication.data.remote.MalApiService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import retrofit2.HttpException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -41,6 +44,8 @@ class AnimeRepository @Inject constructor(
     private val prefsManager: UserPreferencesManager
 ) {
     private val clientId = "16b21f717a3e9f733f121971c122db16"
+    private val seasonalAnimeCache = mutableMapOf<String, AnimeResponse>()
+    private val publishingMangaCache = mutableMapOf<String, List<JikanMangaData>>()
 
     private suspend fun isNsfw(): Boolean {
         return prefsManager.nsfwFlow.first()
@@ -51,7 +56,7 @@ class AnimeRepository @Inject constructor(
         else apiService.getAnimeRankingWithLimit(clientId = clientId, limit = limit, rankingType = rankingType, nsfw = isNsfw())
     }
 
-    suspend fun getSeasonalAnime(year: Int? = null, season: String? = null): AnimeResponse {
+    suspend fun getSeasonalAnime(year: Int? = null, season: String? = null, loadAllPages: Boolean = false): AnimeResponse {
         val targetYear: Int
         val targetSeason: String
 
@@ -69,7 +74,40 @@ class AnimeRepository @Inject constructor(
                 else -> "fall"
             }
         }
-        return apiService.getSeasonalAnime(clientId = clientId, year = targetYear, season = targetSeason, nsfw = isNsfw())
+        val nsfwEnabled = isNsfw()
+        val cacheKey = listOf(targetYear, targetSeason, nsfwEnabled, loadAllPages).joinToString("|")
+        seasonalAnimeCache[cacheKey]?.let { return it }
+
+        val limit = 50
+        val allItems = mutableListOf<com.example.myapplication.data.model.AnimeData>()
+        var offset = 0
+
+        while (true) {
+            val response = try {
+                apiService.getSeasonalAnime(
+                    clientId = clientId,
+                    year = targetYear,
+                    season = targetSeason,
+                    limit = limit,
+                    offset = offset,
+                    nsfw = nsfwEnabled
+                )
+            } catch (e: HttpException) {
+                if (e.code() == 429 && allItems.isNotEmpty()) break
+                throw e
+            }
+            if (response.data.isEmpty()) break
+
+            allItems.addAll(response.data)
+
+            if (!loadAllPages || response.data.size < limit) break
+            offset += response.data.size
+            delay(250)
+        }
+
+        return AnimeResponse(data = allItems).also {
+            seasonalAnimeCache[cacheKey] = it
+        }
     }
 
     suspend fun getTopManga(limit: Int = 20, rankingType: String = "all"): MangaResponse {
@@ -77,8 +115,32 @@ class AnimeRepository @Inject constructor(
         else apiService.getMangaRankingWithLimit(clientId = clientId, limit = limit, rankingType = rankingType, nsfw = isNsfw())
     }
 
-    suspend fun getPublishingManga(): List<JikanMangaData> {
-        return jikanApiService.getTopManga(filter = "publishing").data
+    suspend fun getPublishingManga(loadAllPages: Boolean = false): List<JikanMangaData> {
+        val cacheKey = "publishing|$loadAllPages"
+        publishingMangaCache[cacheKey]?.let { return it }
+
+        val allItems = mutableListOf<JikanMangaData>()
+        var page = 1
+
+        while (true) {
+            val response = try {
+                jikanApiService.getTopManga(filter = "publishing", page = page)
+            } catch (e: HttpException) {
+                if (e.code() == 429 && allItems.isNotEmpty()) break
+                throw e
+            }
+            if (response.data.isEmpty()) break
+
+            allItems.addAll(response.data)
+
+            if (!loadAllPages || response.pagination?.has_next_page != true) break
+            page++
+            delay(400)
+        }
+
+        return allItems.also {
+            publishingMangaCache[cacheKey] = it
+        }
     }
 
     suspend fun searchAnime(query: String): AnimeResponse {
@@ -87,6 +149,47 @@ class AnimeRepository @Inject constructor(
     
     suspend fun searchManga(query: String): MangaResponse {
         return apiService.searchManga(clientId = clientId, query = query, nsfw = isNsfw())
+    }
+
+    suspend fun getAnimeSuggestions(limit: Int = 5, offset: Int = 0): AnimeResponse {
+        return apiService.getAnimeSuggestions(clientId = clientId, limit = limit, offset = offset)
+    }
+
+    suspend fun getMangaSuggestions(limit: Int = 5, offset: Int = 0): MangaResponse {
+        return apiService.getMangaSuggestions(clientId = clientId, limit = limit, offset = offset)
+    }
+
+    suspend fun getFallbackMangaRecommendations(limit: Int = 5): List<MangaData> {
+        val seedStatuses = listOf("reading", "completed")
+        val seeds = mutableListOf<UserMangaData>()
+
+        for (status in seedStatuses) {
+            seeds += getUserMangaList(
+                status = status,
+                sort = "list_updated_at",
+                limit = 10
+            ).data
+            if (seeds.size >= 10) break
+        }
+
+        val seenIds = seeds.map { it.node.id }.toMutableSet()
+        val recommendations: MutableList<MangaData> = mutableListOf()
+
+        for (seed in seeds) {
+            val details = runCatching { getMangaDetails(seed.node.id) }.getOrNull() ?: continue
+            val candidates: List<MangaData> = details.recommendations.orEmpty()
+                .sortedByDescending { it.numRecommendations }
+                .map { MangaData(it.node) }
+
+            for (candidate in candidates) {
+                if (candidate.node.id in seenIds) continue
+                seenIds += candidate.node.id
+                recommendations += candidate
+                if (recommendations.size >= limit) return recommendations
+            }
+        }
+
+        return recommendations
     }
 
     suspend fun getAnimeDetails(id: Int): AnimeDetailsResponse {

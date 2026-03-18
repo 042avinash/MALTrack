@@ -197,6 +197,8 @@ class UserListViewModel @Inject constructor(
         _refreshGenerations.value = _refreshGenerations.value + (
             refreshKey to ((_refreshGenerations.value[refreshKey] ?: 0) + 1)
         )
+        statsCache = emptyMap()
+        _searchState.value = UserAnimeSearchState()
         fullAnimeListCache.keys
             .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
             .toList()
@@ -204,9 +206,8 @@ class UserListViewModel @Inject constructor(
                 fullAnimeListCache.remove(it)
                 _loadedLists.value = _loadedLists.value - it
             }
-        if (userListState.value.status == status && userListState.value.username == effectiveUsername) {
-            loadUserList(status, username = effectiveUsername, forceRefresh = true)
-        }
+        _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
+        loadUserList(status, username = effectiveUsername, forceRefresh = true)
     }
 
     fun clearSearch() {

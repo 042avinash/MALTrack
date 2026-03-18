@@ -38,8 +38,18 @@ class UserPreferencesManager @Inject constructor(
     private val defaultMangaStatusKey = stringPreferencesKey("default_manga_status")
     private val defaultAnimeSortKey = stringPreferencesKey("default_anime_sort")
     private val defaultMangaSortKey = stringPreferencesKey("default_manga_sort")
+    private val defaultAnimeDiscoverySortKey = stringPreferencesKey("default_anime_discovery_sort")
+    private val defaultMangaDiscoverySortKey = stringPreferencesKey("default_manga_discovery_sort")
     private val defaultAnimeListStyleKey = booleanPreferencesKey("default_anime_list_style_grid")
     private val defaultMangaListStyleKey = booleanPreferencesKey("default_manga_list_style_grid")
+    private val defaultAnimeDiscoveryStyleKey = booleanPreferencesKey("default_anime_discovery_style_grid")
+    private val defaultMangaDiscoveryStyleKey = booleanPreferencesKey("default_manga_discovery_style_grid")
+    private val homeContinueWatchingEnabledKey = booleanPreferencesKey("home_continue_watching_enabled")
+    private val homeContinueReadingEnabledKey = booleanPreferencesKey("home_continue_reading_enabled")
+    private val homeDiscoveryButtonsEnabledKey = booleanPreferencesKey("home_discovery_buttons_enabled")
+    private val homeRandomAnimeEnabledKey = booleanPreferencesKey("home_random_anime_enabled")
+    private val homeAnimePicksEnabledKey = booleanPreferencesKey("home_anime_picks_enabled")
+    private val homeMangaPicksEnabledKey = booleanPreferencesKey("home_manga_picks_enabled")
     private val episodeNotificationsEnabledKey = booleanPreferencesKey("episode_notifications_enabled")
     private val episodeNotificationBaselineKey = stringPreferencesKey("episode_notification_baselines")
     private val lastUsedSectionKey = stringPreferencesKey("last_used_section")
@@ -89,6 +99,14 @@ class UserPreferencesManager @Inject constructor(
         prefs[defaultMangaSortKey] ?: "list_score"
     }
 
+    val defaultAnimeDiscoverySortFlow: Flow<String> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[defaultAnimeDiscoverySortKey] ?: "members"
+    }
+
+    val defaultMangaDiscoverySortFlow: Flow<String> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[defaultMangaDiscoverySortKey] ?: "members"
+    }
+
     val lastUsedSectionFlow: Flow<String> = context.userPrefsDataStore.data.map { prefs ->
         prefs[lastUsedSectionKey] ?: "anime_list?initialTab=0"
     }
@@ -103,6 +121,38 @@ class UserPreferencesManager @Inject constructor(
 
     val defaultMangaListStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
         prefs[defaultMangaListStyleKey] ?: false
+    }
+
+    val defaultAnimeDiscoveryStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[defaultAnimeDiscoveryStyleKey] ?: false
+    }
+
+    val defaultMangaDiscoveryStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[defaultMangaDiscoveryStyleKey] ?: false
+    }
+
+    val homeContinueWatchingEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeContinueWatchingEnabledKey] ?: true
+    }
+
+    val homeContinueReadingEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeContinueReadingEnabledKey] ?: true
+    }
+
+    val homeDiscoveryButtonsEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeDiscoveryButtonsEnabledKey] ?: true
+    }
+
+    val homeRandomAnimeEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeRandomAnimeEnabledKey] ?: true
+    }
+
+    val homeAnimePicksEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeAnimePicksEnabledKey] ?: true
+    }
+
+    val homeMangaPicksEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeMangaPicksEnabledKey] ?: true
     }
 
     val episodeNotificationBaselinesFlow: Flow<Map<String, Int>> = context.userPrefsDataStore.data.map { prefs ->
@@ -155,6 +205,18 @@ class UserPreferencesManager @Inject constructor(
         }
     }
 
+    suspend fun saveDefaultAnimeDiscoverySort(sortMode: String) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[defaultAnimeDiscoverySortKey] = sortMode
+        }
+    }
+
+    suspend fun saveDefaultMangaDiscoverySort(sortMode: String) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[defaultMangaDiscoverySortKey] = sortMode
+        }
+    }
+
     suspend fun saveLastUsedSection(route: String) {
         context.userPrefsDataStore.edit { prefs -> prefs[lastUsedSectionKey] = route }
     }
@@ -172,6 +234,72 @@ class UserPreferencesManager @Inject constructor(
     suspend fun saveDefaultMangaListStyle(isGrid: Boolean) {
         context.userPrefsDataStore.edit { prefs ->
             prefs[defaultMangaListStyleKey] = isGrid
+        }
+    }
+
+    suspend fun saveDefaultAnimeDiscoveryStyle(isGrid: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[defaultAnimeDiscoveryStyleKey] = isGrid
+        }
+    }
+
+    suspend fun saveDefaultMangaDiscoveryStyle(isGrid: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[defaultMangaDiscoveryStyleKey] = isGrid
+        }
+    }
+
+    suspend fun saveHomeContinueWatchingEnabled(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeContinueWatchingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeContinueReadingEnabled(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeContinueReadingEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeDiscoveryButtonsEnabled(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeDiscoveryButtonsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeRandomAnimeEnabled(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeRandomAnimeEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeAnimePicksEnabled(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeAnimePicksEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeMangaPicksEnabled(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeMangaPicksEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeSections(
+        continueWatchingEnabled: Boolean,
+        continueReadingEnabled: Boolean,
+        discoveryButtonsEnabled: Boolean,
+        randomAnimeEnabled: Boolean,
+        animePicksEnabled: Boolean,
+        mangaPicksEnabled: Boolean
+    ) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeContinueWatchingEnabledKey] = continueWatchingEnabled
+            prefs[homeContinueReadingEnabledKey] = continueReadingEnabled
+            prefs[homeDiscoveryButtonsEnabledKey] = discoveryButtonsEnabled
+            prefs[homeRandomAnimeEnabledKey] = randomAnimeEnabled
+            prefs[homeAnimePicksEnabledKey] = animePicksEnabled
+            prefs[homeMangaPicksEnabledKey] = mangaPicksEnabled
         }
     }
 

@@ -176,6 +176,8 @@ class UserMangaListViewModel @Inject constructor(
         _refreshGenerations.value = _refreshGenerations.value + (
             refreshKey to ((_refreshGenerations.value[refreshKey] ?: 0) + 1)
         )
+        statsCache = emptyMap()
+        _searchState.value = UserMangaSearchState()
         fullMangaListCache.keys
             .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
             .toList()
@@ -183,9 +185,8 @@ class UserMangaListViewModel @Inject constructor(
                 fullMangaListCache.remove(it)
                 _loadedLists.value = _loadedLists.value - it
             }
-        if (userMangaListState.value.status == status && userMangaListState.value.username == effectiveUsername) {
-            loadUserMangaList(status, username = effectiveUsername, forceRefresh = true)
-        }
+        _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
+        loadUserMangaList(status, username = effectiveUsername, forceRefresh = true)
     }
 
     fun clearSearch() {

@@ -59,6 +59,18 @@ class SettingsViewModel @Inject constructor(
         initialValue = "list_score"
     )
 
+    val defaultAnimeDiscoverySort = prefsManager.defaultAnimeDiscoverySortFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "members"
+    )
+
+    val defaultMangaDiscoverySort = prefsManager.defaultMangaDiscoverySortFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "members"
+    )
+
     val lastUsedSection = prefsManager.lastUsedSectionFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -83,10 +95,58 @@ class SettingsViewModel @Inject constructor(
         initialValue = false
     )
 
+    val defaultAnimeDiscoveryStyleIsGrid = prefsManager.defaultAnimeDiscoveryStyleFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val defaultMangaDiscoveryStyleIsGrid = prefsManager.defaultMangaDiscoveryStyleFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
     val episodeNotificationsEnabled = prefsManager.episodeNotificationsEnabledFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = false
+    )
+
+    val homeContinueWatchingEnabled = prefsManager.homeContinueWatchingEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val homeContinueReadingEnabled = prefsManager.homeContinueReadingEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val homeDiscoveryButtonsEnabled = prefsManager.homeDiscoveryButtonsEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val homeRandomAnimeEnabled = prefsManager.homeRandomAnimeEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val homeAnimePicksEnabled = prefsManager.homeAnimePicksEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val homeMangaPicksEnabled = prefsManager.homeMangaPicksEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
     )
 
     fun setThemePreference(preference: ThemePreference) {
@@ -124,6 +184,14 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefsManager.saveDefaultMangaSort(sort) }
     }
 
+    fun setDefaultAnimeDiscoverySort(sort: String) {
+        viewModelScope.launch { prefsManager.saveDefaultAnimeDiscoverySort(sort) }
+    }
+
+    fun setDefaultMangaDiscoverySort(sort: String) {
+        viewModelScope.launch { prefsManager.saveDefaultMangaDiscoverySort(sort) }
+    }
+
     fun setLastUsedSection(route: String) {
         viewModelScope.launch { prefsManager.saveLastUsedSection(route) }
     }
@@ -147,7 +215,61 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefsManager.saveDefaultMangaListStyle(isGrid) }
     }
 
+    fun setDefaultAnimeDiscoveryStyle(isGrid: Boolean) {
+        viewModelScope.launch { prefsManager.saveDefaultAnimeDiscoveryStyle(isGrid) }
+    }
+
+    fun setDefaultMangaDiscoveryStyle(isGrid: Boolean) {
+        viewModelScope.launch { prefsManager.saveDefaultMangaDiscoveryStyle(isGrid) }
+    }
+
     fun setEpisodeNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch { prefsManager.saveEpisodeNotificationsEnabled(enabled) }
+    }
+
+    fun setHomeContinueWatchingEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeContinueWatchingEnabled(enabled) }
+    }
+
+    fun setHomeContinueReadingEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeContinueReadingEnabled(enabled) }
+    }
+
+    fun setHomeDiscoveryButtonsEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeDiscoveryButtonsEnabled(enabled) }
+    }
+
+    fun setHomeRandomAnimeEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeRandomAnimeEnabled(enabled) }
+    }
+
+    fun setHomeAnimePicksEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeAnimePicksEnabled(enabled) }
+    }
+
+    fun setHomeMangaPicksEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeMangaPicksEnabled(enabled) }
+    }
+
+    fun setHomeSectionsAndThen(
+        continueWatchingEnabled: Boolean,
+        continueReadingEnabled: Boolean,
+        discoveryButtonsEnabled: Boolean,
+        randomAnimeEnabled: Boolean,
+        animePicksEnabled: Boolean,
+        mangaPicksEnabled: Boolean,
+        onSaved: () -> Unit
+    ) {
+        viewModelScope.launch {
+            prefsManager.saveHomeSections(
+                continueWatchingEnabled = continueWatchingEnabled,
+                continueReadingEnabled = continueReadingEnabled,
+                discoveryButtonsEnabled = discoveryButtonsEnabled,
+                randomAnimeEnabled = randomAnimeEnabled,
+                animePicksEnabled = animePicksEnabled,
+                mangaPicksEnabled = mangaPicksEnabled
+            )
+            onSaved()
+        }
     }
 }

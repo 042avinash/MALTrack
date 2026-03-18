@@ -238,6 +238,18 @@ class MainActivity : ComponentActivity() {
                                 onMangaClick = { mangaId ->
                                     navController.navigate("manga_details/$mangaId")
                                 },
+                                onOpenAnimeUserList = {
+                                    navigateToBottomDestination(
+                                        route = "user_list?mainTab=0&subTab=1",
+                                        destinationPrefix = "user_list"
+                                    )
+                                },
+                                onOpenMangaUserList = {
+                                    navigateToBottomDestination(
+                                        route = "user_list?mainTab=1&subTab=1",
+                                        destinationPrefix = "user_list"
+                                    )
+                                },
                                 onSettingsClick = {
                                     navController.navigate("settings")
                                 }

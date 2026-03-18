@@ -12,7 +12,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -31,6 +34,8 @@ import java.util.concurrent.TimeUnit
 
 private const val AIRING_NOTIFICATION_CHANNEL_ID = "airing_updates"
 private const val AIRING_NOTIFICATION_WORK_NAME = "airing_notification_work"
+private const val AIRING_NOTIFICATION_IMMEDIATE_WORK_NAME = "airing_notification_immediate_work"
+private const val INPUT_IS_TEST_NOTIFICATION = "is_test_notification"
 
 object AiringNotificationScheduler {
     fun schedule(context: Context) {
@@ -44,8 +49,33 @@ object AiringNotificationScheduler {
         )
     }
 
+    fun triggerNow(context: Context) {
+        val request = OneTimeWorkRequestBuilder<AiringNotificationWorker>().build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            AIRING_NOTIFICATION_IMMEDIATE_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+    }
+
+    fun triggerTest(context: Context) {
+        val request = OneTimeWorkRequestBuilder<AiringNotificationWorker>()
+            .setInputData(
+                Data.Builder()
+                    .putBoolean(INPUT_IS_TEST_NOTIFICATION, true)
+                    .build()
+            )
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            AIRING_NOTIFICATION_IMMEDIATE_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+    }
+
     fun cancel(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(AIRING_NOTIFICATION_WORK_NAME)
+        WorkManager.getInstance(context).cancelUniqueWork(AIRING_NOTIFICATION_IMMEDIATE_WORK_NAME)
     }
 }
 
@@ -74,6 +104,16 @@ class AiringNotificationWorker(
         createNotificationChannel()
 
         return runCatching {
+            if (inputData.getBoolean(INPUT_IS_TEST_NOTIFICATION, false)) {
+                postNotification(
+                    animeId = Int.MAX_VALUE,
+                    title = "MALTrack",
+                    airedEpisode = 1,
+                    isTest = true
+                )
+                return Result.success()
+            }
+
             val repository = entryPoint.repository()
             val prefsManager = entryPoint.preferencesManager()
 
@@ -107,11 +147,7 @@ class AiringNotificationWorker(
 
                 if (nextEpisode > previousBaseline) {
                     val airedEpisode = nextEpisode - 1
-                    postNotification(
-                        animeId = anime.node.id,
-                        title = anime.node.getPreferredTitle(TitleLanguage.ROMAJI),
-                        airedEpisode = airedEpisode
-                    )
+                    postNotification(anime.node.id, anime.node.getPreferredTitle(TitleLanguage.ROMAJI), airedEpisode)
                     baselines[key] = nextEpisode
                     baselinesChanged = true
                 }
@@ -154,7 +190,7 @@ class AiringNotificationWorker(
         }
     }
 
-    private fun postNotification(animeId: Int, title: String, airedEpisode: Int) {
+    private fun postNotification(animeId: Int, title: String, airedEpisode: Int, isTest: Boolean = false) {
         val intent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -167,11 +203,23 @@ class AiringNotificationWorker(
 
         val notification = NotificationCompat.Builder(applicationContext, AIRING_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("New episode aired")
-            .setContentText("$title episode $airedEpisode is now out.")
+            .setContentTitle(if (isTest) "Test notification" else "New episode aired")
+            .setContentText(
+                if (isTest) {
+                    "Notifications are working on this device."
+                } else {
+                    "$title episode $airedEpisode is now out."
+                }
+            )
             .setStyle(
                 NotificationCompat.BigTextStyle()
-                    .bigText("$title episode $airedEpisode is now out.")
+                    .bigText(
+                        if (isTest) {
+                            "Notifications are working on this device."
+                        } else {
+                            "$title episode $airedEpisode is now out."
+                        }
+                    )
             )
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)

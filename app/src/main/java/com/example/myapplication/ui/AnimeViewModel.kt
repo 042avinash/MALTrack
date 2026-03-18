@@ -9,6 +9,8 @@ import com.example.myapplication.data.model.AnimeNode
 import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MangaNode
 import com.example.myapplication.data.model.MainPicture
+import com.example.myapplication.data.model.MyListStatus
+import com.example.myapplication.data.model.MyMangaListStatus
 import com.example.myapplication.data.remote.JikanMangaData
 import com.example.myapplication.data.repository.AnimeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import android.os.SystemClock
@@ -34,7 +37,6 @@ class AnimeViewModel @Inject constructor(
     private val repository: AnimeRepository,
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow<AnimeUiState>(AnimeUiState.Loading)
     val uiState: StateFlow<AnimeUiState> = _uiState.asStateFlow()
 
@@ -49,6 +51,12 @@ class AnimeViewModel @Inject constructor(
 
     private val _airingDetails = MutableStateFlow<Map<Int, AniListMedia>>(emptyMap())
     val airingDetails: StateFlow<Map<Int, AniListMedia>> = _airingDetails.asStateFlow()
+    private val _randomAnimeNavigation = MutableStateFlow<Int?>(null)
+    val randomAnimeNavigation: StateFlow<Int?> = _randomAnimeNavigation.asStateFlow()
+    private val _isRefreshingAnimeRecommendations = MutableStateFlow(false)
+    val isRefreshingAnimeRecommendations: StateFlow<Boolean> = _isRefreshingAnimeRecommendations.asStateFlow()
+    private val _isRefreshingMangaRecommendations = MutableStateFlow(false)
+    val isRefreshingMangaRecommendations: StateFlow<Boolean> = _isRefreshingMangaRecommendations.asStateFlow()
 
     // Generic keys: not_in_list, active, completed, on_hold, planned, dropped
     private val _listFilters = MutableStateFlow(setOf("not_in_list", "active", "completed", "on_hold", "planned", "dropped"))
@@ -116,22 +124,72 @@ class AnimeViewModel @Inject constructor(
             }
             try {
                 supervisorScope {
-                    val seasonalDeferred = async { repository.getSeasonalAnime(currentYear, currentSeason).data }
-                    val topAnimeDeferred = async { repository.getTopAnime().data }
-                    val topMangaDeferred = async { repository.getTopManga().data }
-                    val publishingMangaDeferred = async { repository.getPublishingManga() }
+                    val continueWatchingDeferred = async {
+                        runCatching {
+                            repository.getUserAnimeList(
+                                status = "watching",
+                                sort = "list_updated_at",
+                                limit = 5
+                            ).data.map { userAnime ->
+                                AnimeData(
+                                    node = userAnime.node.copy(
+                                        myListStatus = MyListStatus(
+                                            status = userAnime.listStatus.status,
+                                            score = userAnime.listStatus.score,
+                                            numEpisodesWatched = userAnime.listStatus.numEpisodesWatched,
+                                            isRewatching = userAnime.listStatus.isRewatching,
+                                            updatedAt = userAnime.listStatus.updatedAt
+                                        )
+                                    )
+                                )
+                            }
+                        }.getOrDefault(emptyList())
+                    }
+                    val continueReadingDeferred = async {
+                        runCatching {
+                            repository.getUserMangaList(
+                                status = "reading",
+                                sort = "list_updated_at",
+                                limit = 5
+                            ).data.map { userManga ->
+                                MangaData(
+                                    node = userManga.node.copy(
+                                        myListStatus = MyMangaListStatus(
+                                            status = userManga.listStatus.status,
+                                            score = userManga.listStatus.score,
+                                            numVolumesRead = userManga.listStatus.numVolumesRead,
+                                            numChaptersRead = userManga.listStatus.numChaptersRead,
+                                            isRereading = userManga.listStatus.isRereading,
+                                            updatedAt = userManga.listStatus.updatedAt
+                                        )
+                                    )
+                                )
+                            }
+                        }.getOrDefault(emptyList())
+                    }
+                    val animeSuggestionsDeferred = async {
+                        runCatching<List<AnimeData>> { repository.getAnimeSuggestions(limit = 5).data }
+                            .getOrDefault(emptyList<AnimeData>())
+                    }
+                    val mangaSuggestionsDeferred = async {
+                        runCatching<List<MangaData>> { repository.getMangaSuggestions(limit = 5).data }
+                            .recoverCatching { repository.getFallbackMangaRecommendations(limit = 5) }
+                            .getOrDefault(emptyList<MangaData>())
+                    }
 
-                    val seasonal = seasonalDeferred.await()
-                    val topAnime = topAnimeDeferred.await()
-                    val topManga = topMangaDeferred.await()
-                    val publishingManga = publishingMangaDeferred.await().map { it.toMangaData() }
+                    val continueWatching = continueWatchingDeferred.await()
+                    val continueReading = continueReadingDeferred.await()
+                    val animeSuggestions = animeSuggestionsDeferred.await()
+                    val mangaSuggestions = enrichMangaRecommendationStats(mangaSuggestionsDeferred.await())
 
-                    currentSeasonalData = seasonal
                     val successState = AnimeUiState.HomeSuccess(
-                        seasonal = seasonal,
-                        topAnime = topAnime,
-                        topManga = topManga,
-                        publishingManga = publishingManga,
+                        continueWatching = continueWatching,
+                        continueReading = continueReading,
+                        seasonal = emptyList(),
+                        topAnime = emptyList(),
+                        topManga = emptyList(),
+                        animeRecommendations = animeSuggestions,
+                        mangaRecommendations = mangaSuggestions,
                         year = currentYear,
                         season = currentSeason,
                         canGoNext = canGoToNextSeason(currentYear, currentSeason)
@@ -140,7 +198,7 @@ class AnimeViewModel @Inject constructor(
                     _uiState.value = successState
                     lastHomeLoadAtMs = SystemClock.elapsedRealtime()
 
-                    fetchAiringDetails(seasonal.map { it.node.id })
+                    fetchAiringDetails(animeSuggestions.map { it.node.id })
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -149,6 +207,76 @@ class AnimeViewModel @Inject constructor(
                 _uiState.value = previousState ?: AnimeUiState.Error(e.message ?: "Unknown Error")
             }
         }
+    }
+
+    fun refreshAnimeRecommendations() {
+        val currentState = _uiState.value as? AnimeUiState.HomeSuccess ?: return
+        viewModelScope.launch {
+            _isRefreshingAnimeRecommendations.value = true
+            try {
+                val previousIds = currentState.animeRecommendations.map { it.node.id }.toSet()
+                val fetched = repository.getAnimeSuggestions(limit = 10).data
+                    .distinctBy { it.node.id }
+                val fresh = (fetched.filter { it.node.id !in previousIds } + fetched)
+                    .distinctBy { it.node.id }
+                    .take(5)
+
+                val updatedState = currentState.copy(animeRecommendations = fresh)
+                cachedHomeState = updatedState
+                _uiState.value = updatedState
+                fetchAiringDetails(fresh.map { it.node.id })
+            } catch (e: Exception) {
+                _errorMessage.value = getFriendlyErrorMessage(e)
+            } finally {
+                _isRefreshingAnimeRecommendations.value = false
+            }
+        }
+    }
+
+    fun refreshMangaRecommendations() {
+        val currentState = _uiState.value as? AnimeUiState.HomeSuccess ?: return
+        viewModelScope.launch {
+            _isRefreshingMangaRecommendations.value = true
+            try {
+                val previousIds = currentState.mangaRecommendations.map { it.node.id }.toSet()
+                val fetched = runCatching { repository.getMangaSuggestions(limit = 10).data }
+                    .recoverCatching { repository.getFallbackMangaRecommendations(limit = 10) }
+                    .getOrDefault(emptyList())
+                    .distinctBy { it.node.id }
+                val enrichedFresh = enrichMangaRecommendationStats(
+                    (fetched.filter { it.node.id !in previousIds } + fetched)
+                        .distinctBy { it.node.id }
+                        .take(5)
+                )
+                val updatedState = currentState.copy(mangaRecommendations = enrichedFresh)
+                cachedHomeState = updatedState
+                _uiState.value = updatedState
+            } catch (e: Exception) {
+                _errorMessage.value = getFriendlyErrorMessage(e)
+            } finally {
+                _isRefreshingMangaRecommendations.value = false
+            }
+        }
+    }
+
+    fun openRandomAnime() {
+        viewModelScope.launch {
+            try {
+                val pool = repository.getTopAnime(limit = 100, rankingType = "all").data
+                val randomId = pool.randomOrNull()?.node?.id
+                if (randomId != null) {
+                    _randomAnimeNavigation.value = randomId
+                } else {
+                    _errorMessage.value = "Could not find a random anime right now. Please try again."
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = getFriendlyErrorMessage(e)
+            }
+        }
+    }
+
+    fun consumeRandomAnimeNavigation() {
+        _randomAnimeNavigation.value = null
     }
 
     private fun fetchUserPfp() {
@@ -303,7 +431,7 @@ class AnimeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {
-                val response = repository.getSeasonalAnime(currentYear, currentSeason)
+                val response = repository.getSeasonalAnime(currentYear, currentSeason, loadAllPages = true)
                 currentSeasonalData = response.data
                 applyCurrentSeasonalFiltersAndSort()
                 fetchAiringDetails(currentSeasonalData.map { it.node.id })
@@ -321,8 +449,8 @@ class AnimeViewModel @Inject constructor(
 
         filtered = when (currentSeasonalSort) {
             "score" -> filtered.sortedByDescending { it.node.meanScore ?: 0f }
-            "title" -> filtered.sortedBy { it.node.title.lowercase() }
-            else -> filtered // API default
+            "members" -> filtered.sortedByDescending { it.node.numListUsers ?: 0 }
+            else -> filtered
         }
 
         val categorized = filtered.groupBy { 
@@ -348,7 +476,7 @@ class AnimeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {
-                val mangaList = repository.getPublishingManga().map { it.toMangaData() }
+                val mangaList = repository.getPublishingManga(loadAllPages = true).map { it.toMangaData() }
                 currentMangaDiscoveryData = mangaList
                 applyCurrentMangaDiscoveryFiltersAndSort()
             } catch (e: Exception) {
@@ -365,7 +493,6 @@ class AnimeViewModel @Inject constructor(
 
         filtered = when (currentDiscoverySort) {
             "score" -> filtered.sortedByDescending { it.node.meanScore ?: 0f }
-            "title" -> filtered.sortedBy { it.node.title.lowercase() }
             else -> filtered
         }
 
@@ -422,7 +549,7 @@ class AnimeViewModel @Inject constructor(
         )
     }
 
-    fun searchAnime(query: String) {
+    fun searchAnime(query: String, isAnimeSearch: Boolean) {
         searchJob?.cancel()
         if (query.isBlank()) {
             loadHomeData()
@@ -435,17 +562,19 @@ class AnimeViewModel @Inject constructor(
             delay(500)
             _uiState.value = AnimeUiState.Loading
             try {
-                supervisorScope {
-                    val animeDeferred = async { repository.searchAnime(query) }
-                    val mangaDeferred = async { repository.searchManga(query) }
-
-                    val animeResponse = animeDeferred.await()
-                    val mangaResponse = mangaDeferred.await()
-
-                    _uiState.value = AnimeUiState.SearchSuccess(animeResponse.data, mangaResponse.data)
-
-                    val allAnimeIds = animeResponse.data.map { it.node.id }
-                    fetchAiringDetails(allAnimeIds)
+                if (isAnimeSearch) {
+                    val animeResponse = repository.searchAnime(query)
+                    _uiState.value = AnimeUiState.SearchSuccess(
+                        animeList = animeResponse.data,
+                        mangaList = emptyList()
+                    )
+                    fetchAiringDetails(animeResponse.data.map { it.node.id })
+                } else {
+                    val mangaResponse = repository.searchManga(query)
+                    _uiState.value = AnimeUiState.SearchSuccess(
+                        animeList = emptyList(),
+                        mangaList = mangaResponse.data
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -512,11 +641,36 @@ class AnimeViewModel @Inject constructor(
         }
     }
 
-    fun getGridModeFlow() = prefsManager.getGridModeFlow("seasonal_chart")
+    fun getDiscoveryGridModeFlow(isAnime: Boolean) = if (isAnime) {
+        prefsManager.defaultAnimeDiscoveryStyleFlow
+    } else {
+        prefsManager.defaultMangaDiscoveryStyleFlow
+    }
 
-    fun setGridMode(isGrid: Boolean) {
+    fun setDiscoveryGridMode(isAnime: Boolean, isGrid: Boolean) {
         viewModelScope.launch {
-            prefsManager.saveGridMode("seasonal_chart", isGrid, false)
+            if (isAnime) prefsManager.saveDefaultAnimeDiscoveryStyle(isGrid)
+            else prefsManager.saveDefaultMangaDiscoveryStyle(isGrid)
+        }
+    }
+
+    fun getDiscoverySortFlow(isAnime: Boolean) = if (isAnime) {
+        prefsManager.defaultAnimeDiscoverySortFlow
+    } else {
+        prefsManager.defaultMangaDiscoverySortFlow
+    }
+
+    fun getHomeContinueWatchingEnabledFlow() = prefsManager.homeContinueWatchingEnabledFlow
+    fun getHomeContinueReadingEnabledFlow() = prefsManager.homeContinueReadingEnabledFlow
+    fun getHomeDiscoveryButtonsEnabledFlow() = prefsManager.homeDiscoveryButtonsEnabledFlow
+    fun getHomeRandomAnimeEnabledFlow() = prefsManager.homeRandomAnimeEnabledFlow
+    fun getHomeAnimePicksEnabledFlow() = prefsManager.homeAnimePicksEnabledFlow
+    fun getHomeMangaPicksEnabledFlow() = prefsManager.homeMangaPicksEnabledFlow
+
+    fun setDiscoverySort(isAnime: Boolean, sort: String) {
+        viewModelScope.launch {
+            if (isAnime) prefsManager.saveDefaultAnimeDiscoverySort(sort)
+            else prefsManager.saveDefaultMangaDiscoverySort(sort)
         }
     }
 
@@ -536,6 +690,38 @@ class AnimeViewModel @Inject constructor(
         }
     }
 
+    private suspend fun enrichMangaRecommendationStats(items: List<MangaData>): List<MangaData> = supervisorScope {
+        items.map { manga ->
+            async {
+                val needsStats = manga.node.meanScore == null || manga.node.numListUsers == null
+                if (!needsStats) return@async manga
+
+                // Suggestion payloads can be partial; fetch details with a retry to avoid transient misses/timeouts.
+                val details = runCatching { repository.getMangaDetails(manga.node.id) }.getOrNull()
+                    ?: run {
+                        delay(250)
+                        runCatching { repository.getMangaDetails(manga.node.id) }.getOrNull()
+                    }
+
+                if (details == null) {
+                    return@async manga.copy(
+                        node = manga.node.copy(
+                            meanScore = manga.node.meanScore ?: 0f,
+                            numListUsers = manga.node.numListUsers ?: 0
+                        )
+                    )
+                }
+
+                manga.copy(
+                    node = manga.node.copy(
+                        meanScore = manga.node.meanScore ?: details.mean ?: 0f,
+                        numListUsers = manga.node.numListUsers ?: details.numListUsers ?: 0
+                    )
+                )
+            }
+        }.awaitAll()
+    }
+
     private fun JikanMangaData.toMangaData(): MangaData {
         return MangaData(
             node = MangaNode(
@@ -546,6 +732,7 @@ class AnimeViewModel @Inject constructor(
                     large = this.images.jpg?.large_image_url ?: this.images.jpg?.image_url ?: ""
                 ),
                 meanScore = this.score,
+                numListUsers = this.members,
                 synopsis = this.synopsis,
                 status = this.status,
                 mediaType = this.type
@@ -561,6 +748,7 @@ class AnimeViewModel @Inject constructor(
                 mainPicture = this.node.mainPicture,
                 synopsis = this.node.synopsis,
                 meanScore = this.node.meanScore,
+                numListUsers = this.node.numListUsers,
                 mediaType = this.node.mediaType ?: "manga",
                 alternativeTitles = this.node.alternativeTitles,
                 myListStatus = this.node.myListStatus?.let {
@@ -584,10 +772,13 @@ sealed interface QuickUpdateEvent {
 sealed interface AnimeUiState {
     data object Loading : AnimeUiState
     data class HomeSuccess(
+        val continueWatching: List<AnimeData>,
+        val continueReading: List<MangaData>,
         val seasonal: List<AnimeData>,
         val topAnime: List<AnimeData>,
         val topManga: List<MangaData>,
-        val publishingManga: List<MangaData>,
+        val animeRecommendations: List<AnimeData>,
+        val mangaRecommendations: List<MangaData>,
         val year: Int,
         val season: String,
         val canGoNext: Boolean

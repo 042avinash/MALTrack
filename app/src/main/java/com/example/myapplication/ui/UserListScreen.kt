@@ -139,14 +139,18 @@ fun ListActionToolbar(
     onRefreshClick: () -> Unit,
     onOpenSettings: () -> Unit,
     isAnime: Boolean,
+    isOwnList: Boolean,
     onTypeSwitch: () -> Unit
 ) {
+    val listOwnerLabel = if (isOwnList) "Your" else "User"
+    val mediaLabel = if (isAnime) "Anime" else "Manga"
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         shadowElevation = 8.dp
     ) {
         Column(
@@ -162,7 +166,7 @@ fun ListActionToolbar(
                         modifier = Modifier
                             .weight(1f)
                             .heightIn(min = 56.dp),
-                        placeholder = { Text("Search...", fontSize = 14.sp) },
+                        placeholder = { Text("Search $listOwnerLabel $mediaLabel List...", fontSize = 14.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -187,7 +191,7 @@ fun ListActionToolbar(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(if (isAnime) "To Manga" else "To Anime", fontSize = 12.sp)
+                        Text(if (isAnime) "Anime" else "Manga", fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -293,6 +297,7 @@ fun UserAnimeSection(
                     },
                     onOpenSettings = onOpenSettings,
                     isAnime = true,
+                    isOwnList = username.isNullOrBlank() || username == "@me",
                     onTypeSwitch = onTypeSwitch
                 )
                 TabRow(
@@ -465,6 +470,7 @@ fun UserMangaSection(
                     },
                     onOpenSettings = onOpenSettings,
                     isAnime = false,
+                    isOwnList = username.isNullOrBlank() || username == "@me",
                     onTypeSwitch = onTypeSwitch
                 )
                 TabRow(

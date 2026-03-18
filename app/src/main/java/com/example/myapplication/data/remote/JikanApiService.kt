@@ -163,7 +163,8 @@ data class JikanImageFormat(
 
 @Serializable
 data class JikanMangaResponse(
-    val data: List<JikanMangaData> = emptyList()
+    val data: List<JikanMangaData> = emptyList(),
+    val pagination: JikanPagination? = null
 )
 
 @Serializable
@@ -171,6 +172,7 @@ data class JikanMangaData(
     val mal_id: Int,
     val title: String,
     val images: JikanImages,
+    val members: Int? = null,
     val score: Float? = null,
     val synopsis: String? = null,
     val type: String? = null,

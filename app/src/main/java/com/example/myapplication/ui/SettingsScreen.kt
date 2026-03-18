@@ -19,10 +19,13 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,9 +56,19 @@ fun SettingsScreen(
     val defaultMangaStatus by viewModel.defaultMangaStatus.collectAsState()
     val defaultAnimeSort by viewModel.defaultAnimeSort.collectAsState()
     val defaultMangaSort by viewModel.defaultMangaSort.collectAsState()
+    val defaultAnimeDiscoverySort by viewModel.defaultAnimeDiscoverySort.collectAsState()
+    val defaultMangaDiscoverySort by viewModel.defaultMangaDiscoverySort.collectAsState()
     val defaultAnimeListStyleIsGrid by viewModel.defaultAnimeListStyleIsGrid.collectAsState()
     val defaultMangaListStyleIsGrid by viewModel.defaultMangaListStyleIsGrid.collectAsState()
+    val defaultAnimeDiscoveryStyleIsGrid by viewModel.defaultAnimeDiscoveryStyleIsGrid.collectAsState()
+    val defaultMangaDiscoveryStyleIsGrid by viewModel.defaultMangaDiscoveryStyleIsGrid.collectAsState()
     val episodeNotificationsEnabled by viewModel.episodeNotificationsEnabled.collectAsState()
+    val homeContinueWatchingEnabled by viewModel.homeContinueWatchingEnabled.collectAsState()
+    val homeContinueReadingEnabled by viewModel.homeContinueReadingEnabled.collectAsState()
+    val homeDiscoveryButtonsEnabled by viewModel.homeDiscoveryButtonsEnabled.collectAsState()
+    val homeRandomAnimeEnabled by viewModel.homeRandomAnimeEnabled.collectAsState()
+    val homeAnimePicksEnabled by viewModel.homeAnimePicksEnabled.collectAsState()
+    val homeMangaPicksEnabled by viewModel.homeMangaPicksEnabled.collectAsState()
     val nsfwEnabled by viewModel.nsfwEnabled.collectAsState()
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -75,12 +88,18 @@ fun SettingsScreen(
     var showMangaStatusDialog by remember { mutableStateOf(false) }
     var showAnimeSortDialog by remember { mutableStateOf(false) }
     var showMangaSortDialog by remember { mutableStateOf(false) }
+    var showAnimeDiscoverySortDialog by remember { mutableStateOf(false) }
+    var showMangaDiscoverySortDialog by remember { mutableStateOf(false) }
     var showAnimeListStyleDialog by remember { mutableStateOf(false) }
     var showMangaListStyleDialog by remember { mutableStateOf(false) }
+    var showAnimeDiscoveryStyleDialog by remember { mutableStateOf(false) }
+    var showMangaDiscoveryStyleDialog by remember { mutableStateOf(false) }
+    var showHomeSectionsDialog by remember { mutableStateOf(false) }
     var showDefaultsPage by remember { mutableStateOf(false) }
     var startupParentSelection by remember { mutableStateOf<StartupParentOption?>(null) }
     var pendingStartupSection by remember { mutableStateOf<DefaultSection?>(null) }
     var pendingNsfwEnabled by remember { mutableStateOf<Boolean?>(null) }
+    var pendingHomeSectionsConfig by remember { mutableStateOf<HomeSectionsConfig?>(null) }
 
     if (showDefaultsPage) {
         DefaultsScreen(
@@ -88,15 +107,23 @@ fun SettingsScreen(
             defaultMangaStatus = defaultMangaStatus,
             defaultAnimeSort = defaultAnimeSort,
             defaultMangaSort = defaultMangaSort,
+            defaultAnimeDiscoverySort = defaultAnimeDiscoverySort,
+            defaultMangaDiscoverySort = defaultMangaDiscoverySort,
             defaultAnimeListStyleIsGrid = defaultAnimeListStyleIsGrid,
             defaultMangaListStyleIsGrid = defaultMangaListStyleIsGrid,
+            defaultAnimeDiscoveryStyleIsGrid = defaultAnimeDiscoveryStyleIsGrid,
+            defaultMangaDiscoveryStyleIsGrid = defaultMangaDiscoveryStyleIsGrid,
             onBack = { showDefaultsPage = false },
             onDefaultAnimeStatusClick = { showAnimeStatusDialog = true },
             onDefaultMangaStatusClick = { showMangaStatusDialog = true },
             onDefaultAnimeListStyleClick = { showAnimeListStyleDialog = true },
             onDefaultMangaListStyleClick = { showMangaListStyleDialog = true },
+            onDefaultAnimeDiscoveryStyleClick = { showAnimeDiscoveryStyleDialog = true },
+            onDefaultMangaDiscoveryStyleClick = { showMangaDiscoveryStyleDialog = true },
             onDefaultAnimeSortClick = { showAnimeSortDialog = true },
-            onDefaultMangaSortClick = { showMangaSortDialog = true }
+            onDefaultMangaSortClick = { showMangaSortDialog = true },
+            onDefaultAnimeDiscoverySortClick = { showAnimeDiscoverySortDialog = true },
+            onDefaultMangaDiscoverySortClick = { showMangaDiscoverySortDialog = true }
         )
     } else {
         Scaffold(
@@ -143,6 +170,13 @@ fun SettingsScreen(
                     title = "Defaults",
                     subtitle = "List section, style, and anime/manga sorting",
                     onClick = { showDefaultsPage = true }
+                )
+
+                SettingClickableItem(
+                    icon = Icons.Default.Home,
+                    title = "Home Sections",
+                    subtitle = "Customize which home tabs are visible",
+                    onClick = { showHomeSectionsDialog = true }
                 )
 
                 Row(
@@ -194,6 +228,23 @@ fun SettingsScreen(
                         }
                     )
                 }
+
+                HorizontalDivider()
+
+                SettingClickableItem(
+                    icon = Icons.Default.Notifications,
+                    title = "Test Notification",
+                    subtitle = "Send a sample notification to verify alerts are working",
+                    onClick = {
+                        toggleEpisodeNotifications(
+                            enabled = true,
+                            viewModel = viewModel,
+                            context = context,
+                            permissionLauncher = notificationPermissionLauncher,
+                            onEnabled = { AiringNotificationScheduler.triggerTest(context) }
+                        )
+                    }
+                )
 
                 HorizontalDivider()
 
@@ -351,6 +402,43 @@ fun SettingsScreen(
         )
     }
 
+    pendingHomeSectionsConfig?.let { config ->
+        RestartRequiredDialog(
+            title = "Restart Required",
+            message = "Saving Home Sections requires restarting the app to fully apply. Continue?",
+            onDismiss = { pendingHomeSectionsConfig = null },
+            onConfirm = {
+                viewModel.setHomeSectionsAndThen(
+                    continueWatchingEnabled = config.continueWatchingEnabled,
+                    continueReadingEnabled = config.continueReadingEnabled,
+                    discoveryButtonsEnabled = config.discoveryButtonsEnabled,
+                    randomAnimeEnabled = config.randomAnimeEnabled,
+                    animePicksEnabled = config.animePicksEnabled,
+                    mangaPicksEnabled = config.mangaPicksEnabled
+                ) {
+                    pendingHomeSectionsConfig = null
+                    restartApp(context)
+                }
+            }
+        )
+    }
+
+    if (showHomeSectionsDialog) {
+        HomeSectionsDialog(
+            currentContinueWatchingEnabled = homeContinueWatchingEnabled,
+            currentContinueReadingEnabled = homeContinueReadingEnabled,
+            currentDiscoveryButtonsEnabled = homeDiscoveryButtonsEnabled,
+            currentRandomAnimeEnabled = homeRandomAnimeEnabled,
+            currentAnimePicksEnabled = homeAnimePicksEnabled,
+            currentMangaPicksEnabled = homeMangaPicksEnabled,
+            onDismiss = { showHomeSectionsDialog = false },
+            onSave = { config ->
+                showHomeSectionsDialog = false
+                pendingHomeSectionsConfig = config
+            }
+        )
+    }
+
     if (showAnimeStatusDialog) {
         StatusDialog(
             title = "Default Anime List Section",
@@ -401,6 +489,30 @@ fun SettingsScreen(
         )
     }
 
+    if (showAnimeDiscoveryStyleDialog) {
+        ListStyleDialog(
+            title = "Default Anime Discovery Style",
+            currentIsGrid = defaultAnimeDiscoveryStyleIsGrid,
+            onDismiss = { showAnimeDiscoveryStyleDialog = false },
+            onSelect = {
+                viewModel.setDefaultAnimeDiscoveryStyle(it)
+                showAnimeDiscoveryStyleDialog = false
+            }
+        )
+    }
+
+    if (showMangaDiscoveryStyleDialog) {
+        ListStyleDialog(
+            title = "Default Manga Discovery Style",
+            currentIsGrid = defaultMangaDiscoveryStyleIsGrid,
+            onDismiss = { showMangaDiscoveryStyleDialog = false },
+            onSelect = {
+                viewModel.setDefaultMangaDiscoveryStyle(it)
+                showMangaDiscoveryStyleDialog = false
+            }
+        )
+    }
+
     if (showAnimeSortDialog) {
         SortDialog(
             title = "Default List Sorting (Anime)",
@@ -436,6 +548,31 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showAnimeDiscoverySortDialog) {
+        DiscoverySortDialog(
+            title = "Default Anime Discovery Sorting",
+            currentValue = defaultAnimeDiscoverySort,
+            onDismiss = { showAnimeDiscoverySortDialog = false },
+            onSelect = {
+                viewModel.setDefaultAnimeDiscoverySort(it)
+                showAnimeDiscoverySortDialog = false
+            }
+        )
+    }
+
+    if (showMangaDiscoverySortDialog) {
+        DiscoverySortDialog(
+            title = "Default Manga Discovery Sorting",
+            currentValue = defaultMangaDiscoverySort,
+            onDismiss = { showMangaDiscoverySortDialog = false },
+            onSelect = {
+                viewModel.setDefaultMangaDiscoverySort(it)
+                showMangaDiscoverySortDialog = false
+            }
+        )
+    }
+
 }
 
 private fun openNotificationSettings(context: android.content.Context) {
@@ -456,7 +593,8 @@ private fun toggleEpisodeNotifications(
     enabled: Boolean,
     viewModel: SettingsViewModel,
     context: android.content.Context,
-    permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    permissionLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    onEnabled: (() -> Unit)? = null
 ) {
     if (!enabled) {
         viewModel.setEpisodeNotificationsEnabled(false)
@@ -472,25 +610,34 @@ private fun toggleEpisodeNotifications(
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED -> {
                 viewModel.setEpisodeNotificationsEnabled(true)
                 AiringNotificationScheduler.schedule(context)
+                AiringNotificationScheduler.triggerNow(context)
+                onEnabled?.invoke()
             }
             else -> permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     } else {
         viewModel.setEpisodeNotificationsEnabled(true)
         AiringNotificationScheduler.schedule(context)
+        AiringNotificationScheduler.triggerNow(context)
+        onEnabled?.invoke()
     }
 }
 
 private fun restartApp(context: android.content.Context) {
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-        ?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-        }
-        ?: return
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+    val component = launchIntent.component ?: run {
+        ContextCompat.startActivity(
+            context,
+            launchIntent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) },
+            null
+        )
+        (context as? Activity)?.finishAffinity()
+        return
+    }
 
-    ContextCompat.startActivity(context, launchIntent, null)
+    val restartIntent = Intent.makeRestartActivityTask(component)
+    ContextCompat.startActivity(context, restartIntent, null)
     (context as? Activity)?.finishAffinity()
-    Runtime.getRuntime().exit(0)
 }
 
 @Composable
@@ -544,6 +691,157 @@ fun SettingClickableItem(icon: ImageVector, title: String, subtitle: String, onC
     }
 }
 
+@Composable
+fun SettingToggleItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = 16.dp)
+            )
+            Column {
+                Text(text = title, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
+private data class HomeSectionsConfig(
+    val continueWatchingEnabled: Boolean,
+    val continueReadingEnabled: Boolean,
+    val discoveryButtonsEnabled: Boolean,
+    val randomAnimeEnabled: Boolean,
+    val animePicksEnabled: Boolean,
+    val mangaPicksEnabled: Boolean
+)
+
+@Composable
+private fun HomeSectionsDialog(
+    currentContinueWatchingEnabled: Boolean,
+    currentContinueReadingEnabled: Boolean,
+    currentDiscoveryButtonsEnabled: Boolean,
+    currentRandomAnimeEnabled: Boolean,
+    currentAnimePicksEnabled: Boolean,
+    currentMangaPicksEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (HomeSectionsConfig) -> Unit
+) {
+    var continueWatchingEnabled by remember(currentContinueWatchingEnabled) { mutableStateOf(currentContinueWatchingEnabled) }
+    var continueReadingEnabled by remember(currentContinueReadingEnabled) { mutableStateOf(currentContinueReadingEnabled) }
+    var discoveryButtonsEnabled by remember(currentDiscoveryButtonsEnabled) { mutableStateOf(currentDiscoveryButtonsEnabled) }
+    var randomAnimeEnabled by remember(currentRandomAnimeEnabled) { mutableStateOf(currentRandomAnimeEnabled) }
+    var animePicksEnabled by remember(currentAnimePicksEnabled) { mutableStateOf(currentAnimePicksEnabled) }
+    var mangaPicksEnabled by remember(currentMangaPicksEnabled) { mutableStateOf(currentMangaPicksEnabled) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Home Sections") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                SettingToggleItem(
+                    icon = Icons.Default.Visibility,
+                    title = "Continue Watching",
+                    subtitle = "Show your active anime row",
+                    checked = continueWatchingEnabled,
+                    onCheckedChange = { continueWatchingEnabled = it }
+                )
+                HorizontalDivider()
+                SettingToggleItem(
+                    icon = Icons.Default.Visibility,
+                    title = "Continue Reading",
+                    subtitle = "Show your active manga row",
+                    checked = continueReadingEnabled,
+                    onCheckedChange = { continueReadingEnabled = it }
+                )
+                HorizontalDivider()
+                SettingToggleItem(
+                    icon = Icons.Default.GridView,
+                    title = "Discovery Buttons",
+                    subtitle = "Seasonal chart and Top 100 quick buttons",
+                    checked = discoveryButtonsEnabled,
+                    onCheckedChange = { discoveryButtonsEnabled = it }
+                )
+                HorizontalDivider()
+                SettingToggleItem(
+                    icon = Icons.Default.Movie,
+                    title = "Random Anime",
+                    subtitle = "Show random anime launcher button",
+                    checked = randomAnimeEnabled,
+                    onCheckedChange = { randomAnimeEnabled = it }
+                )
+                HorizontalDivider()
+                SettingToggleItem(
+                    icon = Icons.Default.Refresh,
+                    title = "Anime Picks",
+                    subtitle = "Show anime recommendation row",
+                    checked = animePicksEnabled,
+                    onCheckedChange = { animePicksEnabled = it }
+                )
+                HorizontalDivider()
+                SettingToggleItem(
+                    icon = Icons.Default.Refresh,
+                    title = "Manga Picks",
+                    subtitle = "Show manga recommendation row",
+                    checked = mangaPicksEnabled,
+                    onCheckedChange = { mangaPicksEnabled = it }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        HomeSectionsConfig(
+                            continueWatchingEnabled = continueWatchingEnabled,
+                            continueReadingEnabled = continueReadingEnabled,
+                            discoveryButtonsEnabled = discoveryButtonsEnabled,
+                            randomAnimeEnabled = randomAnimeEnabled,
+                            animePicksEnabled = animePicksEnabled,
+                            mangaPicksEnabled = mangaPicksEnabled
+                        )
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DefaultsScreen(
@@ -551,15 +849,23 @@ fun DefaultsScreen(
     defaultMangaStatus: String,
     defaultAnimeSort: String,
     defaultMangaSort: String,
+    defaultAnimeDiscoverySort: String,
+    defaultMangaDiscoverySort: String,
     defaultAnimeListStyleIsGrid: Boolean,
     defaultMangaListStyleIsGrid: Boolean,
+    defaultAnimeDiscoveryStyleIsGrid: Boolean,
+    defaultMangaDiscoveryStyleIsGrid: Boolean,
     onBack: () -> Unit,
     onDefaultAnimeStatusClick: () -> Unit,
     onDefaultMangaStatusClick: () -> Unit,
     onDefaultAnimeListStyleClick: () -> Unit,
     onDefaultMangaListStyleClick: () -> Unit,
+    onDefaultAnimeDiscoveryStyleClick: () -> Unit,
+    onDefaultMangaDiscoveryStyleClick: () -> Unit,
     onDefaultAnimeSortClick: () -> Unit,
-    onDefaultMangaSortClick: () -> Unit
+    onDefaultMangaSortClick: () -> Unit,
+    onDefaultAnimeDiscoverySortClick: () -> Unit,
+    onDefaultMangaDiscoverySortClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -599,10 +905,28 @@ fun DefaultsScreen(
                 HorizontalDivider()
 
                 SettingClickableItem(
+                    icon = Icons.Default.GridView,
+                    title = "Default Discovery List Style",
+                    subtitle = if (defaultAnimeDiscoveryStyleIsGrid) "Grid" else "List",
+                    onClick = onDefaultAnimeDiscoveryStyleClick
+                )
+
+                HorizontalDivider()
+
+                SettingClickableItem(
                     icon = Icons.Default.Sort,
                     title = "Default List Sorting",
                     subtitle = sortLabel(defaultAnimeSort),
                     onClick = onDefaultAnimeSortClick
+                )
+
+                HorizontalDivider()
+
+                SettingClickableItem(
+                    icon = Icons.Default.Sort,
+                    title = "Default Discovery Sorting",
+                    subtitle = discoverySortLabel(defaultAnimeDiscoverySort),
+                    onClick = onDefaultAnimeDiscoverySortClick
                 )
             }
 
@@ -626,10 +950,28 @@ fun DefaultsScreen(
                 HorizontalDivider()
 
                 SettingClickableItem(
+                    icon = Icons.Default.GridView,
+                    title = "Default Discovery List Style",
+                    subtitle = if (defaultMangaDiscoveryStyleIsGrid) "Grid" else "List",
+                    onClick = onDefaultMangaDiscoveryStyleClick
+                )
+
+                HorizontalDivider()
+
+                SettingClickableItem(
                     icon = Icons.Default.Sort,
                     title = "Default List Sorting",
                     subtitle = sortLabel(defaultMangaSort),
                     onClick = onDefaultMangaSortClick
+                )
+
+                HorizontalDivider()
+
+                SettingClickableItem(
+                    icon = Icons.Default.Sort,
+                    title = "Default Discovery Sorting",
+                    subtitle = discoverySortLabel(defaultMangaDiscoverySort),
+                    onClick = onDefaultMangaDiscoverySortClick
                 )
             }
         }
@@ -855,6 +1197,12 @@ private fun sortLabel(sort: String): String = when (sort) {
     else -> sort
 }
 
+private fun discoverySortLabel(sort: String): String = when (sort) {
+    "members" -> "Popularity"
+    "score" -> "Score"
+    else -> sort
+}
+
 @Composable
 fun SortDialog(
     title: String,
@@ -897,6 +1245,43 @@ fun SortDialog(
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+@Composable
+fun DiscoverySortDialog(
+    title: String,
+    currentValue: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    val options = listOf(
+        "members" to "Popularity",
+        "score" to "Score"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEach { (option, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(option) }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = currentValue == option, onClick = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 
 @Composable
 private fun RestartRequiredDialog(
