@@ -45,6 +45,11 @@ class UserListViewModel @Inject constructor(
     val loadedLists: StateFlow<Map<String, List<UserAnimeData>>> = _loadedLists.asStateFlow()
     private val _loadingStatuses = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val loadingStatuses: StateFlow<Map<String, Boolean>> = _loadingStatuses.asStateFlow()
+    val recentSearches = prefsManager.recentSearchesFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     val nsfwEnabled = prefsManager.nsfwFlow.stateIn(
         scope = viewModelScope,
@@ -281,6 +286,14 @@ class UserListViewModel @Inject constructor(
             } catch (_: Exception) {
                 _searchState.value = _searchState.value.copy(isLoading = false)
             }
+        }
+    }
+
+    fun saveRecentSearch(query: String) {
+        val cleaned = query.trim()
+        if (cleaned.length < 2) return
+        viewModelScope.launch {
+            prefsManager.saveRecentSearch(cleaned)
         }
     }
 

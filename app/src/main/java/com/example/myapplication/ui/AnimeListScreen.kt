@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -71,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,6 +121,7 @@ fun AnimeListScreen(
     val homeRandomAnimeEnabled by viewModel.getHomeRandomAnimeEnabledFlow().collectAsState(initial = true)
     val homeAnimePicksEnabled by viewModel.getHomeAnimePicksEnabledFlow().collectAsState(initial = true)
     val homeMangaPicksEnabled by viewModel.getHomeMangaPicksEnabledFlow().collectAsState(initial = true)
+    val recentSearches by viewModel.recentSearches.collectAsState()
     val listFilters by viewModel.listFilters.collectAsState()
     
     var searchQuery by remember { mutableStateOf("") }
@@ -319,13 +322,24 @@ fun AnimeListScreen(
                             loadingViewContext = LoadingViewContext.HOME
                             viewModel.loadHomeData()
                         }
-                    } else {
-                        loadingViewContext = LoadingViewContext.SEARCH
-                        viewModel.searchAnime(
-                            it,
-                            isAnimeSearch = searchMediaType == SearchMediaType.ANIME
-                        )
                     }
+                },
+                onSearchSubmit = {
+                    loadingViewContext = LoadingViewContext.SEARCH
+                    viewModel.searchAnime(
+                        searchQuery,
+                        isAnimeSearch = searchMediaType == SearchMediaType.ANIME
+                    )
+                    viewModel.saveRecentSearch(searchQuery)
+                },
+                recentSearches = recentSearches,
+                onRecentSearchSelected = { selected ->
+                    searchQuery = selected
+                    loadingViewContext = LoadingViewContext.SEARCH
+                    viewModel.searchAnime(
+                        selected,
+                        isAnimeSearch = searchMediaType == SearchMediaType.ANIME
+                    )
                 },
                 onSettingsClick = onSettingsClick
             )
@@ -1010,8 +1024,17 @@ private fun HomeSearchToolbar(
     onSearchExpandChange: (Boolean) -> Unit,
     onMediaTypeToggle: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+    recentSearches: List<String>,
+    onRecentSearchSelected: (String) -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val filteredRecent = remember(searchQuery, recentSearches) {
+        val query = searchQuery.trim()
+        recentSearches
+            .filter { query.isBlank() || it.contains(query, ignoreCase = true) }
+            .take(4)
+    }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -1043,6 +1066,8 @@ private fun HomeSearchToolbar(
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
                         trailingIcon = {
                             IconButton(onClick = {
                                 onSearchQueryChange("")
@@ -1075,6 +1100,30 @@ private fun HomeSearchToolbar(
 
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
+            }
+
+            if (isSearchExpanded && filteredRecent.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    filteredRecent.forEach { item ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onRecentSearchSelected(item) },
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+                        ) {
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
                     }
                 }
             }

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -52,6 +53,7 @@ class UserPreferencesManager @Inject constructor(
     private val homeMangaPicksEnabledKey = booleanPreferencesKey("home_manga_picks_enabled")
     private val episodeNotificationsEnabledKey = booleanPreferencesKey("episode_notifications_enabled")
     private val episodeNotificationBaselineKey = stringPreferencesKey("episode_notification_baselines")
+    private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val lastUsedSectionKey = stringPreferencesKey("last_used_section")
     private val nsfwToggleKey = booleanPreferencesKey("nsfw_toggle")
     private val json = Json { ignoreUnknownKeys = true }
@@ -165,6 +167,14 @@ class UserPreferencesManager @Inject constructor(
 
     val episodeNotificationsEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
         prefs[episodeNotificationsEnabledKey] ?: false
+    }
+
+    val recentSearchesFlow: Flow<List<String>> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[recentSearchesKey]?.let { encoded ->
+            runCatching {
+                json.decodeFromString(ListSerializer(String.serializer()), encoded)
+            }.getOrDefault(emptyList())
+        } ?: emptyList()
     }
 
     suspend fun saveTheme(theme: ThemePreference) {
@@ -313,6 +323,25 @@ class UserPreferencesManager @Inject constructor(
     suspend fun saveEpisodeNotificationsEnabled(enabled: Boolean) {
         context.userPrefsDataStore.edit { prefs ->
             prefs[episodeNotificationsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveRecentSearch(query: String, maxItems: Int = 4) {
+        val cleaned = query.trim()
+        if (cleaned.isBlank()) return
+
+        context.userPrefsDataStore.edit { prefs ->
+            val current = prefs[recentSearchesKey]?.let { encoded ->
+                runCatching {
+                    json.decodeFromString(ListSerializer(String.serializer()), encoded)
+                }.getOrDefault(emptyList())
+            } ?: emptyList()
+
+            val updated = (listOf(cleaned) + current.filterNot { it.equals(cleaned, ignoreCase = true) })
+                .take(maxItems)
+
+            prefs[recentSearchesKey] =
+                json.encodeToString(ListSerializer(String.serializer()), updated)
         }
     }
     

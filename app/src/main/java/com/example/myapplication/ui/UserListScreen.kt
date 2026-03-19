@@ -9,6 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,6 +36,8 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -87,6 +90,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -149,6 +153,9 @@ fun ListActionToolbar(
     onSearchQueryChange: (String) -> Unit,
     isSearchExpanded: Boolean,
     onSearchExpandChange: (Boolean) -> Unit,
+    onSearchSubmit: () -> Unit,
+    recentSearches: List<String>,
+    onRecentSearchSelected: (String) -> Unit,
     onRefreshClick: () -> Unit,
     onOpenSettings: () -> Unit,
     isAnime: Boolean,
@@ -157,6 +164,12 @@ fun ListActionToolbar(
 ) {
     val listOwnerLabel = if (isOwnList) "Your" else "User"
     val mediaLabel = if (isAnime) "Anime" else "Manga"
+    val filteredRecent = remember(searchQuery, recentSearches) {
+        val query = searchQuery.trim()
+        recentSearches
+            .filter { query.isBlank() || it.contains(query, ignoreCase = true) }
+            .take(4)
+    }
 
     Surface(
         modifier = Modifier
@@ -183,6 +196,8 @@ fun ListActionToolbar(
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
                         trailingIcon = {
                             IconButton(onClick = {
                                 onSearchQueryChange("")
@@ -222,6 +237,30 @@ fun ListActionToolbar(
                     }
                 }
             }
+
+            if (isSearchExpanded && filteredRecent.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    filteredRecent.forEach { item ->
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onRecentSearchSelected(item) },
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+                        ) {
+                            Text(
+                                text = item,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -240,6 +279,7 @@ fun UserAnimeSection(
     val userListState by viewModel.userListState.collectAsState()
     val airingDetails by viewModel.airingDetails.collectAsState()
     val searchState by viewModel.searchState.collectAsState()
+    val recentSearches by viewModel.recentSearches.collectAsState()
     val loadedLists by viewModel.loadedLists.collectAsState()
     val loadingStatuses by viewModel.loadingStatuses.collectAsState()
 
@@ -257,6 +297,7 @@ fun UserAnimeSection(
     val coroutineScope = rememberCoroutineScope()
 
     var searchQuery by remember { mutableStateOf("") }
+    var submittedSearchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var isSearchTransitionLoading by remember { mutableStateOf(false) }
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
@@ -280,31 +321,28 @@ fun UserAnimeSection(
 
     LaunchedEffect(username) {
         searchQuery = ""
+        submittedSearchQuery = ""
         isSearchExpanded = false
         viewModel.clearSearch()
     }
 
-    LaunchedEffect(searchQuery, currentStatus, username, userListState.sort) {
-        val query = searchQuery.trim()
+    LaunchedEffect(submittedSearchQuery, currentStatus, username, userListState.sort) {
+        val query = submittedSearchQuery.trim()
         if (query.isBlank()) {
             isSearchTransitionLoading = false
             viewModel.clearSearch()
         } else {
-            isSearchTransitionLoading = true
-            delay(250)
-            if (query == searchQuery.trim()) {
-                viewModel.searchUserList(
-                    query = query,
-                    status = currentStatus,
-                    username = username,
-                    sort = userListState.sort
-                )
-            }
+            viewModel.searchUserList(
+                query = query,
+                status = currentStatus,
+                username = username,
+                sort = userListState.sort
+            )
         }
     }
 
-    LaunchedEffect(searchState.isLoading, searchState.query, searchQuery) {
-        val query = searchQuery.trim()
+    LaunchedEffect(searchState.isLoading, searchState.query, submittedSearchQuery) {
+        val query = submittedSearchQuery.trim()
         if (query.isBlank()) {
             isSearchTransitionLoading = false
         } else if (!searchState.isLoading && searchState.query == query) {
@@ -327,6 +365,24 @@ fun UserAnimeSection(
                     onSearchQueryChange = { searchQuery = it },
                     isSearchExpanded = isSearchExpanded,
                     onSearchExpandChange = { isSearchExpanded = it },
+                    onSearchSubmit = {
+                        val query = searchQuery.trim()
+                        if (query.isBlank()) {
+                            submittedSearchQuery = ""
+                            isSearchTransitionLoading = false
+                            viewModel.clearSearch()
+                        } else {
+                            submittedSearchQuery = query
+                            isSearchTransitionLoading = true
+                            viewModel.saveRecentSearch(query)
+                        }
+                    },
+                    recentSearches = recentSearches,
+                    onRecentSearchSelected = {
+                        searchQuery = it
+                        submittedSearchQuery = it
+                        isSearchTransitionLoading = true
+                    },
                     onRefreshClick = {
                         viewModel.refreshStatus(currentStatus, username = username)
                     },
@@ -372,7 +428,7 @@ fun UserAnimeSection(
         ) {
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 1
+                beyondViewportPageCount = 0
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userListState.status) userListState.sort else null
@@ -407,9 +463,9 @@ fun UserAnimeSection(
                         animeList = pageItems,
                         airingDetails = airingDetails,
                         titleLanguage = titleLanguage,
-                        searchQuery = if (page == activePage) searchQuery else "",
+                        searchQuery = if (page == activePage) submittedSearchQuery else "",
                         searchResults = if (page == activePage) searchState.results else emptyList(),
-                        isSearchLoading = page == activePage && searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
+                        isSearchLoading = page == activePage && submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
                         isOwnList = username == null,
                         onAnimeClick = onAnimeClick,
@@ -421,7 +477,7 @@ fun UserAnimeSection(
                         page == activePage && (
                             isTabTransitionLoading ||
                                 pageIsLoading ||
-                                (searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading))
+                                (submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading))
                             )
                     ) {
                         Box(
@@ -476,6 +532,7 @@ fun UserMangaSection(
 ) {
     val userMangaListState by viewModel.userMangaListState.collectAsState()
     val searchState by viewModel.searchState.collectAsState()
+    val recentSearches by viewModel.recentSearches.collectAsState()
     val loadedLists by viewModel.loadedLists.collectAsState()
     val loadingStatuses by viewModel.loadingStatuses.collectAsState()
 
@@ -493,6 +550,7 @@ fun UserMangaSection(
     val coroutineScope = rememberCoroutineScope()
 
     var searchQuery by remember { mutableStateOf("") }
+    var submittedSearchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var isSearchTransitionLoading by remember { mutableStateOf(false) }
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
@@ -516,31 +574,28 @@ fun UserMangaSection(
 
     LaunchedEffect(username) {
         searchQuery = ""
+        submittedSearchQuery = ""
         isSearchExpanded = false
         viewModel.clearSearch()
     }
 
-    LaunchedEffect(searchQuery, currentStatus, username, userMangaListState.sort) {
-        val query = searchQuery.trim()
+    LaunchedEffect(submittedSearchQuery, currentStatus, username, userMangaListState.sort) {
+        val query = submittedSearchQuery.trim()
         if (query.isBlank()) {
             isSearchTransitionLoading = false
             viewModel.clearSearch()
         } else {
-            isSearchTransitionLoading = true
-            delay(250)
-            if (query == searchQuery.trim()) {
-                viewModel.searchUserList(
-                    query = query,
-                    status = currentStatus,
-                    username = username,
-                    sort = userMangaListState.sort
-                )
-            }
+            viewModel.searchUserList(
+                query = query,
+                status = currentStatus,
+                username = username,
+                sort = userMangaListState.sort
+            )
         }
     }
 
-    LaunchedEffect(searchState.isLoading, searchState.query, searchQuery) {
-        val query = searchQuery.trim()
+    LaunchedEffect(searchState.isLoading, searchState.query, submittedSearchQuery) {
+        val query = submittedSearchQuery.trim()
         if (query.isBlank()) {
             isSearchTransitionLoading = false
         } else if (!searchState.isLoading && searchState.query == query) {
@@ -563,6 +618,24 @@ fun UserMangaSection(
                     onSearchQueryChange = { searchQuery = it },
                     isSearchExpanded = isSearchExpanded,
                     onSearchExpandChange = { isSearchExpanded = it },
+                    onSearchSubmit = {
+                        val query = searchQuery.trim()
+                        if (query.isBlank()) {
+                            submittedSearchQuery = ""
+                            isSearchTransitionLoading = false
+                            viewModel.clearSearch()
+                        } else {
+                            submittedSearchQuery = query
+                            isSearchTransitionLoading = true
+                            viewModel.saveRecentSearch(query)
+                        }
+                    },
+                    recentSearches = recentSearches,
+                    onRecentSearchSelected = {
+                        searchQuery = it
+                        submittedSearchQuery = it
+                        isSearchTransitionLoading = true
+                    },
                     onRefreshClick = {
                         viewModel.refreshStatus(currentStatus, username = username)
                     },
@@ -608,7 +681,7 @@ fun UserMangaSection(
         ) {
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 1
+                beyondViewportPageCount = 0
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userMangaListState.status) userMangaListState.sort else null
@@ -642,9 +715,9 @@ fun UserMangaSection(
                         listKey = "manga_${username ?: "@me"}_$pageStatus",
                         mangaList = pageItems,
                         titleLanguage = titleLanguage,
-                        searchQuery = if (page == activePage) searchQuery else "",
+                        searchQuery = if (page == activePage) submittedSearchQuery else "",
                         searchResults = if (page == activePage) searchState.results else emptyList(),
-                        isSearchLoading = page == activePage && searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
+                        isSearchLoading = page == activePage && submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
                         isOwnList = username == null,
                         onMangaClick = onMangaClick,
@@ -656,7 +729,7 @@ fun UserMangaSection(
                         page == activePage && (
                             isTabTransitionLoading ||
                                 pageIsLoading ||
-                                (searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading))
+                                (submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading))
                             )
                     ) {
                         Box(
