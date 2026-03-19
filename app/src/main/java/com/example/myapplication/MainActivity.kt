@@ -1,10 +1,12 @@
 package com.example.myapplication
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -24,8 +26,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -49,6 +51,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val animeViewModel: AnimeViewModel = hiltViewModel()
+            val userListViewModel: UserListViewModel = hiltViewModel()
+            val userMangaListViewModel: UserMangaListViewModel = hiltViewModel()
+            val profileViewModel: ProfileViewModel = hiltViewModel()
             val themePref by settingsViewModel.themePreference.collectAsState()
             val titleLanguage by settingsViewModel.titleLanguage.collectAsState()
             val userPfp by animeViewModel.userPfp.collectAsState()
@@ -64,13 +69,49 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
+                var showExitDialog by remember { mutableStateOf(false) }
                 var lastBottomNavClickAt by remember { mutableLongStateOf(0L) }
+                val routeHistory = remember { mutableStateListOf<String>() }
+                var hasWarmedSession by remember { mutableStateOf(false) }
                 val showBottomBar = currentDestination?.route != "login" && 
                                     currentDestination?.route != "settings" && 
                                     currentDestination?.route != "feedback" && 
                                     currentDestination?.route?.startsWith("anime_details") != true &&
                                     currentDestination?.route?.startsWith("manga_details") != true &&
                                     currentDestination?.route?.startsWith("all_reviews") != true
+                val isHomeRootRoute = currentDestination?.route?.startsWith("anime_list") == true
+                val userListUsernameArg = navBackStackEntry?.arguments?.getString("username")
+                val isOwnUserListRootRoute =
+                    currentDestination?.route?.startsWith("user_list") == true &&
+                        (userListUsernameArg.isNullOrBlank() || userListUsernameArg == "null")
+                val profileUsernameArg = navBackStackEntry?.arguments?.getString("username")
+                val isOwnProfileRootRoute =
+                    currentDestination?.route?.startsWith("profile_route") == true &&
+                        (profileUsernameArg.isNullOrBlank() || profileUsernameArg == "null")
+                val shouldInterceptBackForExit =
+                    isHomeRootRoute || isOwnUserListRootRoute || isOwnProfileRootRoute
+
+                BackHandler(enabled = shouldInterceptBackForExit) {
+                    showExitDialog = true
+                }
+
+                if (showExitDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showExitDialog = false },
+                        title = { Text("Exit App") },
+                        text = { Text("Are you sure you want to exit?") },
+                        confirmButton = {
+                            TextButton(onClick = { finish() }) {
+                                Text("Exit")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showExitDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
 
                 val loginUiState by loginViewModel.uiState.collectAsState()
                 
@@ -90,16 +131,46 @@ class MainActivity : ComponentActivity() {
                     lastBottomNavClickAt = now
                     runCatching {
                         navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
+                            popUpTo(navController.graph.id) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
+                }
+
+                fun navigateSingleTop(route: String) {
+                    runCatching {
+                        navController.navigate(route) {
                             launchSingleTop = true
                             restoreState = true
                         }
                     }
                 }
+
+                fun navigateToExistingOrPush(route: String) {
+                    val targetKey = routeToKey(route) ?: route
+                    val targetIndex = routeHistory.indexOfLast { it == targetKey }
+                    if (targetIndex >= 0) {
+                        val popsNeeded = routeHistory.lastIndex - targetIndex
+                        repeat(popsNeeded) {
+                            navController.popBackStack()
+                        }
+                    } else {
+                        val shouldAvoidSingleTop =
+                            route.startsWith("anime_details/") ||
+                                route.startsWith("manga_details/") ||
+                                route.startsWith("all_reviews/")
+                        if (shouldAvoidSingleTop) {
+                            runCatching { navController.navigate(route) }
+                        } else {
+                            navigateSingleTop(route)
+                        }
+                    }
+                }
                 
                 LaunchedEffect(loginUiState) {
+                    if (loginUiState is LoginUiState.Idle) {
+                        hasWarmedSession = false
+                    }
                     if (loginUiState is LoginUiState.Success) {
                         if (navController.currentDestination?.route == "login") {
                             val targetRoute = when (defaultSection) {
@@ -120,6 +191,14 @@ class MainActivity : ComponentActivity() {
                             navController.navigate(targetRoute) {
                                 popUpTo("login") { inclusive = true }
                             }
+                        }
+
+                        if (!hasWarmedSession) {
+                            hasWarmedSession = true
+                            animeViewModel.loadHomeData()
+                            profileViewModel.getProfile(null)
+                            userListViewModel.loadUserList(defaultAnimeStatus, username = null, forceRefresh = false)
+                            userMangaListViewModel.loadUserMangaList(defaultMangaStatus, username = null, forceRefresh = false)
                         }
                     }
                 }
@@ -143,6 +222,20 @@ class MainActivity : ComponentActivity() {
                         } ?: route
                         
                         settingsViewModel.setLastUsedSection(fullRoute)
+                    }
+                }
+
+                LaunchedEffect(navBackStackEntry) {
+                    val key = navBackStackEntry?.let { backStackEntryToKey(it) } ?: return@LaunchedEffect
+                    if (routeHistory.isEmpty()) {
+                        routeHistory.add(key)
+                    } else if (routeHistory.last() != key) {
+                        val existingIndex = routeHistory.indexOfLast { it == key }
+                        if (existingIndex >= 0) {
+                            routeHistory.subList(existingIndex + 1, routeHistory.size).clear()
+                        } else {
+                            routeHistory.add(key)
+                        }
                     }
                 }
 
@@ -229,14 +322,14 @@ class MainActivity : ComponentActivity() {
                             }
 
                             AnimeListScreen(
-                                viewModel = hiltViewModel(),
+                                viewModel = animeViewModel,
                                 titleLanguage = titleLanguage,
                                 initialTab = initialTab,
                                 onAnimeClick = { animeId ->
-                                    navController.navigate("anime_details/$animeId")
+                                    navigateToExistingOrPush("anime_details/$animeId")
                                 },
                                 onMangaClick = { mangaId ->
-                                    navController.navigate("manga_details/$mangaId")
+                                    navigateToExistingOrPush("manga_details/$mangaId")
                                 },
                                 onOpenAnimeUserList = {
                                     navigateToBottomDestination(
@@ -251,7 +344,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                 },
                                 onSettingsClick = {
-                                    navController.navigate("settings")
+                                    navigateSingleTop("settings")
                                 }
                             )
                         }
@@ -268,20 +361,20 @@ class MainActivity : ComponentActivity() {
                             val username = backStackEntry.arguments?.getString("username")
                             
                             UserListScreen(
-                                animeViewModel = hiltViewModel(),
-                                mangaViewModel = hiltViewModel(),
+                                animeViewModel = userListViewModel,
+                                mangaViewModel = userMangaListViewModel,
                                 titleLanguage = titleLanguage,
                                 initialMainTab = mainTab,
                                 initialSubTab = subTab,
                                 username = username,
                                 onAnimeClick = { animeId ->
-                                    navController.navigate("anime_details/$animeId")
+                                    navigateToExistingOrPush("anime_details/$animeId")
                                 },
                                 onMangaClick = { mangaId ->
-                                    navController.navigate("manga_details/$mangaId")
+                                    navigateToExistingOrPush("manga_details/$mangaId")
                                 },
                                 onOpenSettings = {
-                                    navController.navigate("settings")
+                                    navigateSingleTop("settings")
                                 }
                             )
                         }
@@ -297,7 +390,10 @@ class MainActivity : ComponentActivity() {
                                 titleLanguage = titleLanguage,
                                 onBackClick = { navController.popBackStack() },
                                 onReviewsClick = { animeId ->
-                                    navController.navigate("all_reviews/$animeId")
+                                    navigateToExistingOrPush("all_reviews/$animeId")
+                                },
+                                onAnimeClick = { animeId ->
+                                    navigateToExistingOrPush("anime_details/$animeId")
                                 }
                             )
                         }
@@ -311,7 +407,10 @@ class MainActivity : ComponentActivity() {
                             MangaDetailsScreen(
                                 viewModel = viewModel,
                                 titleLanguage = titleLanguage,
-                                onBackClick = { navController.popBackStack() }
+                                onBackClick = { navController.popBackStack() },
+                                onMangaClick = { mangaId ->
+                                    navigateToExistingOrPush("manga_details/$mangaId")
+                                }
                             )
                         }
                         composable(
@@ -333,16 +432,21 @@ class MainActivity : ComponentActivity() {
                             )
                         ) { backStackEntry ->
                             val username = backStackEntry.arguments?.getString("username")
-                            val viewModel: ProfileViewModel = hiltViewModel()
                             ProfileScreen(
-                                viewModel = viewModel,
+                                viewModel = profileViewModel,
                                 username = username,
                                 onBack = { navController.popBackStack() },
                                 onUserClick = { clickedUser ->
-                                    navController.navigate("profile_route?username=$clickedUser")
+                                    navigateToExistingOrPush("profile_route?username=$clickedUser")
                                 },
                                 onListClick = { listUser ->
-                                    navController.navigate("user_list?mainTab=0&subTab=0&username=$listUser")
+                                    navigateToExistingOrPush("user_list?mainTab=0&subTab=0&username=$listUser")
+                                },
+                                onAnimeClick = { animeId ->
+                                    navigateToExistingOrPush("anime_details/$animeId")
+                                },
+                                onMangaClick = { mangaId ->
+                                    navigateToExistingOrPush("manga_details/$mangaId")
                                 },
                                 onLogout = {
                                     loginViewModel.logout()
@@ -355,7 +459,7 @@ class MainActivity : ComponentActivity() {
                         composable("settings") {
                             SettingsScreen(
                                 viewModel = hiltViewModel(),
-                                onFeedbackClick = { navController.navigate("feedback") },
+                                onFeedbackClick = { navigateSingleTop("feedback") },
                                 onBack = { navController.popBackStack() }
                             )
                         }
@@ -383,6 +487,82 @@ class MainActivity : ComponentActivity() {
         }
         
         return list.indexOf(effectiveStatus).coerceAtLeast(0)
+    }
+
+    private fun normalizeUsername(value: String?): String? {
+        return value?.takeUnless { it.isBlank() || it == "null" }
+    }
+
+    private fun routeToKey(route: String): String? {
+        return when {
+            route.startsWith("anime_details/") -> {
+                val animeId = route.substringAfter("anime_details/").toIntOrNull() ?: return null
+                "anime_details:$animeId"
+            }
+            route.startsWith("manga_details/") -> {
+                val mangaId = route.substringAfter("manga_details/").toIntOrNull() ?: return null
+                "manga_details:$mangaId"
+            }
+            route.startsWith("all_reviews/") -> {
+                val animeId = route.substringAfter("all_reviews/").toIntOrNull() ?: return null
+                "all_reviews:$animeId"
+            }
+            route.startsWith("profile_route") -> {
+                val uri = Uri.parse("app://maltrack/$route")
+                val username = normalizeUsername(uri.getQueryParameter("username"))
+                "profile_route:${username ?: "@me"}"
+            }
+            route.startsWith("user_list") -> {
+                val uri = Uri.parse("app://maltrack/$route")
+                val mainTab = uri.getQueryParameter("mainTab")?.toIntOrNull() ?: 0
+                val subTab = uri.getQueryParameter("subTab")?.toIntOrNull() ?: 0
+                val username = normalizeUsername(uri.getQueryParameter("username"))
+                "user_list:$mainTab:$subTab:${username ?: "@me"}"
+            }
+            route.startsWith("anime_list") -> {
+                val uri = Uri.parse("app://maltrack/$route")
+                val tab = uri.getQueryParameter("initialTab")?.toIntOrNull() ?: 0
+                "anime_list:$tab"
+            }
+            route == "settings" || route == "feedback" || route == "login" -> route
+            else -> null
+        }
+    }
+
+    private fun backStackEntryToKey(entry: NavBackStackEntry): String? {
+        val destinationRoute = entry.destination.route ?: return null
+        val args = entry.arguments
+        return when {
+            destinationRoute == "anime_details/{animeId}" -> {
+                val animeId = args?.getInt("animeId") ?: return null
+                "anime_details:$animeId"
+            }
+            destinationRoute == "manga_details/{mangaId}" -> {
+                val mangaId = args?.getInt("mangaId") ?: return null
+                "manga_details:$mangaId"
+            }
+            destinationRoute == "all_reviews/{animeId}" -> {
+                val animeId = args?.getInt("animeId") ?: return null
+                "all_reviews:$animeId"
+            }
+            destinationRoute.startsWith("profile_route") -> {
+                val username = normalizeUsername(args?.getString("username"))
+                "profile_route:${username ?: "@me"}"
+            }
+            destinationRoute.startsWith("user_list") -> {
+                val mainTab = args?.getInt("mainTab") ?: 0
+                val subTab = args?.getInt("subTab") ?: 0
+                val username = normalizeUsername(args?.getString("username"))
+                "user_list:$mainTab:$subTab:${username ?: "@me"}"
+            }
+            destinationRoute.startsWith("anime_list") -> {
+                val initialTab = args?.getInt("initialTab") ?: 0
+                "anime_list:$initialTab"
+            }
+            destinationRoute == "settings" || destinationRoute == "feedback" || destinationRoute == "login" ->
+                destinationRoute
+            else -> null
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

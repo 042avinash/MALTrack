@@ -7,6 +7,9 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface JikanApiService {
+    @GET("random/anime")
+    suspend fun getRandomAnime(): JikanRandomAnimeResponse
+
     @GET("anime/{id}/characters")
     suspend fun getAnimeCharacters(@Path("id") id: Int): JikanCharactersResponse
 
@@ -179,4 +182,14 @@ data class JikanMangaData(
     val chapters: Int? = null,
     val volumes: Int? = null,
     val status: String? = null
+)
+
+@Serializable
+data class JikanRandomAnimeResponse(
+    val data: JikanRandomAnimeData
+)
+
+@Serializable
+data class JikanRandomAnimeData(
+    val mal_id: Int
 )

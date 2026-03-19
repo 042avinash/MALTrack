@@ -1,6 +1,11 @@
 package com.example.myapplication.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -8,11 +13,13 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -42,12 +49,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,7 +80,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -85,6 +94,10 @@ import coil.compose.AsyncImage
 import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.data.local.getPreferredTitle
 import com.example.myapplication.data.model.AniListMedia
+import com.example.myapplication.data.model.ListStatus
+import com.example.myapplication.data.model.MangaListStatus
+import com.example.myapplication.data.model.MyListStatus
+import com.example.myapplication.data.model.MyMangaListStatus
 import com.example.myapplication.data.model.UserAnimeData
 import com.example.myapplication.data.model.UserMangaData
 import kotlinx.coroutines.delay
@@ -186,7 +199,7 @@ fun ListActionToolbar(
                         modifier = Modifier.height(36.dp)
                     ) {
                         Icon(
-                            if (isAnime) Icons.AutoMirrored.Filled.MenuBook else Icons.Default.Movie,
+                            if (isAnime) Icons.Default.Movie else Icons.AutoMirrored.Filled.MenuBook,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
@@ -245,32 +258,39 @@ fun UserAnimeSection(
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var isSearchTransitionLoading by remember { mutableStateOf(false) }
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
     var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
+    var pendingAnimeEdit by remember { mutableStateOf<UserAnimeData?>(null) }
 
     val settledPage = pagerState.settledPage
-    val currentStatus = statuses[settledPage]
+    val activePage = pagerState.currentPage
+    val currentStatus = statuses[activePage]
     val isGridView by viewModel.getGridModeFlow(currentStatus)
         .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
 
     LaunchedEffect(settledPage, username) {
-        searchQuery = ""
-        isSearchExpanded = false
-        viewModel.clearSearch()
         if (currentStatus !in loadedStatuses) {
             isTabTransitionLoading = true
             viewModel.loadUserList(currentStatus, username = username, forceRefresh = false)
-            loadedStatuses = loadedStatuses + currentStatus
         } else {
             isTabTransitionLoading = false
         }
     }
 
+    LaunchedEffect(username) {
+        searchQuery = ""
+        isSearchExpanded = false
+        viewModel.clearSearch()
+    }
+
     LaunchedEffect(searchQuery, currentStatus, username, userListState.sort) {
         val query = searchQuery.trim()
         if (query.isBlank()) {
+            isSearchTransitionLoading = false
             viewModel.clearSearch()
         } else {
+            isSearchTransitionLoading = true
             delay(250)
             if (query == searchQuery.trim()) {
                 viewModel.searchUserList(
@@ -283,6 +303,22 @@ fun UserAnimeSection(
         }
     }
 
+    LaunchedEffect(searchState.isLoading, searchState.query, searchQuery) {
+        val query = searchQuery.trim()
+        if (query.isBlank()) {
+            isSearchTransitionLoading = false
+        } else if (!searchState.isLoading && searchState.query == query) {
+            isSearchTransitionLoading = false
+        }
+    }
+
+    LaunchedEffect(isSearchTransitionLoading, searchQuery) {
+        if (isSearchTransitionLoading && searchQuery.isNotBlank()) {
+            delay(1500)
+            isSearchTransitionLoading = false
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -292,7 +328,6 @@ fun UserAnimeSection(
                     isSearchExpanded = isSearchExpanded,
                     onSearchExpandChange = { isSearchExpanded = it },
                     onRefreshClick = {
-                        loadedStatuses = loadedStatuses + currentStatus
                         viewModel.refreshStatus(currentStatus, username = username)
                     },
                     onOpenSettings = onOpenSettings,
@@ -345,12 +380,22 @@ fun UserAnimeSection(
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
                 val effectiveUsername = (if (username == "null") null else username) ?: "@me"
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
-                val pageItems = loadedLists[pageCacheKey].orEmpty()
+                val pageItems = loadedLists[pageCacheKey]
+                    ?: loadedLists.entries.firstOrNull {
+                        it.key.startsWith("$effectiveUsername|$pageStatus|")
+                    }?.value
+                    ?: emptyList()
+                val pageHasLoadedData = loadedLists.containsKey(pageCacheKey) || loadedLists.keys.any {
+                    it.startsWith("$effectiveUsername|$pageStatus|")
+                }
                 val pageIsLoading = loadingStatuses[listOf(effectiveUsername, pageStatus).joinToString("|")] == true
 
                 if (page == settledPage && !pageIsLoading) {
-                    LaunchedEffect(pageIsLoading, settledPage, userListState.status) {
+                    LaunchedEffect(pageIsLoading, pageHasLoadedData, settledPage, userListState.status) {
                         if (userListState.status == currentStatus) {
+                            if (pageHasLoadedData) {
+                                loadedStatuses = loadedStatuses + currentStatus
+                            }
                             isTabTransitionLoading = false
                         }
                     }
@@ -362,28 +407,59 @@ fun UserAnimeSection(
                         animeList = pageItems,
                         airingDetails = airingDetails,
                         titleLanguage = titleLanguage,
-                        searchQuery = if (page == settledPage) searchQuery else "",
-                        searchResults = if (page == settledPage) searchState.results else emptyList(),
-                        isSearchLoading = page == settledPage && searchQuery.isNotBlank() && searchState.isLoading,
+                        searchQuery = if (page == activePage) searchQuery else "",
+                        searchResults = if (page == activePage) searchState.results else emptyList(),
+                        isSearchLoading = page == activePage && searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
                         isOwnList = username == null,
                         onAnimeClick = onAnimeClick,
-                        onAnimeLongClick = { viewModel.quickIncrement(it) },
+                        onAnimePlusOne = { item -> viewModel.quickIncrement(item.node.id) },
+                        onAnimeEdit = { item -> pendingAnimeEdit = item },
                     )
 
-                    if (page == settledPage && (isTabTransitionLoading || pageIsLoading)) {
+                    if (
+                        page == activePage && (
+                            isTabTransitionLoading ||
+                                pageIsLoading ||
+                                (searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading))
+                            )
+                    ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surface),
-                            contentAlignment = Alignment.Center
+                                .background(MaterialTheme.colorScheme.surface)
                         ) {
-                            CircularProgressIndicator()
+                            UserListLoadingShimmer(isGridView = pageIsGridView)
                         }
                     }
                 }
             }
         }
+    }
+
+    pendingAnimeEdit?.let { item ->
+        EditListStatusDialog(
+            currentStatus = item.listStatus.toMyListStatus(),
+            maxEpisodes = item.node.numEpisodes ?: 0,
+            onDismiss = { pendingAnimeEdit = null },
+            onSave = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
+                viewModel.updateListStatus(
+                    animeId = item.node.id,
+                    status = status,
+                    isRewatching = isRewatching,
+                    score = score,
+                    numWatchedEpisodes = eps,
+                    priority = priority,
+                    numTimesRewatched = timesRewatched,
+                    rewatchValue = rewatchVal,
+                    tags = tags,
+                    comments = comments,
+                    startDate = start,
+                    finishDate = finish
+                )
+                pendingAnimeEdit = null
+            }
+        )
     }
 }
 
@@ -418,32 +494,39 @@ fun UserMangaSection(
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var isSearchTransitionLoading by remember { mutableStateOf(false) }
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
     var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
+    var pendingMangaEdit by remember { mutableStateOf<UserMangaData?>(null) }
 
     val settledPage = pagerState.settledPage
-    val currentStatus = statuses[settledPage]
+    val activePage = pagerState.currentPage
+    val currentStatus = statuses[activePage]
     val isGridView by viewModel.getGridModeFlow(currentStatus)
         .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
 
     LaunchedEffect(settledPage, username) {
-        searchQuery = ""
-        isSearchExpanded = false
-        viewModel.clearSearch()
         if (currentStatus !in loadedStatuses) {
             isTabTransitionLoading = true
             viewModel.loadUserMangaList(currentStatus, username = username, forceRefresh = false)
-            loadedStatuses = loadedStatuses + currentStatus
         } else {
             isTabTransitionLoading = false
         }
     }
 
+    LaunchedEffect(username) {
+        searchQuery = ""
+        isSearchExpanded = false
+        viewModel.clearSearch()
+    }
+
     LaunchedEffect(searchQuery, currentStatus, username, userMangaListState.sort) {
         val query = searchQuery.trim()
         if (query.isBlank()) {
+            isSearchTransitionLoading = false
             viewModel.clearSearch()
         } else {
+            isSearchTransitionLoading = true
             delay(250)
             if (query == searchQuery.trim()) {
                 viewModel.searchUserList(
@@ -456,6 +539,22 @@ fun UserMangaSection(
         }
     }
 
+    LaunchedEffect(searchState.isLoading, searchState.query, searchQuery) {
+        val query = searchQuery.trim()
+        if (query.isBlank()) {
+            isSearchTransitionLoading = false
+        } else if (!searchState.isLoading && searchState.query == query) {
+            isSearchTransitionLoading = false
+        }
+    }
+
+    LaunchedEffect(isSearchTransitionLoading, searchQuery) {
+        if (isSearchTransitionLoading && searchQuery.isNotBlank()) {
+            delay(1500)
+            isSearchTransitionLoading = false
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -465,7 +564,6 @@ fun UserMangaSection(
                     isSearchExpanded = isSearchExpanded,
                     onSearchExpandChange = { isSearchExpanded = it },
                     onRefreshClick = {
-                        loadedStatuses = loadedStatuses + currentStatus
                         viewModel.refreshStatus(currentStatus, username = username)
                     },
                     onOpenSettings = onOpenSettings,
@@ -518,12 +616,22 @@ fun UserMangaSection(
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
                 val effectiveUsername = (if (username == "null") null else username) ?: "@me"
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
-                val pageItems = loadedLists[pageCacheKey].orEmpty()
+                val pageItems = loadedLists[pageCacheKey]
+                    ?: loadedLists.entries.firstOrNull {
+                        it.key.startsWith("$effectiveUsername|$pageStatus|")
+                    }?.value
+                    ?: emptyList()
+                val pageHasLoadedData = loadedLists.containsKey(pageCacheKey) || loadedLists.keys.any {
+                    it.startsWith("$effectiveUsername|$pageStatus|")
+                }
                 val pageIsLoading = loadingStatuses[listOf(effectiveUsername, pageStatus).joinToString("|")] == true
 
                 if (page == settledPage && !pageIsLoading) {
-                    LaunchedEffect(pageIsLoading, settledPage, userMangaListState.status) {
+                    LaunchedEffect(pageIsLoading, pageHasLoadedData, settledPage, userMangaListState.status) {
                         if (userMangaListState.status == currentStatus) {
+                            if (pageHasLoadedData) {
+                                loadedStatuses = loadedStatuses + currentStatus
+                            }
                             isTabTransitionLoading = false
                         }
                     }
@@ -534,28 +642,61 @@ fun UserMangaSection(
                         listKey = "manga_${username ?: "@me"}_$pageStatus",
                         mangaList = pageItems,
                         titleLanguage = titleLanguage,
-                        searchQuery = if (page == settledPage) searchQuery else "",
-                        searchResults = if (page == settledPage) searchState.results else emptyList(),
-                        isSearchLoading = page == settledPage && searchQuery.isNotBlank() && searchState.isLoading,
+                        searchQuery = if (page == activePage) searchQuery else "",
+                        searchResults = if (page == activePage) searchState.results else emptyList(),
+                        isSearchLoading = page == activePage && searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
                         isOwnList = username == null,
                         onMangaClick = onMangaClick,
-                        onMangaLongClick = { viewModel.quickIncrement(it) },
+                        onMangaPlusOne = { item -> viewModel.quickIncrement(item.node.id) },
+                        onMangaEdit = { item -> pendingMangaEdit = item },
                     )
 
-                    if (page == settledPage && (isTabTransitionLoading || pageIsLoading)) {
+                    if (
+                        page == activePage && (
+                            isTabTransitionLoading ||
+                                pageIsLoading ||
+                                (searchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading))
+                            )
+                    ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surface),
-                            contentAlignment = Alignment.Center
+                                .background(MaterialTheme.colorScheme.surface)
                         ) {
-                            CircularProgressIndicator()
+                            UserListLoadingShimmer(isGridView = pageIsGridView)
                         }
                     }
                 }
             }
         }
+    }
+
+    pendingMangaEdit?.let { item ->
+        EditMangaListStatusDialog(
+            currentStatus = item.listStatus.toMyMangaListStatus(),
+            maxVolumes = item.node.numVolumes ?: 0,
+            maxChapters = item.node.numChapters ?: 0,
+            onDismiss = { pendingMangaEdit = null },
+            onSave = { status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish ->
+                viewModel.updateListStatus(
+                    mangaId = item.node.id,
+                    status = status,
+                    isRereading = isRereading,
+                    score = score,
+                    numVolumesRead = vols,
+                    numChaptersRead = chaps,
+                    priority = priority,
+                    numTimesReread = timesReread,
+                    rereadValue = rereadVal,
+                    tags = tags,
+                    comments = comments,
+                    startDate = start,
+                    finishDate = finish
+                )
+                pendingMangaEdit = null
+            }
+        )
     }
 }
 
@@ -571,7 +712,8 @@ fun UserAnimeList(
     isGridView: Boolean,
     isOwnList: Boolean = true,
     onAnimeClick: (Int) -> Unit,
-    onAnimeLongClick: (Int) -> Unit
+    onAnimePlusOne: (UserAnimeData) -> Unit,
+    onAnimeEdit: (UserAnimeData) -> Unit
 ) {
     val listState = rememberSaveable(listKey, saver = LazyListState.Saver) {
         LazyListState()
@@ -615,7 +757,8 @@ fun UserAnimeList(
                             titleLanguage = titleLanguage,
                             isOwnList = isOwnList,
                             onClick = { onAnimeClick(item.node.id) },
-                            onLongClick = { if (isOwnList) onAnimeLongClick(item.node.id) }
+                            onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
+                            onEditStatus = { if (isOwnList) onAnimeEdit(item) }
                         )
                     }
                 }
@@ -632,7 +775,8 @@ fun UserAnimeList(
                         titleLanguage = titleLanguage,
                         isOwnList = isOwnList,
                         onClick = { onAnimeClick(item.node.id) },
-                        onLongClick = { if (isOwnList) onAnimeLongClick(item.node.id) }
+                        onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
+                        onEditStatus = { if (isOwnList) onAnimeEdit(item) }
                     )
                 }
             }
@@ -669,7 +813,8 @@ fun UserAnimeList(
                             titleLanguage = titleLanguage,
                             isOwnList = isOwnList,
                             onClick = { onAnimeClick(item.node.id) },
-                            onLongClick = { if (isOwnList) onAnimeLongClick(item.node.id) }
+                            onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
+                            onEditStatus = { if (isOwnList) onAnimeEdit(item) }
                         )
                     }
                 }
@@ -686,7 +831,8 @@ fun UserAnimeList(
                         titleLanguage = titleLanguage,
                         isOwnList = isOwnList,
                         onClick = { onAnimeClick(item.node.id) },
-                        onLongClick = { if (isOwnList) onAnimeLongClick(item.node.id) }
+                        onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
+                        onEditStatus = { if (isOwnList) onAnimeEdit(item) }
                     )
                 }
             }
@@ -705,7 +851,8 @@ fun UserMangaList(
     isGridView: Boolean,
     isOwnList: Boolean = true,
     onMangaClick: (Int) -> Unit,
-    onMangaLongClick: (Int) -> Unit
+    onMangaPlusOne: (UserMangaData) -> Unit,
+    onMangaEdit: (UserMangaData) -> Unit
 ) {
     val listState = rememberSaveable(listKey, saver = LazyListState.Saver) {
         LazyListState()
@@ -747,7 +894,8 @@ fun UserMangaList(
                             titleLanguage = titleLanguage,
                             isOwnList = isOwnList,
                             onClick = { onMangaClick(item.node.id) },
-                            onLongClick = { if (isOwnList) onMangaLongClick(item.node.id) }
+                            onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
+                            onEditStatus = { if (isOwnList) onMangaEdit(item) }
                         )
                     }
                 }
@@ -762,7 +910,8 @@ fun UserMangaList(
                         titleLanguage = titleLanguage,
                         isOwnList = isOwnList,
                         onClick = { onMangaClick(item.node.id) },
-                        onLongClick = { if (isOwnList) onMangaLongClick(item.node.id) }
+                        onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
+                        onEditStatus = { if (isOwnList) onMangaEdit(item) }
                     )
                 }
             }
@@ -797,7 +946,8 @@ fun UserMangaList(
                             titleLanguage = titleLanguage,
                             isOwnList = isOwnList,
                             onClick = { onMangaClick(item.node.id) },
-                            onLongClick = { if (isOwnList) onMangaLongClick(item.node.id) }
+                            onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
+                            onEditStatus = { if (isOwnList) onMangaEdit(item) }
                         )
                     }
                 }
@@ -812,12 +962,123 @@ fun UserMangaList(
                         titleLanguage = titleLanguage,
                         isOwnList = isOwnList,
                         onClick = { onMangaClick(item.node.id) },
-                        onLongClick = { if (isOwnList) onMangaLongClick(item.node.id) }
+                        onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
+                        onEditStatus = { if (isOwnList) onMangaEdit(item) }
                     )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun UserListLoadingShimmer(isGridView: Boolean) {
+    val shimmerBrush = rememberShimmerBrush()
+
+    if (isGridView) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(12) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(0.7f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(shimmerBrush)
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(6) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(146.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(82.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(shimmerBrush)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .height(18.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.6f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.7f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.65f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberShimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "user_list_shimmer")
+    val offset by transition.animateFloat(
+        initialValue = -300f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer_offset"
+    )
+
+    val base = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val highlight = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+    return Brush.horizontalGradient(
+        colors = listOf(base, highlight, base),
+        startX = offset - 220f,
+        endX = offset
+    )
 }
 
 fun getUserStatusIcon(status: String?): ImageVector {
@@ -831,6 +1092,23 @@ fun getUserStatusIcon(status: String?): ImageVector {
     }
 }
 
+private fun ListStatus.toMyListStatus(): MyListStatus = MyListStatus(
+    status = status,
+    score = score,
+    numEpisodesWatched = numEpisodesWatched,
+    isRewatching = isRewatching,
+    updatedAt = updatedAt
+)
+
+private fun MangaListStatus.toMyMangaListStatus(): MyMangaListStatus = MyMangaListStatus(
+    status = status,
+    score = score,
+    numVolumesRead = numVolumesRead,
+    numChaptersRead = numChaptersRead,
+    isRereading = isRereading,
+    updatedAt = updatedAt
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun UserAnimeItem(
@@ -839,119 +1117,145 @@ fun UserAnimeItem(
     titleLanguage: TitleLanguage,
     isOwnList: Boolean = true,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onPlusOne: () -> Unit,
+    onEditStatus: () -> Unit
 ) {
     var isAnimating by remember { mutableStateOf(false) }
+    var showQuickActions by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(targetValue = if (isAnimating) 0.3f else 1f, animationSpec = tween(500))
     val scale by animateFloatAsState(targetValue = if (isAnimating) 1.5f else 0f, animationSpec = tween(500))
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             delay(600)
-            onLongClick()
+            onPlusOne()
             isAnimating = false
         }
     }
 
     Box(contentAlignment = Alignment.Center) {
-        Card(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) isAnimating = true }
+                    onLongClick = { if (isOwnList) showQuickActions = true }
                 ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            verticalAlignment = Alignment.Top
         ) {
-            Row(modifier = Modifier.padding(8.dp)) {
-                AsyncImage(
-                    model = data.node.mainPicture?.medium,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(60.dp, 90.dp),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = data.node.getPreferredTitle(titleLanguage),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
-                    val episodesText = if (data.node.status == "currently_airing") {
-                        val aired = if (anilistMedia?.nextAiringEpisode != null) (anilistMedia.nextAiringEpisode.episode - 1).toString() else "?"
-                        "${data.listStatus.numEpisodesWatched} / $aired / $total"
-                    } else {
-                        "${data.listStatus.numEpisodesWatched} / $total"
-                    }
-                    
-                    Text(
-                        text = "Score: ${data.listStatus.score} | Watched: $episodesText",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = getUserStatusIcon(data.listStatus.status),
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+            AsyncImage(
+                model = data.node.mainPicture?.medium,
+                contentDescription = null,
+                modifier = Modifier
+                    .width(82.dp)
+                    .aspectRatio(9f / 16f)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(146.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(modifier = Modifier.padding(8.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = data.listStatus.status.replace("_", " ").uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary
+                            text = data.node.getPreferredTitle(titleLanguage),
+                            style = MaterialTheme.typography.titleMedium,
+                            minLines = 2,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
-                    
-                    if (data.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
-                        val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
-                        val days = timeUntil / 86400
-                        val hours = (timeUntil % 86400) / 3600
-                        val mins = (timeUntil % 3600) / 60
-                        val countdown = if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
                         
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
+                        val episodesText = if (data.node.status == "currently_airing") {
+                            val aired = if (anilistMedia?.nextAiringEpisode != null) (anilistMedia.nextAiringEpisode.episode - 1).toString() else "?"
+                            "${data.listStatus.numEpisodesWatched} / $aired / $total"
+                        } else {
+                            "${data.listStatus.numEpisodesWatched} / $total"
+                        }
+                        
+                        Text(
+                            text = "Score: ${data.listStatus.score} | Watched: $episodesText",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val countdown = if (data.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
+                            val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
+                            val days = timeUntil / 86400
+                            val hours = (timeUntil % 86400) / 3600
+                            val mins = (timeUntil % 3600) / 60
+                            if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
+                        } else null
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Next Ep: $countdown",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = getUserStatusIcon(data.listStatus.status),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = data.listStatus.status.replace("_", " ").uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                        }
+
+                        if (countdown != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        shape = RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Next Ep: $countdown",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
-                if (data.listStatus.score > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = "Score",
-                            tint = Color.Yellow,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = data.listStatus.score.toString(),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
             }
+        }
+        DropdownMenu(
+            expanded = showQuickActions,
+            onDismissRequest = { showQuickActions = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("+1") },
+                onClick = {
+                    showQuickActions = false
+                    isAnimating = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showQuickActions = false
+                    onEditStatus()
+                }
+            )
         }
         if (isAnimating) {
             Text(
@@ -972,89 +1276,107 @@ fun UserMangaItem(
     titleLanguage: TitleLanguage,
     isOwnList: Boolean = true,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onPlusOne: () -> Unit,
+    onEditStatus: () -> Unit
 ) {
     var isAnimating by remember { mutableStateOf(false) }
+    var showQuickActions by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(targetValue = if (isAnimating) 0.3f else 1f, animationSpec = tween(500))
     val scale by animateFloatAsState(targetValue = if (isAnimating) 1.5f else 0f, animationSpec = tween(500))
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             delay(600)
-            onLongClick()
+            onPlusOne()
             isAnimating = false
         }
     }
 
     Box(contentAlignment = Alignment.Center) {
-        Card(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) isAnimating = true }
+                    onLongClick = { if (isOwnList) showQuickActions = true }
                 ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            verticalAlignment = Alignment.Top
         ) {
-            Row(modifier = Modifier.padding(8.dp)) {
-                AsyncImage(
-                    model = data.node.mainPicture?.medium,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(60.dp, 90.dp),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = data.node.getPreferredTitle(titleLanguage),
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    val totalVols = if (data.node.numVolumes != null && data.node.numVolumes > 0) data.node.numVolumes.toString() else "?"
-                    val totalChaps = if (data.node.numChapters != null && data.node.numChapters > 0) data.node.numChapters.toString() else "?"
-                    
-                    Text(
-                        text = "Score: ${data.listStatus.score} | Read: ${data.listStatus.numVolumesRead}/$totalVols vols, ${data.listStatus.numChaptersRead}/$totalChaps chaps",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = getUserStatusIcon(data.listStatus.status),
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+            AsyncImage(
+                model = data.node.mainPicture?.medium,
+                contentDescription = null,
+                modifier = Modifier
+                    .width(82.dp)
+                    .aspectRatio(9f / 16f)
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(146.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(modifier = Modifier.padding(8.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = data.listStatus.status.replace("_", " ").uppercase(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                }
-                if (data.listStatus.score > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = "Score",
-                            tint = Color.Yellow,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = data.listStatus.score.toString(),
-                            style = MaterialTheme.typography.labelMedium,
+                            text = data.node.getPreferredTitle(titleLanguage),
+                            style = MaterialTheme.typography.titleMedium,
+                            minLines = 2,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.Bold
                         )
+                        
+                        val totalVols = if (data.node.numVolumes != null && data.node.numVolumes > 0) data.node.numVolumes.toString() else "?"
+                        val totalChaps = if (data.node.numChapters != null && data.node.numChapters > 0) data.node.numChapters.toString() else "?"
+                        
+                        Text(
+                            text = "Score: ${data.listStatus.score} | Read: ${data.listStatus.numVolumesRead}/$totalVols vols, ${data.listStatus.numChaptersRead}/$totalChaps chaps",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = getUserStatusIcon(data.listStatus.status),
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.secondary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = data.listStatus.status.replace("_", " ").uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
                 }
             }
+        }
+        DropdownMenu(
+            expanded = showQuickActions,
+            onDismissRequest = { showQuickActions = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("+1") },
+                onClick = {
+                    showQuickActions = false
+                    isAnimating = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showQuickActions = false
+                    onEditStatus()
+                }
+            )
         }
         if (isAnimating) {
             Text(
@@ -1076,16 +1398,18 @@ fun UserAnimeGridItem(
     titleLanguage: TitleLanguage,
     isOwnList: Boolean = true,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onPlusOne: () -> Unit,
+    onEditStatus: () -> Unit
 ) {
     var isAnimating by remember { mutableStateOf(false) }
+    var showQuickActions by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(targetValue = if (isAnimating) 0.3f else 1f, animationSpec = tween(500))
     val scale by animateFloatAsState(targetValue = if (isAnimating) 1.5f else 0f, animationSpec = tween(500))
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             delay(600)
-            onLongClick()
+            onPlusOne()
             isAnimating = false
         }
     }
@@ -1098,7 +1422,7 @@ fun UserAnimeGridItem(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) isAnimating = true }
+                    onLongClick = { if (isOwnList) showQuickActions = true }
                 ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -1152,8 +1476,17 @@ fun UserAnimeGridItem(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(4.dp)
+                        .height(92.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.88f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalArrangement = Arrangement.Bottom
                 ) {
                     Text(
                         text = data.node.getPreferredTitle(titleLanguage),
@@ -1205,6 +1538,25 @@ fun UserAnimeGridItem(
                 }
             }
         }
+        DropdownMenu(
+            expanded = showQuickActions,
+            onDismissRequest = { showQuickActions = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("+1") },
+                onClick = {
+                    showQuickActions = false
+                    isAnimating = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showQuickActions = false
+                    onEditStatus()
+                }
+            )
+        }
         if (isAnimating) {
             Text(
                 text = "+1",
@@ -1224,16 +1576,18 @@ fun UserMangaGridItem(
     titleLanguage: TitleLanguage,
     isOwnList: Boolean = true,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onPlusOne: () -> Unit,
+    onEditStatus: () -> Unit
 ) {
     var isAnimating by remember { mutableStateOf(false) }
+    var showQuickActions by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(targetValue = if (isAnimating) 0.3f else 1f, animationSpec = tween(500))
     val scale by animateFloatAsState(targetValue = if (isAnimating) 1.5f else 0f, animationSpec = tween(500))
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             delay(600)
-            onLongClick()
+            onPlusOne()
             isAnimating = false
         }
     }
@@ -1246,7 +1600,7 @@ fun UserMangaGridItem(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) isAnimating = true }
+                    onLongClick = { if (isOwnList) showQuickActions = true }
                 ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -1299,8 +1653,17 @@ fun UserMangaGridItem(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(4.dp)
+                        .height(92.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.88f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalArrangement = Arrangement.Bottom
                 ) {
                     Text(
                         text = data.node.getPreferredTitle(titleLanguage),
@@ -1322,6 +1685,25 @@ fun UserMangaGridItem(
                     )
                 }
             }
+        }
+        DropdownMenu(
+            expanded = showQuickActions,
+            onDismissRequest = { showQuickActions = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("+1") },
+                onClick = {
+                    showQuickActions = false
+                    isAnimating = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showQuickActions = false
+                    onEditStatus()
+                }
+            )
         }
         if (isAnimating) {
             Text(

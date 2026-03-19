@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -65,6 +66,7 @@ import com.example.myapplication.data.local.getPreferredTitle
 import com.example.myapplication.data.model.AlternativeTitles
 import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AnimeDetailsResponse
+import com.example.myapplication.data.model.AnimeNode
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
@@ -129,9 +131,11 @@ fun AnimeDetailsScreen(
     viewModel: AnimeDetailsViewModel,
     titleLanguage: TitleLanguage,
     onBackClick: () -> Unit,
-    onReviewsClick: (Int) -> Unit
+    onReviewsClick: (Int) -> Unit,
+    onAnimeClick: (Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     val topBarTitle = if (uiState is AnimeDetailsUiState.Success) {
         (uiState as AnimeDetailsUiState.Success).details.getPreferredTitle(titleLanguage)
@@ -150,6 +154,25 @@ fun AnimeDetailsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (uiState is AnimeDetailsUiState.Success) {
+                        FilledTonalButton(
+                            onClick = {
+                                val animeId = (uiState as AnimeDetailsUiState.Success).details.id
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://myanimelist.net/anime/$animeId")
+                                    )
+                                )
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("MAL")
+                        }
                     }
                 }
             )
@@ -180,8 +203,10 @@ fun AnimeDetailsScreen(
                         allReviewsCount = state.allReviewsCount,
                         streaming = state.streaming,
                         airingMedia = state.airingMedia,
+                        recommendationMeta = state.recommendationMeta,
                         titleLanguage = titleLanguage,
                         onReviewsClick = { onReviewsClick(state.details.id) },
+                        onAnimeClick = onAnimeClick,
                         onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
                             viewModel.updateListStatus(status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish)
                         },
@@ -202,8 +227,10 @@ fun AnimeDetailsContent(
     allReviewsCount: Int,
     streaming: List<JikanStreamingData>,
     airingMedia: AniListMedia?,
+    recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
     titleLanguage: TitleLanguage,
     onReviewsClick: () -> Unit,
+    onAnimeClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
     onDeleteStatus: () -> Unit
 ) {
@@ -371,64 +398,102 @@ fun AnimeDetailsContent(
         // Action Buttons / My List Status
         item {
             if (details.myListStatus != null) {
-                Card(
+                val statusLabel = details.myListStatus.status
+                    ?.replace("_", " ")
+                    ?.uppercase()
+                    ?: "UNKNOWN"
+                val progressLabel = "${details.myListStatus.numEpisodesWatched}/${details.numEpisodes ?: "?"}"
+                val scoreLabel = if (details.myListStatus.score > 0) "Score ${details.myListStatus.score}" else "Score -"
+
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(1.dp)
                         ) {
                             Text(
-                                text = "My List Status",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = "My List",
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
-                            Row {
-                                IconButton(onClick = { showEditDialog = true }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                                }
-                                IconButton(onClick = { showDeleteConfirm = true }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                                }
-                            }
+                            Text(
+                                text = "$statusLabel | $progressLabel | $scoreLabel",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Status: ${details.myListStatus.status?.replace("_", " ")?.uppercase() ?: "UNKNOWN"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+
+                        IconButton(
+                            onClick = { showEditDialog = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { showDeleteConfirm = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable { showEditDialog = true },
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 14.dp, top = 11.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Score: ${if (details.myListStatus.score > 0) details.myListStatus.score else "-"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            text = "Progress: ${details.myListStatus.numEpisodesWatched} / ${details.numEpisodes ?: "?"}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "Add to List",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
                 }
-            } else {
-                Button(
-                    onClick = { showEditDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add to List")
-                }
             }
+
         }
 
         // Streaming Platforms
@@ -740,34 +805,34 @@ fun AnimeDetailsContent(
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(details.relatedAnime) { rel ->
-                            Card(
-                                modifier = Modifier.width(120.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                            Column(
+                                modifier = Modifier.width(124.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Column {
-                                    AsyncImage(
-                                        model = rel.node.mainPicture?.medium,
-                                        contentDescription = null,
+                                RecommendationGridCard(
+                                    anime = rel.node,
+                                    meta = recommendationMeta[rel.node.id],
+                                    titleLanguage = titleLanguage,
+                                    onClick = { onAnimeClick(rel.node.id) }
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                                    tonalElevation = 1.dp
+                                ) {
+                                    Text(
+                                        text = rel.relationTypeFormatted,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(180.dp),
-                                        contentScale = ContentScale.Crop
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
                                     )
-                                    Column(modifier = Modifier.padding(4.dp)) {
-                                        Text(
-                                            text = rel.node.title,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = rel.relationTypeFormatted,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                            fontStyle = FontStyle.Italic
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -788,28 +853,12 @@ fun AnimeDetailsContent(
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(details.recommendations) { rec ->
-                            Card(
-                                modifier = Modifier.width(120.dp),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                            ) {
-                                Column {
-                                    AsyncImage(
-                                        model = rec.node.mainPicture?.medium,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(180.dp),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                    Text(
-                                        text = rec.node.title,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(4.dp)
-                                    )
-                                }
-                            }
+                            RecommendationGridCard(
+                                anime = rec.node,
+                                meta = recommendationMeta[rec.node.id],
+                                titleLanguage = titleLanguage,
+                                onClick = { onAnimeClick(rec.node.id) }
+                            )
                         }
                     }
                 }
@@ -934,11 +983,11 @@ fun AnimeDetailsContent(
         if (details.statistics?.status != null) {
             item {
                 val stats = details.statistics.status
-                val watching = stats.watching?.toIntOrNull() ?: 0
-                val completed = stats.completed?.toIntOrNull() ?: 0
-                val onHold = stats.onHold?.toIntOrNull() ?: 0
-                val dropped = stats.dropped?.toIntOrNull() ?: 0
-                val planToWatch = stats.planToWatch?.toIntOrNull() ?: 0
+                val watching = stats.watching ?: 0
+                val completed = stats.completed ?: 0
+                val onHold = stats.onHold ?: 0
+                val dropped = stats.dropped ?: 0
+                val planToWatch = stats.planToWatch ?: 0
                 
                 val total = watching + completed + onHold + dropped + planToWatch
                 if (total > 0) {
@@ -1154,6 +1203,129 @@ fun AnimeDetailsContent(
                 showEditDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun RecommendationGridCard(
+    anime: AnimeNode,
+    meta: RecommendationCardMeta? = null,
+    titleLanguage: TitleLanguage,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(124.dp)
+            .aspectRatio(0.7f)
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        val resolvedListStatus = anime.myListStatus ?: meta?.myListStatus
+        Box(modifier = Modifier.fillMaxSize()) {
+            AsyncImage(
+                model = anime.mainPicture?.medium,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
+            resolvedListStatus?.let { status ->
+                if (status.status != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f), shape = CircleShape)
+                            .padding(4.dp)
+                    ) {
+                        @Suppress("DEPRECATION")
+                        Icon(
+                            imageVector = getStatusIcon(status.status),
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+
+            resolvedListStatus?.let { status ->
+                if (status.score > 0) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .background(Color.Black.copy(alpha = 0.7f), shape = RoundedCornerShape(4.dp))
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Star, null, tint = Color.Yellow, modifier = Modifier.size(10.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = status.score.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .height(92.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.88f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Text(
+                    text = anime.getPreferredTitle(titleLanguage),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Medium
+                )
+                val resolvedMean = meta?.mean ?: anime.meanScore
+                val resolvedMembers = meta?.members ?: anime.numListUsers
+                val malScoreText = resolvedMean?.let { String.format("%.2f", it) } ?: "N/A"
+                Text(
+                    text = "Members: ${formatMembersCountLocal(resolvedMembers)}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = "MAL: $malScoreText",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 10.sp
+                )
+            }
+        }
+    }
+}
+
+private fun formatMembersCountLocal(count: Int?): String {
+    if (count == null) return "N/A"
+    return when {
+        count >= 1_000_000 -> String.format(Locale.US, "%.1fM", count / 1_000_000f)
+        count >= 1_000 -> String.format(Locale.US, "%.1fK", count / 1_000f)
+        else -> count.toString()
     }
 }
 
@@ -1497,3 +1669,4 @@ private fun InfoRow(label: String, value: String) {
 private fun String.capitalize(): String {
     return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
+

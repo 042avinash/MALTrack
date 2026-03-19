@@ -22,6 +22,11 @@ class UserMangaListViewModel @Inject constructor(
     private val repository: AnimeRepository,
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
+    companion object {
+        private val globalFullMangaListCache = mutableMapOf<String, List<UserMangaData>>()
+        private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
+    }
+
     private val mangaStatuses = listOf("all", "reading", "completed", "on_hold", "plan_to_read", "dropped")
 
     private val _userMangaListState = MutableStateFlow(UserMangaListState())
@@ -43,8 +48,6 @@ class UserMangaListViewModel @Inject constructor(
         initialValue = false
     )
     
-    private var statsCache: Map<String, Int> = emptyMap()
-    private val fullMangaListCache = mutableMapOf<String, List<UserMangaData>>()
     private var loadJob: Job? = null
     private var searchJob: Job? = null
 
@@ -86,11 +89,15 @@ class UserMangaListViewModel @Inject constructor(
                 )
 
                 if (forceRefresh) {
-                    fullMangaListCache.remove(cacheKey)
+                    globalFullMangaListCache.remove(cacheKey)
                     _loadedLists.value = _loadedLists.value - cacheKey
                 }
 
-                if (!fullMangaListCache.containsKey(cacheKey)) {
+                val cachedList = globalFullMangaListCache[cacheKey]
+                if (cachedList != null) {
+                    _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
+                } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
                         val fullList = repository.getAllUserMangaList(
@@ -98,18 +105,22 @@ class UserMangaListViewModel @Inject constructor(
                             status = if (statusKey == "all") null else statusKey,
                             sort = effectiveSort
                         )
-                        fullMangaListCache[cacheKey] = fullList
+                        globalFullMangaListCache[cacheKey] = fullList
                         _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                     } finally {
                         _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                     }
                 }
 
-                if (statsCache.isEmpty() || forceRefresh) {
+                val statsCacheKey = effectiveUsername ?: "@me"
+                val cachedStats = globalStatsCache[statsCacheKey]
+                if (cachedStats != null && !forceRefresh) {
+                    _userMangaListState.value = _userMangaListState.value.copy(counts = cachedStats)
+                } else {
                     try {
                         val profile = if (effectiveUsername != null) {
                             repository.getUserFullProfile(effectiveUsername).statistics?.manga?.let { jikan ->
-                                statsCache = mapOf(
+                                globalStatsCache[statsCacheKey] = mapOf(
                                     "all" to jikan.total_entries,
                                     "reading" to jikan.reading,
                                     "completed" to jikan.completed,
@@ -123,9 +134,9 @@ class UserMangaListViewModel @Inject constructor(
                             repository.getMyUserProfile()
                         }
 
-                        if (statsCache.isEmpty() || effectiveUsername == null) {
+                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || effectiveUsername == null) {
                             val stats = profile.mangaStatistics
-                            statsCache = mapOf(
+                            globalStatsCache[statsCacheKey] = mapOf(
                                 "all" to (stats?.numItems ?: 0),
                                 "reading" to (stats?.numReading ?: 0),
                                 "completed" to (stats?.numCompleted ?: 0),
@@ -134,7 +145,7 @@ class UserMangaListViewModel @Inject constructor(
                                 "dropped" to (stats?.numDropped ?: 0)
                             )
                         }
-                        _userMangaListState.value = _userMangaListState.value.copy(counts = statsCache)
+                        _userMangaListState.value = _userMangaListState.value.copy(counts = globalStatsCache[statsCacheKey].orEmpty())
                     } catch (_: Exception) {
                     }
                 }
@@ -151,7 +162,7 @@ class UserMangaListViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 repository.quickIncrementManga(mangaId)
-                statsCache = emptyMap()
+                globalStatsCache.remove(userMangaListState.value.username ?: "@me")
                 loadUserMangaList(userMangaListState.value.status, userMangaListState.value.username, forceRefresh = true)
             } catch (e: Exception) {
             }
@@ -176,13 +187,13 @@ class UserMangaListViewModel @Inject constructor(
         _refreshGenerations.value = _refreshGenerations.value + (
             refreshKey to ((_refreshGenerations.value[refreshKey] ?: 0) + 1)
         )
-        statsCache = emptyMap()
+        globalStatsCache.remove(effectiveUsername ?: "@me")
         _searchState.value = UserMangaSearchState()
-        fullMangaListCache.keys
+        globalFullMangaListCache.keys
             .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
             .toList()
             .forEach {
-                fullMangaListCache.remove(it)
+                globalFullMangaListCache.remove(it)
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
@@ -212,7 +223,7 @@ class UserMangaListViewModel @Inject constructor(
                     isLoading = true
                 )
 
-                val fullList = fullMangaListCache.getOrPut(cacheKey) {
+                val fullList = globalFullMangaListCache.getOrPut(cacheKey) {
                     repository.getAllUserMangaList(
                         username = effectiveUsername,
                         status = if (status == "all") null else status,
@@ -231,9 +242,51 @@ class UserMangaListViewModel @Inject constructor(
                     isLoading = false
                 )
             } catch (e: CancellationException) {
+                _searchState.value = _searchState.value.copy(isLoading = false)
                 throw e
             } catch (_: Exception) {
                 _searchState.value = _searchState.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    fun updateListStatus(
+        mangaId: Int,
+        status: String? = null,
+        isRereading: Boolean? = null,
+        score: Int? = null,
+        numVolumesRead: Int? = null,
+        numChaptersRead: Int? = null,
+        priority: Int? = null,
+        numTimesReread: Int? = null,
+        rereadValue: Int? = null,
+        tags: String? = null,
+        comments: String? = null,
+        startDate: String? = null,
+        finishDate: String? = null
+    ) {
+        if (userMangaListState.value.username != null) return
+
+        viewModelScope.launch {
+            try {
+                repository.updateMyMangaListStatus(
+                    mangaId = mangaId,
+                    status = status,
+                    isRereading = isRereading,
+                    score = score,
+                    numVolumesRead = numVolumesRead,
+                    numChaptersRead = numChaptersRead,
+                    priority = priority,
+                    numTimesReread = numTimesReread,
+                    rereadValue = rereadValue,
+                    tags = tags,
+                    comments = comments,
+                    startDate = startDate,
+                    finishDate = finishDate
+                )
+                globalStatsCache.remove(userMangaListState.value.username ?: "@me")
+                loadUserMangaList(userMangaListState.value.status, userMangaListState.value.username, forceRefresh = true)
+            } catch (_: Exception) {
             }
         }
     }

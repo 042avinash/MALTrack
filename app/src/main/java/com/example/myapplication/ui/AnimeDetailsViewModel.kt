@@ -3,8 +3,10 @@ package com.example.myapplication.ui
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.os.SystemClock
 import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AnimeDetailsResponse
+import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
 import com.example.myapplication.data.remote.JikanStreamingData
@@ -25,6 +27,11 @@ class AnimeDetailsViewModel @Inject constructor(
     private val repository: AnimeRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+    companion object {
+        private const val CACHE_TTL_MS = 10 * 60 * 1000L
+        private val detailsCache = mutableMapOf<Int, Pair<Long, AnimeDetailsUiState.Success>>()
+        private val recommendationMetaCache = mutableMapOf<Int, Pair<Long, RecommendationCardMeta>>()
+    }
 
     private val animeId: Int = checkNotNull(savedStateHandle["animeId"])
 
@@ -35,9 +42,18 @@ class AnimeDetailsViewModel @Inject constructor(
         loadDetails()
     }
 
-    fun loadDetails() {
+    fun loadDetails(forceRefresh: Boolean = false) {
         viewModelScope.launch {
             try {
+                val now = SystemClock.elapsedRealtime()
+                if (!forceRefresh) {
+                    val cached = detailsCache[animeId]
+                    if (cached != null && now - cached.first < CACHE_TTL_MS) {
+                        _uiState.value = cached.second
+                        return@launch
+                    }
+                }
+
                 // Keep existing state if it's already success, to avoid flickering during refresh
                 val currentState = _uiState.value
                 if (currentState !is AnimeDetailsUiState.Success) {
@@ -76,16 +92,20 @@ class AnimeDetailsViewModel @Inject constructor(
                     
                     val topReviews = listOfNotNull(recommended, mixed, notRecommended)
                     val finalReviews = (topReviews + reviews).distinctBy { it.mal_id }.take(3)
+                    val recommendationMeta = getAnimeCardMeta(details)
 
-                    _uiState.value = AnimeDetailsUiState.Success(
+                    val successState = AnimeDetailsUiState.Success(
                         details = details,
                         characters = characters,
                         themes = themes,
                         reviews = finalReviews,
                         allReviewsCount = reviews.size,
                         streaming = streaming,
-                        airingMedia = airingMedia
+                        airingMedia = airingMedia,
+                        recommendationMeta = recommendationMeta
                     )
+                    detailsCache[animeId] = SystemClock.elapsedRealtime() to successState
+                    _uiState.value = successState
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -124,7 +144,7 @@ class AnimeDetailsViewModel @Inject constructor(
                     startDate = startDate,
                     finishDate = finishDate
                 )
-                loadDetails() // Refresh to show new status
+                loadDetails(forceRefresh = true) // Refresh to show new status
             } catch (e: Exception) {
                 // Handle error
             }
@@ -135,11 +155,45 @@ class AnimeDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 repository.deleteMyListStatus(animeId)
-                loadDetails() // Refresh
+                loadDetails(forceRefresh = true) // Refresh
             } catch (e: Exception) {
                 // Handle error
             }
         }
+    }
+
+    private suspend fun getAnimeCardMeta(
+        details: AnimeDetailsResponse
+    ): Map<Int, RecommendationCardMeta> = supervisorScope {
+        val targetIds = (
+            details.recommendations.orEmpty().map { it.node.id } +
+                details.relatedAnime.orEmpty().map { it.node.id }
+            )
+            .distinct()
+            .take(24)
+        if (targetIds.isEmpty()) return@supervisorScope emptyMap()
+        val now = SystemClock.elapsedRealtime()
+        targetIds
+            .map { targetId ->
+                async {
+                    val cached = recommendationMetaCache[targetId]
+                    if (cached != null && now - cached.first < CACHE_TTL_MS) {
+                        return@async targetId to cached.second
+                    }
+                    val fetchedDetails = runCatching { repository.getAnimeDetails(targetId) }.getOrNull()
+                    val meta = fetchedDetails?.let {
+                        RecommendationCardMeta(
+                            mean = it.mean,
+                            members = it.numListUsers,
+                            myListStatus = it.myListStatus
+                        )
+                    } ?: RecommendationCardMeta()
+                    recommendationMetaCache[targetId] = SystemClock.elapsedRealtime() to meta
+                    targetId to meta
+                }
+            }
+            .toList()
+            .associate { it.await() }
     }
 }
 
@@ -152,7 +206,14 @@ sealed interface AnimeDetailsUiState {
         val reviews: List<JikanReviewData>,
         val allReviewsCount: Int,
         val streaming: List<JikanStreamingData>,
-        val airingMedia: AniListMedia?
+        val airingMedia: AniListMedia?,
+        val recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap()
     ) : AnimeDetailsUiState
     data class Error(val message: String) : AnimeDetailsUiState
 }
+
+data class RecommendationCardMeta(
+    val mean: Float? = null,
+    val members: Int? = null,
+    val myListStatus: MyListStatus? = null
+)

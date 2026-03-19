@@ -23,6 +23,11 @@ class UserListViewModel @Inject constructor(
     private val repository: AnimeRepository,
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
+    companion object {
+        private val globalFullAnimeListCache = mutableMapOf<String, List<UserAnimeData>>()
+        private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
+    }
+
     private val animeStatuses = listOf("all", "watching", "completed", "on_hold", "plan_to_watch", "dropped")
 
     private val _userListState = MutableStateFlow(UserListState())
@@ -47,8 +52,6 @@ class UserListViewModel @Inject constructor(
         initialValue = false
     )
 
-    private var statsCache: Map<String, Int> = emptyMap()
-    private val fullAnimeListCache = mutableMapOf<String, List<UserAnimeData>>()
     private var loadJob: Job? = null
     private var searchJob: Job? = null
 
@@ -94,11 +97,15 @@ class UserListViewModel @Inject constructor(
                 )
 
                 if (forceRefresh) {
-                    fullAnimeListCache.remove(cacheKey)
+                    globalFullAnimeListCache.remove(cacheKey)
                     _loadedLists.value = _loadedLists.value - cacheKey
                 }
 
-                if (!fullAnimeListCache.containsKey(cacheKey)) {
+                val cachedList = globalFullAnimeListCache[cacheKey]
+                if (cachedList != null) {
+                    _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
+                } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
                         val fullList = repository.getAllUserAnimeList(
@@ -106,7 +113,7 @@ class UserListViewModel @Inject constructor(
                             status = if (statusKey == "all") null else statusKey,
                             sort = effectiveSort
                         )
-                        fullAnimeListCache[cacheKey] = fullList
+                        globalFullAnimeListCache[cacheKey] = fullList
                         _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
 
                         val malIds = fullList
@@ -126,11 +133,15 @@ class UserListViewModel @Inject constructor(
                     }
                 }
 
-                if (statsCache.isEmpty() || forceRefresh) {
+                val statsCacheKey = effectiveUsername ?: "@me"
+                val cachedStats = globalStatsCache[statsCacheKey]
+                if (cachedStats != null && !forceRefresh) {
+                    _userListState.value = _userListState.value.copy(counts = cachedStats)
+                } else {
                     try {
                         val profile = if (effectiveUsername != null) {
                             repository.getUserFullProfile(effectiveUsername).statistics?.anime?.let { jikan ->
-                                statsCache = mapOf(
+                                globalStatsCache[statsCacheKey] = mapOf(
                                     "all" to jikan.total_entries,
                                     "watching" to jikan.watching,
                                     "completed" to jikan.completed,
@@ -144,9 +155,9 @@ class UserListViewModel @Inject constructor(
                             repository.getMyUserProfile()
                         }
 
-                        if (statsCache.isEmpty() || effectiveUsername == null) {
+                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || effectiveUsername == null) {
                             val stats = profile.animeStatistics
-                            statsCache = mapOf(
+                            globalStatsCache[statsCacheKey] = mapOf(
                                 "all" to (stats?.numItems ?: 0),
                                 "watching" to (stats?.numWatching ?: 0),
                                 "completed" to (stats?.numCompleted ?: 0),
@@ -155,7 +166,7 @@ class UserListViewModel @Inject constructor(
                                 "dropped" to (stats?.numDropped ?: 0)
                             )
                         }
-                        _userListState.value = _userListState.value.copy(counts = statsCache)
+                        _userListState.value = _userListState.value.copy(counts = globalStatsCache[statsCacheKey].orEmpty())
                     } catch (_: Exception) {
                     }
                 }
@@ -172,7 +183,7 @@ class UserListViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 repository.quickIncrementAnime(animeId)
-                statsCache = emptyMap()
+                globalStatsCache.remove(userListState.value.username ?: "@me")
                 loadUserList(userListState.value.status, userListState.value.username, forceRefresh = true)
             } catch (e: Exception) {
             }
@@ -197,13 +208,13 @@ class UserListViewModel @Inject constructor(
         _refreshGenerations.value = _refreshGenerations.value + (
             refreshKey to ((_refreshGenerations.value[refreshKey] ?: 0) + 1)
         )
-        statsCache = emptyMap()
+        globalStatsCache.remove(effectiveUsername ?: "@me")
         _searchState.value = UserAnimeSearchState()
-        fullAnimeListCache.keys
+        globalFullAnimeListCache.keys
             .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
             .toList()
             .forEach {
-                fullAnimeListCache.remove(it)
+                globalFullAnimeListCache.remove(it)
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
@@ -233,7 +244,7 @@ class UserListViewModel @Inject constructor(
                     isLoading = true
                 )
 
-                val fullList = fullAnimeListCache.getOrPut(cacheKey) {
+                val fullList = globalFullAnimeListCache.getOrPut(cacheKey) {
                     repository.getAllUserAnimeList(
                         username = effectiveUsername,
                         status = if (status == "all") null else status,
@@ -265,9 +276,49 @@ class UserListViewModel @Inject constructor(
                     isLoading = false
                 )
             } catch (e: CancellationException) {
+                _searchState.value = _searchState.value.copy(isLoading = false)
                 throw e
             } catch (_: Exception) {
                 _searchState.value = _searchState.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    fun updateListStatus(
+        animeId: Int,
+        status: String? = null,
+        isRewatching: Boolean? = null,
+        score: Int? = null,
+        numWatchedEpisodes: Int? = null,
+        priority: Int? = null,
+        numTimesRewatched: Int? = null,
+        rewatchValue: Int? = null,
+        tags: String? = null,
+        comments: String? = null,
+        startDate: String? = null,
+        finishDate: String? = null
+    ) {
+        if (userListState.value.username != null) return
+
+        viewModelScope.launch {
+            try {
+                repository.updateMyListStatus(
+                    animeId = animeId,
+                    status = status,
+                    isRewatching = isRewatching,
+                    score = score,
+                    numWatchedEpisodes = numWatchedEpisodes,
+                    priority = priority,
+                    numTimesRewatched = numTimesRewatched,
+                    rewatchValue = rewatchValue,
+                    tags = tags,
+                    comments = comments,
+                    startDate = startDate,
+                    finishDate = finishDate
+                )
+                globalStatsCache.remove(userListState.value.username ?: "@me")
+                loadUserList(userListState.value.status, userListState.value.username, forceRefresh = true)
+            } catch (_: Exception) {
             }
         }
     }

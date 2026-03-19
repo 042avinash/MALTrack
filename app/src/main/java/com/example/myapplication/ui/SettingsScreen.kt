@@ -347,7 +347,13 @@ fun SettingsScreen(
             onDismiss = { showSectionDialog = false },
             onSelect = {
                 when (it) {
-                    StartupParentOption.HOME,
+                    StartupParentOption.HOME -> {
+                        pendingStartupSection = when (defaultSection) {
+                            DefaultSection.HOME_MANGA -> DefaultSection.HOME_MANGA
+                            else -> DefaultSection.HOME_ANIME
+                        }
+                        showSectionDialog = false
+                    }
                     StartupParentOption.MY_LIST -> startupParentSelection = it
                     StartupParentOption.PROFILE -> {
                         pendingStartupSection = DefaultSection.PROFILE

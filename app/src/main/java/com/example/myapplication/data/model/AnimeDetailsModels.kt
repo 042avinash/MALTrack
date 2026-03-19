@@ -2,6 +2,15 @@ package com.example.myapplication.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable
 data class AnimeDetailsResponse(
@@ -47,12 +56,38 @@ data class Statistics(
 
 @Serializable
 data class StatusStatistics(
-    val watching: String? = null,
-    val completed: String? = null,
-    @SerialName("on_hold") val onHold: String? = null,
-    val dropped: String? = null,
-    @SerialName("plan_to_watch") val planToWatch: String? = null
+    @Serializable(with = IntOrStringSerializer::class) val watching: Int? = null,
+    @Serializable(with = IntOrStringSerializer::class) val completed: Int? = null,
+    @SerialName("on_hold") @Serializable(with = IntOrStringSerializer::class) val onHold: Int? = null,
+    @Serializable(with = IntOrStringSerializer::class) val dropped: Int? = null,
+    @SerialName("plan_to_watch") @Serializable(with = IntOrStringSerializer::class) val planToWatch: Int? = null
 )
+
+object IntOrStringSerializer : KSerializer<Int?> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("IntOrStringSerializer", PrimitiveKind.INT)
+
+    override fun deserialize(decoder: Decoder): Int? {
+        val jsonDecoder = decoder as? JsonDecoder ?: return runCatching { decoder.decodeInt() }.getOrNull()
+        val element = jsonDecoder.decodeJsonElement()
+
+        return when (element) {
+            JsonNull -> null
+            is JsonPrimitive -> {
+                element.content.toIntOrNull()
+            }
+            else -> null
+        }
+    }
+
+    override fun serialize(encoder: Encoder, value: Int?) {
+        if (value == null) {
+            encoder.encodeNull()
+        } else {
+            encoder.encodeInt(value)
+        }
+    }
+}
 
 @Serializable
 data class Genre(

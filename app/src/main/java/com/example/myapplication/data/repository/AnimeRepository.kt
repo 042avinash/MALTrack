@@ -29,6 +29,8 @@ import com.example.myapplication.data.remote.MalApiService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import retrofit2.HttpException
+import java.net.SocketTimeoutException
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -54,6 +56,12 @@ class AnimeRepository @Inject constructor(
     suspend fun getTopAnime(limit: Int = 20, rankingType: String = "all"): AnimeResponse {
         return if (limit == 20 && rankingType == "all") apiService.getAnimeRanking(clientId = clientId, nsfw = isNsfw())
         else apiService.getAnimeRankingWithLimit(clientId = clientId, limit = limit, rankingType = rankingType, nsfw = isNsfw())
+    }
+
+    suspend fun getRandomAnimeId(): Int {
+        return retryTimeoutRequest {
+            jikanApiService.getRandomAnime().data.mal_id
+        }
     }
 
     suspend fun getSeasonalAnime(year: Int? = null, season: String? = null, loadAllPages: Boolean = false): AnimeResponse {
@@ -84,16 +92,21 @@ class AnimeRepository @Inject constructor(
 
         while (true) {
             val response = try {
-                apiService.getSeasonalAnime(
-                    clientId = clientId,
-                    year = targetYear,
-                    season = targetSeason,
-                    limit = limit,
-                    offset = offset,
-                    nsfw = nsfwEnabled
-                )
+                retryTimeoutRequest {
+                    apiService.getSeasonalAnime(
+                        clientId = clientId,
+                        year = targetYear,
+                        season = targetSeason,
+                        limit = limit,
+                        offset = offset,
+                        nsfw = nsfwEnabled
+                    )
+                }
             } catch (e: HttpException) {
                 if (e.code() == 429 && allItems.isNotEmpty()) break
+                throw e
+            } catch (e: Throwable) {
+                if (isTimeoutError(e) && allItems.isNotEmpty()) break
                 throw e
             }
             if (response.data.isEmpty()) break
@@ -108,6 +121,28 @@ class AnimeRepository @Inject constructor(
         return AnimeResponse(data = allItems).also {
             seasonalAnimeCache[cacheKey] = it
         }
+    }
+
+    private suspend fun <T> retryTimeoutRequest(block: suspend () -> T): T {
+        var lastError: Throwable? = null
+        val delays = listOf(0L, 350L, 900L)
+        repeat(delays.size) { attempt ->
+            try {
+                if (delays[attempt] > 0) delay(delays[attempt])
+                return block()
+            } catch (e: Throwable) {
+                lastError = e
+                if (!isTimeoutError(e) || attempt == delays.lastIndex) throw e
+            }
+        }
+        throw lastError ?: IllegalStateException("Unknown timeout error")
+    }
+
+    private fun isTimeoutError(error: Throwable): Boolean {
+        if (error is SocketTimeoutException) return true
+        if (error is IOException && error.message?.contains("timeout", ignoreCase = true) == true) return true
+        val cause = error.cause
+        return cause != null && isTimeoutError(cause)
     }
 
     suspend fun getTopManga(limit: Int = 20, rankingType: String = "all"): MangaResponse {

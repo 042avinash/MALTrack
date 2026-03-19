@@ -15,18 +15,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -48,6 +57,9 @@ import com.example.myapplication.data.model.JikanFavoriteItem
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.UserProfile
 import com.example.myapplication.data.remote.JikanFriend
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.regex.Pattern
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +70,8 @@ fun ProfileScreen(
     onBack: () -> Unit,
     onUserClick: (String) -> Unit,
     onListClick: (String) -> Unit,
+    onAnimeClick: (Int) -> Unit,
+    onMangaClick: (Int) -> Unit,
     onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,22 +112,34 @@ fun ProfileScreen(
                         overflow = TextOverflow.Ellipsis
                     ) 
                 },
-                navigationIcon = {
+                navigationIcon = if (username == null || username == "null") ({}) else ({
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
-                },
+                }),
                 actions = {
                     val currentProfileUsername = (uiState as? ProfileUiState.Success)?.jikanUser?.username
                     if (currentProfileUsername != null) {
-                        IconButton(onClick = { onListClick(currentProfileUsername) }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "View List")
+                        TextButton(onClick = { onListClick(currentProfileUsername) }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.List,
+                                contentDescription = "View List",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("View List")
                         }
                     }
 
                     if (username == null || username == "null") {
-                        IconButton(onClick = onLogout) {
-                            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout")
+                        TextButton(onClick = onLogout) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Logout",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Logout")
                         }
                     }
                 }
@@ -128,13 +154,17 @@ fun ProfileScreen(
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             when (val state = uiState) {
                 is ProfileUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    ProfileLoadingShimmer(modifier = Modifier.fillMaxSize())
                 }
                 is ProfileUiState.Success -> {
                     ProfileContent(
                         malUser = state.malUser, 
                         jikanUser = state.jikanUser, 
                         friends = state.friends,
+                        animeFavoriteMeta = state.animeFavoriteMeta,
+                        mangaFavoriteMeta = state.mangaFavoriteMeta,
+                        onAnimeClick = onAnimeClick,
+                        onMangaClick = onMangaClick,
                         onUserClick = onUserClick
                     )
                 }
@@ -160,10 +190,148 @@ fun ProfileScreen(
 }
 
 @Composable
+private fun ProfileLoadingShimmer(modifier: Modifier = Modifier) {
+    val shimmerBrush = rememberProfileShimmerBrush()
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(bottom = 80.dp)
+    ) {
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape)
+                        .background(shimmerBrush)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.45f)
+                        .height(24.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(shimmerBrush)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.6f)
+                        .height(16.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(shimmerBrush)
+                )
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .clip(CircleShape)
+                        .background(shimmerBrush)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .clip(CircleShape)
+                        .background(shimmerBrush)
+                )
+            }
+        }
+        items(5) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(146.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(82.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(shimmerBrush)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.8f)
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(shimmerBrush)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(shimmerBrush)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.65f)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberProfileShimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "profile_shimmer")
+    val offset by transition.animateFloat(
+        initialValue = -350f,
+        targetValue = 1200f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "profile_shimmer_offset"
+    )
+
+    val base = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val highlight = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+    return Brush.horizontalGradient(
+        colors = listOf(base, highlight, base),
+        startX = offset - 220f,
+        endX = offset
+    )
+}
+
+@Composable
 fun ProfileContent(
     malUser: UserProfile?, 
     jikanUser: JikanFullUserProfile, 
     friends: List<JikanFriend>,
+    animeFavoriteMeta: Map<Int, FavoriteMediaMeta>,
+    mangaFavoriteMeta: Map<Int, FavoriteMediaMeta>,
+    onAnimeClick: (Int) -> Unit,
+    onMangaClick: (Int) -> Unit,
     onUserClick: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -277,9 +445,17 @@ fun ProfileContent(
                     ) {
                         Text(text = "Friends", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         if (friends.size > 8) {
-                            TextButton(onClick = { showFriendsDialog = true }) {
-                                Text("MORE >")
-                            }
+                            AssistChip(
+                                onClick = { showFriendsDialog = true },
+                                label = { Text("More") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -315,21 +491,72 @@ fun ProfileContent(
         }
 
         item {
-            TabRow(selectedTabIndex = selectedTabIndex) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTabIndex == index,
+                    val selected = selectedTabIndex == index
+                    FilterChip(
+                        selected = selected,
                         onClick = { selectedTabIndex = index },
-                        text = { Text(title) }
+                        modifier = Modifier.weight(1f),
+                        shape = CircleShape,
+                        label = {
+                            Text(
+                                text = title,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                 }
             }
         }
 
         if (selectedTabIndex == 0) {
-            animeProfileItems(jikanUser)
+            animeProfileItems(
+                user = jikanUser,
+                animeFavoriteMeta = animeFavoriteMeta,
+                onAnimeClick = onAnimeClick
+            )
         } else {
-            mangaProfileItems(jikanUser)
+            mangaProfileItems(
+                user = jikanUser,
+                mangaFavoriteMeta = mangaFavoriteMeta,
+                onMangaClick = onMangaClick
+            )
+        }
+
+        jikanUser.favorites?.let { favs ->
+            favs.characters?.takeIf { it.isNotEmpty() }?.let {
+                item {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        FavoriteCharactersSection(items = it)
+                    }
+                }
+            }
+            favs.people?.takeIf { it.isNotEmpty() }?.let {
+                item {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        FavoritePeopleSection(items = it)
+                    }
+                }
+            }
+            favs.studios?.takeIf { it.isNotEmpty() }?.let {
+                item {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        FavoritesSection("Favorite Studios", it)
+                    }
+                }
+            }
         }
     }
 }
@@ -393,13 +620,31 @@ private fun FriendsDialog(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 friend.last_online?.let {
-                                    Text(
-                                        text = it,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Schedule,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = formatLastOnline(it),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             Text(
@@ -415,7 +660,20 @@ private fun FriendsDialog(
     }
 }
 
-fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(user: JikanFullUserProfile) {
+private fun formatLastOnline(raw: String): String {
+    val zonedDateTime = runCatching {
+        OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.systemDefault())
+    }.getOrElse { return raw }
+
+    val formatter = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a")
+    return zonedDateTime.format(formatter)
+}
+
+fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
+    user: JikanFullUserProfile,
+    animeFavoriteMeta: Map<Int, FavoriteMediaMeta>,
+    onAnimeClick: (Int) -> Unit
+) {
     val stats = user.statistics?.anime ?: return
     
     item {
@@ -434,8 +692,6 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(user: Jikan
     item {
         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
                 DetailRow("Days Watched", "%.1f".format(stats.days_watched))
                 DetailRow("Mean Score", stats.mean_score.toString())
                 DetailRow("Episodes", "%,d".format(stats.episodes_watched))
@@ -447,21 +703,25 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(user: Jikan
 
     user.favorites?.let { favs ->
         favs.anime?.takeIf { it.isNotEmpty() }?.let {
-            item { Column(modifier = Modifier.padding(16.dp)) { FavoritesSection("Favorite Anime", it) } }
-        }
-        favs.characters?.takeIf { it.isNotEmpty() }?.let {
-            item { Column(modifier = Modifier.padding(16.dp)) { FavoritesSection("Favorite Characters", it) } }
-        }
-        favs.people?.takeIf { it.isNotEmpty() }?.let {
-            item { Column(modifier = Modifier.padding(16.dp)) { FavoritesSection("Favorite People", it) } }
-        }
-        favs.studios?.takeIf { it.isNotEmpty() }?.let {
-            item { Column(modifier = Modifier.padding(16.dp)) { FavoritesSection("Favorite Studios", it) } }
+            item {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    FavoriteMediaSection(
+                        title = "Favorite Anime",
+                        items = it,
+                        metadata = animeFavoriteMeta,
+                        onItemClick = onAnimeClick
+                    )
+                }
+            }
         }
     }
 }
 
-fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(user: JikanFullUserProfile) {
+fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
+    user: JikanFullUserProfile,
+    mangaFavoriteMeta: Map<Int, FavoriteMediaMeta>,
+    onMangaClick: (Int) -> Unit
+) {
     val stats = user.statistics?.manga ?: return
 
     item {
@@ -480,8 +740,6 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(user: Jikan
     item {
         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
                 DetailRow("Days Read", "%.1f".format(stats.days_read))
                 DetailRow("Mean Score", stats.mean_score.toString())
                 DetailRow("Chapters", "%,d".format(stats.chapters_read))
@@ -493,7 +751,16 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(user: Jikan
     }
 
     user.favorites?.manga?.takeIf { it.isNotEmpty() }?.let {
-        item { Column(modifier = Modifier.padding(16.dp)) { FavoritesSection("Favorite Manga", it) } }
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                FavoriteMediaSection(
+                    title = "Favorite Manga",
+                    items = it,
+                    metadata = mangaFavoriteMeta,
+                    onItemClick = onMangaClick
+                )
+            }
+        }
     }
 }
 
@@ -628,6 +895,166 @@ fun FavoritesSection(title: String, items: List<JikanFavoriteItem>) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun FavoriteCharactersSection(items: List<JikanFavoriteItem>) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = "Favorite Characters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(12.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(items) { item ->
+                Column(
+                    modifier = Modifier
+                        .width(80.dp)
+                        .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = item.images?.jpg?.image_url,
+                        contentDescription = item.title ?: item.name,
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = item.title ?: item.name ?: "Unknown",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FavoritePeopleSection(items: List<JikanFavoriteItem>) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = "Favorite People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(12.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(items) { item ->
+                Column(
+                    modifier = Modifier
+                        .width(80.dp)
+                        .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = item.images?.jpg?.image_url,
+                        contentDescription = item.title ?: item.name,
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = item.title ?: item.name ?: "Unknown",
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FavoriteMediaSection(
+    title: String,
+    items: List<JikanFavoriteItem>,
+    metadata: Map<Int, FavoriteMediaMeta>,
+    onItemClick: (Int) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(12.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(items) { item ->
+                val meta = metadata[item.mal_id]
+                Card(
+                    modifier = Modifier
+                        .width(124.dp)
+                        .aspectRatio(0.7f)
+                        .clickable { onItemClick(item.mal_id) },
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AsyncImage(
+                            model = item.images?.jpg?.image_url,
+                            contentDescription = item.title ?: item.name,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .height(92.dp)
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = 0.88f)
+                                        )
+                                    )
+                                )
+                                .padding(horizontal = 6.dp, vertical = 5.dp),
+                            verticalArrangement = Arrangement.Bottom
+                        ) {
+                            Text(
+                                text = item.title ?: item.name ?: "Unknown",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "Members: ${formatMembersCount(meta?.numListUsers)}",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 10.sp
+                            )
+                            val malScoreText = meta?.mean?.let { String.format("%.2f", it) } ?: "N/A"
+                            Text(
+                                text = "MAL: $malScoreText",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatMembersCount(count: Int?): String {
+    val value = count ?: return "N/A"
+    return when {
+        value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f)
+        value >= 1_000 -> String.format("%.1fK", value / 1_000f)
+        else -> value.toString()
     }
 }
 

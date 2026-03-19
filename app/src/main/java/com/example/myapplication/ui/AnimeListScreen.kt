@@ -7,6 +7,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -79,7 +84,10 @@ import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AnimeData
 import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MyListStatus
+import com.example.myapplication.data.model.MyMangaListStatus
 import kotlinx.coroutines.delay
+
+private enum class LoadingViewContext { HOME, DISCOVERY, SEARCH }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -115,6 +123,9 @@ fun AnimeListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var showSeasonPicker by remember { mutableStateOf(false) }
+    var pendingAnimeEdit by remember { mutableStateOf<QuickAnimeEdit?>(null) }
+    var pendingMangaEdit by remember { mutableStateOf<QuickMangaEdit?>(null) }
+    var loadingViewContext by remember { mutableStateOf(LoadingViewContext.HOME) }
     var searchMediaType by remember(initialTab) {
         mutableStateOf(if (initialTab == 0) SearchMediaType.ANIME else SearchMediaType.MANGA)
     }
@@ -130,6 +141,7 @@ fun AnimeListScreen(
 
     LaunchedEffect(Unit) {
         if (uiState is AnimeUiState.Loading && searchQuery.isEmpty()) {
+            loadingViewContext = LoadingViewContext.HOME
             viewModel.loadHomeData()
         }
     }
@@ -146,13 +158,26 @@ fun AnimeListScreen(
         viewModel.consumeRandomAnimeNavigation()
     }
 
+    LaunchedEffect(uiState) {
+        when (uiState) {
+            is AnimeUiState.HomeSuccess -> loadingViewContext = LoadingViewContext.HOME
+            is AnimeUiState.SeasonalDetails,
+            is AnimeUiState.MangaDiscoveryDetails,
+            is AnimeUiState.TopDiscoveryDetails -> loadingViewContext = LoadingViewContext.DISCOVERY
+            is AnimeUiState.SearchSuccess -> loadingViewContext = LoadingViewContext.SEARCH
+            else -> Unit
+        }
+    }
+
     if (uiState is AnimeUiState.SeasonalDetails || uiState is AnimeUiState.MangaDiscoveryDetails || uiState is AnimeUiState.TopDiscoveryDetails || uiState is AnimeUiState.SearchSuccess) {
         BackHandler {
             if (searchQuery.isNotEmpty()) {
                 searchQuery = ""
                 isSearchExpanded = false
+                loadingViewContext = LoadingViewContext.HOME
                 viewModel.loadHomeData()
             } else {
+                loadingViewContext = LoadingViewContext.HOME
                 viewModel.loadHomeData()
             }
         }
@@ -162,6 +187,7 @@ fun AnimeListScreen(
         SeasonPicker(
             onDismiss = { showSeasonPicker = false },
             onSeasonSelected = { year, season ->
+                loadingViewContext = LoadingViewContext.DISCOVERY
                 viewModel.selectSpecificSeason(year, season)
                 showSeasonPicker = false
             }
@@ -169,23 +195,96 @@ fun AnimeListScreen(
     }
 
     quickUpdateEvent?.let { event ->
-        if (event is QuickUpdateEvent.ConfirmAdd) {
-            AlertDialog(
-                onDismissRequest = { viewModel.dismissQuickUpdate() },
-                title = { Text("Add to List?") },
-                text = { Text("Do you want to add \"${event.title}\" to your list and start watching/reading?") },
-                confirmButton = {
-                    TextButton(onClick = { viewModel.confirmQuickAdd(event.id, event.isAnime) }) {
-                        Text("Add")
+        when (event) {
+            is QuickUpdateEvent.ConfirmAdd -> {
+                AlertDialog(
+                    onDismissRequest = { viewModel.dismissQuickUpdate() },
+                    title = { Text("Add to List?") },
+                    text = { Text("Do you want to add \"${event.title}\" to your list and start watching/reading?") },
+                    confirmButton = {
+                        TextButton(onClick = { viewModel.confirmQuickAdd(event.id, event.isAnime) }) {
+                            Text("Add")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viewModel.dismissQuickUpdate() }) {
+                            Text("Cancel")
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.dismissQuickUpdate() }) {
-                        Text("Cancel")
+                )
+            }
+            is QuickUpdateEvent.ShowActions -> {
+                LaunchedEffect(event) {
+                    if (event.isAnime) {
+                        pendingAnimeEdit = QuickAnimeEdit(
+                            id = event.id,
+                            status = event.animeStatus ?: MyListStatus(),
+                            maxEpisodes = event.maxEpisodes
+                        )
+                    } else {
+                        pendingMangaEdit = QuickMangaEdit(
+                            id = event.id,
+                            status = event.mangaStatus ?: MyMangaListStatus(),
+                            maxVolumes = event.maxVolumes,
+                            maxChapters = event.maxChapters
+                        )
                     }
+                    viewModel.dismissQuickUpdate()
                 }
-            )
+            }
         }
+    }
+
+    pendingAnimeEdit?.let { edit ->
+        EditListStatusDialog(
+            currentStatus = edit.status,
+            maxEpisodes = edit.maxEpisodes,
+            onDismiss = { pendingAnimeEdit = null },
+            onSave = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
+                viewModel.updateAnimeListStatus(
+                    animeId = edit.id,
+                    status = status,
+                    isRewatching = isRewatching,
+                    score = score,
+                    numWatchedEpisodes = eps,
+                    priority = priority,
+                    numTimesRewatched = timesRewatched,
+                    rewatchValue = rewatchVal,
+                    tags = tags,
+                    comments = comments,
+                    startDate = start,
+                    finishDate = finish
+                )
+                pendingAnimeEdit = null
+            }
+        )
+    }
+
+    pendingMangaEdit?.let { edit ->
+        EditMangaListStatusDialog(
+            currentStatus = edit.status,
+            maxVolumes = edit.maxVolumes,
+            maxChapters = edit.maxChapters,
+            onDismiss = { pendingMangaEdit = null },
+            onSave = { status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish ->
+                viewModel.updateMangaListStatus(
+                    mangaId = edit.id,
+                    status = status,
+                    isRereading = isRereading,
+                    score = score,
+                    numVolumesRead = vols,
+                    numChaptersRead = chaps,
+                    priority = priority,
+                    numTimesReread = timesReread,
+                    rereadValue = rereadVal,
+                    tags = tags,
+                    comments = comments,
+                    startDate = start,
+                    finishDate = finish
+                )
+                pendingMangaEdit = null
+            }
+        )
     }
 
     Scaffold(
@@ -202,6 +301,7 @@ fun AnimeListScreen(
                     val nextType = if (searchMediaType == SearchMediaType.ANIME) SearchMediaType.MANGA else SearchMediaType.ANIME
                     searchMediaType = nextType
                     if (searchQuery.isNotBlank()) {
+                        loadingViewContext = LoadingViewContext.SEARCH
                         viewModel.searchAnime(
                             searchQuery,
                             isAnimeSearch = nextType == SearchMediaType.ANIME
@@ -210,6 +310,7 @@ fun AnimeListScreen(
                 },
                 onSearchQueryChange = {
                     searchQuery = it
+                    loadingViewContext = if (it.isBlank()) LoadingViewContext.HOME else LoadingViewContext.SEARCH
                     viewModel.searchAnime(
                         it,
                         isAnimeSearch = searchMediaType == SearchMediaType.ANIME
@@ -229,7 +330,14 @@ fun AnimeListScreen(
         ) {
             when (val state = uiState) {
                 is AnimeUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    if (loadingViewContext == LoadingViewContext.HOME) {
+                        HomeLoadingShimmer(modifier = Modifier.fillMaxSize())
+                    } else {
+                        DiscoveryLoadingShimmer(
+                            modifier = Modifier.fillMaxSize(),
+                            isGridView = currentDiscoveryIsGrid
+                        )
+                    }
                 }
                 is AnimeUiState.HomeSuccess -> {
                     Box(modifier = Modifier.fillMaxSize()) {
@@ -247,7 +355,8 @@ fun AnimeListScreen(
                                         airingDetails = airingDetails,
                                         titleLanguage = titleLanguage,
                                         onItemClick = { onAnimeClick(it) },
-                                        onItemLongClick = { id, title -> viewModel.onLongPressAnime(id, title) },
+                                        onItemPlusOne = { id, title -> viewModel.onLongPressAnime(id, title) },
+                                        onItemEditStatus = { id, title -> viewModel.prepareAnimeEdit(id, title) },
                                         endButtonLabel = "Anime List",
                                         endButtonIcon = Icons.AutoMirrored.Filled.List,
                                         onEndButtonClick = onOpenAnimeUserList
@@ -263,7 +372,8 @@ fun AnimeListScreen(
                                         airingDetails = emptyMap(),
                                         titleLanguage = titleLanguage,
                                         onItemClick = { onMangaClick(it) },
-                                        onItemLongClick = { id, title -> viewModel.onLongPressManga(id, title) },
+                                        onItemPlusOne = { id, title -> viewModel.onLongPressManga(id, title) },
+                                        onItemEditStatus = { id, title -> viewModel.prepareMangaEdit(id, title) },
                                         endButtonLabel = "Manga List",
                                         endButtonIcon = Icons.AutoMirrored.Filled.List,
                                         onEndButtonClick = onOpenMangaUserList
@@ -275,9 +385,18 @@ fun AnimeListScreen(
                                     DiscoveryButtonCluster(
                                         season = state.season,
                                         year = state.year,
-                                        onSeasonalClick = { viewModel.showSeasonalDetails(animeDiscoverySort) },
-                                        onTopAnimeClick = { viewModel.showTopDiscovery(isAnime = true, sort = animeDiscoverySort) },
-                                        onTopMangaClick = { viewModel.showTopDiscovery(isAnime = false, sort = mangaDiscoverySort) }
+                                        onSeasonalClick = {
+                                            loadingViewContext = LoadingViewContext.DISCOVERY
+                                            viewModel.showSeasonalDetails(animeDiscoverySort)
+                                        },
+                                        onTopAnimeClick = {
+                                            loadingViewContext = LoadingViewContext.DISCOVERY
+                                            viewModel.showTopDiscovery(isAnime = true, sort = animeDiscoverySort)
+                                        },
+                                        onTopMangaClick = {
+                                            loadingViewContext = LoadingViewContext.DISCOVERY
+                                            viewModel.showTopDiscovery(isAnime = false, sort = mangaDiscoverySort)
+                                        }
                                     )
                                 }
                             }
@@ -297,7 +416,8 @@ fun AnimeListScreen(
                                         airingDetails = airingDetails,
                                         titleLanguage = titleLanguage,
                                         onItemClick = { onAnimeClick(it) },
-                                        onItemLongClick = { id, title -> viewModel.onLongPressAnime(id, title) },
+                                        onItemPlusOne = { id, title -> viewModel.onLongPressAnime(id, title) },
+                                        onItemEditStatus = { id, title -> viewModel.prepareAnimeEdit(id, title) },
                                         endButtonLabel = "Refresh Picks",
                                         endButtonIcon = Icons.Default.Refresh,
                                         endButtonLoading = isRefreshingAnimeRecommendations,
@@ -314,7 +434,8 @@ fun AnimeListScreen(
                                         airingDetails = emptyMap(),
                                         titleLanguage = titleLanguage,
                                         onItemClick = { onMangaClick(it) },
-                                        onItemLongClick = { id, title -> viewModel.onLongPressManga(id, title) },
+                                        onItemPlusOne = { id, title -> viewModel.onLongPressManga(id, title) },
+                                        onItemEditStatus = { id, title -> viewModel.prepareMangaEdit(id, title) },
                                         endButtonLabel = "Refresh Picks",
                                         endButtonIcon = Icons.Default.Refresh,
                                         endButtonLoading = isRefreshingMangaRecommendations,
@@ -341,6 +462,7 @@ fun AnimeListScreen(
                             onGridClick = { viewModel.setDiscoveryGridMode(isAnime = true, isGrid = !currentDiscoveryIsGrid) },
                             currentSort = state.currentSort,
                             onSortChange = {
+                                loadingViewContext = LoadingViewContext.DISCOVERY
                                 viewModel.setDiscoverySort(isAnime = true, sort = it)
                                 viewModel.showSeasonalDetails(it)
                             },
@@ -354,7 +476,8 @@ fun AnimeListScreen(
                             titleLanguage = titleLanguage,
                             isGridView = currentDiscoveryIsGrid,
                             onAnimeClick = onAnimeClick,
-                            onAnimeLongClick = { id, title -> viewModel.onLongPressAnime(id, title) }
+                            onAnimePlusOne = { id, title -> viewModel.onLongPressAnime(id, title) },
+                            onAnimeEditStatus = { id, title -> viewModel.prepareAnimeEdit(id, title) }
                         )
                     }
                 }
@@ -378,6 +501,7 @@ fun AnimeListScreen(
                             onGridClick = { viewModel.setDiscoveryGridMode(isAnime = false, isGrid = !currentDiscoveryIsGrid) },
                             currentSort = state.currentSort,
                             onSortChange = {
+                                loadingViewContext = LoadingViewContext.DISCOVERY
                                 viewModel.setDiscoverySort(isAnime = false, sort = it)
                                 viewModel.showMangaDiscovery(state.type, it)
                             },
@@ -394,7 +518,8 @@ fun AnimeListScreen(
                             titleLanguage = titleLanguage,
                             isGridView = currentDiscoveryIsGrid,
                             onAnimeClick = onMangaClick,
-                            onAnimeLongClick = { id, title -> viewModel.onLongPressManga(id, title) }
+                            onAnimePlusOne = { id, title -> viewModel.onLongPressManga(id, title) },
+                            onAnimeEditStatus = { id, title -> viewModel.prepareMangaEdit(id, title) }
                         )
                     }
                 }
@@ -423,6 +548,7 @@ fun AnimeListScreen(
                             },
                             currentSort = state.currentSort,
                             onSortChange = {
+                                loadingViewContext = LoadingViewContext.DISCOVERY
                                 viewModel.setDiscoverySort(isAnime = state.isAnime, sort = it)
                                 viewModel.showTopDiscovery(state.isAnime, it)
                             },
@@ -438,9 +564,13 @@ fun AnimeListScreen(
                             titleLanguage = titleLanguage,
                             isGridView = currentDiscoveryIsGrid,
                             onItemClick = if (state.isAnime) onAnimeClick else onMangaClick,
-                            onItemLongClick = { id, title -> 
+                            onItemPlusOne = { id, title -> 
                                 if (state.isAnime) viewModel.onLongPressAnime(id, title) 
                                 else viewModel.onLongPressManga(id, title) 
+                            },
+                            onItemEditStatus = { id, title ->
+                                if (state.isAnime) viewModel.prepareAnimeEdit(id, title)
+                                else viewModel.prepareMangaEdit(id, title)
                             }
                         )
                     }
@@ -476,8 +606,11 @@ fun AnimeListScreen(
                                     titleLanguage = titleLanguage,
                                     isGridView = currentDiscoveryIsGrid,
                                     onItemClick = onAnimeClick,
-                                    onItemLongClick = { id, title ->
+                                    onItemPlusOne = { id, title ->
                                         viewModel.onLongPressAnime(id, title)
+                                    },
+                                    onItemEditStatus = { id, title ->
+                                        viewModel.prepareAnimeEdit(id, title)
                                     }
                                 )
                             }
@@ -489,8 +622,11 @@ fun AnimeListScreen(
                                     titleLanguage = titleLanguage,
                                     isGridView = currentDiscoveryIsGrid,
                                     onItemClick = onMangaClick,
-                                    onItemLongClick = { id, title ->
+                                    onItemPlusOne = { id, title ->
                                         viewModel.onLongPressManga(id, title)
+                                    },
+                                    onItemEditStatus = { id, title ->
+                                        viewModel.prepareMangaEdit(id, title)
                                     }
                                 )
                             }
@@ -674,6 +810,146 @@ private fun HomeBackgroundBlobs() {
 }
 
 @Composable
+private fun HomeLoadingShimmer(modifier: Modifier = Modifier) {
+    val shimmerBrush = rememberHomeShimmerBrush()
+
+    Box(modifier = modifier) {
+        HomeBackgroundBlobs()
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            items(4) {
+                Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .fillMaxWidth(0.55f)
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(shimmerBrush)
+                    )
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(6) {
+                            Box(
+                                modifier = Modifier
+                                    .width(124.dp)
+                                    .aspectRatio(0.7f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(shimmerBrush)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveryLoadingShimmer(
+    modifier: Modifier = Modifier,
+    isGridView: Boolean
+) {
+    val shimmerBrush = rememberHomeShimmerBrush()
+    if (isGridView) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = modifier,
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(18) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(0.7f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(shimmerBrush)
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier,
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(10) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(108.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(86.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(shimmerBrush)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.85f)
+                                .height(18.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(shimmerBrush)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.55f)
+                                .height(14.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(shimmerBrush)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.65f)
+                                .height(14.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(shimmerBrush)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberHomeShimmerBrush(): Brush {
+    val transition = rememberInfiniteTransition(label = "home_shimmer")
+    val offset by transition.animateFloat(
+        initialValue = -400f,
+        targetValue = 1400f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "home_shimmer_offset"
+    )
+
+    val base = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val highlight = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+    return Brush.horizontalGradient(
+        colors = listOf(base, highlight, base),
+        startX = offset - 260f,
+        endX = offset
+    )
+}
+
+@Composable
 private fun HomeSearchToolbar(
     searchMediaType: SearchMediaType,
     searchQuery: String,
@@ -730,7 +1006,7 @@ private fun HomeSearchToolbar(
                         modifier = Modifier.height(36.dp)
                     ) {
                         Icon(
-                            if (searchMediaType == SearchMediaType.ANIME) Icons.AutoMirrored.Filled.MenuBook else Icons.Default.Movie,
+                            if (searchMediaType == SearchMediaType.ANIME) Icons.Default.Movie else Icons.AutoMirrored.Filled.MenuBook,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
@@ -781,7 +1057,8 @@ fun TopDiscoveryView(
     titleLanguage: TitleLanguage,
     isGridView: Boolean,
     onItemClick: (Int) -> Unit,
-    onItemLongClick: (Int, String) -> Unit
+    onItemPlusOne: (Int, String) -> Unit,
+    onItemEditStatus: (Int, String) -> Unit
 ) {
     if (isGridView) {
         LazyVerticalGrid(
@@ -797,7 +1074,8 @@ fun TopDiscoveryView(
                     anilistMedia = airingDetails[item.node.id],
                     titleLanguage = titleLanguage,
                     onClick = { onItemClick(item.node.id) },
-                    onLongClick = { onItemLongClick(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
+                    onPlusOne = { onItemPlusOne(item.node.id, item.node.getPreferredTitle(titleLanguage)) },
+                    onEditStatus = { onItemEditStatus(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
                 )
             }
         }
@@ -813,7 +1091,8 @@ fun TopDiscoveryView(
                     anilistMedia = airingDetails[item.node.id],
                     titleLanguage = titleLanguage,
                     onClick = { onItemClick(item.node.id) },
-                    onLongClick = { onItemLongClick(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
+                    onPlusOne = { onItemPlusOne(item.node.id, item.node.getPreferredTitle(titleLanguage)) },
+                    onEditStatus = { onItemEditStatus(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
                 )
             }
         }
@@ -927,6 +1206,19 @@ fun SeasonPicker(
     )
 }
 
+private data class QuickAnimeEdit(
+    val id: Int,
+    val status: MyListStatus,
+    val maxEpisodes: Int
+)
+
+private data class QuickMangaEdit(
+    val id: Int,
+    val status: MyMangaListStatus,
+    val maxVolumes: Int,
+    val maxChapters: Int
+)
+
 private enum class SearchMediaType(val label: String) {
     ANIME("Anime"),
     MANGA("Manga")
@@ -941,7 +1233,8 @@ fun HomeSection(
     airingDetails: Map<Int, AniListMedia>,
     titleLanguage: TitleLanguage,
     onItemClick: (Int) -> Unit,
-    onItemLongClick: (Int, String) -> Unit,
+    onItemPlusOne: (Int, String) -> Unit,
+    onItemEditStatus: (Int, String) -> Unit,
     endButtonLabel: String? = null,
     endButtonIcon: ImageVector = Icons.AutoMirrored.Filled.List,
     endButtonLoading: Boolean = false,
@@ -1025,7 +1318,8 @@ fun HomeSection(
                         titleLanguage = titleLanguage,
                         showHomeMeta = true,
                         onClick = { onItemClick(item.node.id) },
-                        onLongClick = { onItemLongClick(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
+                        onPlusOne = { onItemPlusOne(item.node.id, item.node.getPreferredTitle(titleLanguage)) },
+                        onEditStatus = { onItemEditStatus(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
                     )
                 }
                 if (onEndButtonClick != null && !endButtonLabel.isNullOrBlank()) {
@@ -1420,7 +1714,8 @@ fun SeasonalDetailsView(
     titleLanguage: TitleLanguage,
     isGridView: Boolean,
     onAnimeClick: (Int) -> Unit,
-    onAnimeLongClick: (Int, String) -> Unit
+    onAnimePlusOne: (Int, String) -> Unit,
+    onAnimeEditStatus: (Int, String) -> Unit
 ) {
     val collapsedSections = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -1465,7 +1760,8 @@ fun SeasonalDetailsView(
                             anilistMedia = airingDetails[anime.node.id],
                             titleLanguage = titleLanguage,
                             onClick = { onAnimeClick(anime.node.id) },
-                            onLongClick = { onAnimeLongClick(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) }
+                            onPlusOne = { onAnimePlusOne(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) },
+                            onEditStatus = { onAnimeEditStatus(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) }
                         )
                     }
                 }
@@ -1510,7 +1806,8 @@ fun SeasonalDetailsView(
                             anilistMedia = airingDetails[anime.node.id],
                             titleLanguage = titleLanguage,
                             onClick = { onAnimeClick(anime.node.id) },
-                            onLongClick = { onAnimeLongClick(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) }
+                            onPlusOne = { onAnimePlusOne(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) },
+                            onEditStatus = { onAnimeEditStatus(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) }
                         )
                     }
                 }
@@ -1557,16 +1854,18 @@ fun HorizontalCard(
     titleLanguage: TitleLanguage,
     showHomeMeta: Boolean = true,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onPlusOne: () -> Unit,
+    onEditStatus: () -> Unit
 ) {
     var isAnimating by remember { mutableStateOf(false) }
+    var showQuickActions by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(targetValue = if (isAnimating) 0.3f else 1f, animationSpec = tween(500))
     val scale by animateFloatAsState(targetValue = if (isAnimating) 1.5f else 0f, animationSpec = tween(500))
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             delay(600)
-            onLongClick()
+            onPlusOne()
             isAnimating = false
         }
     }
@@ -1579,7 +1878,10 @@ fun HorizontalCard(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { isAnimating = true }
+                    onLongClick = {
+                        if (anime.node.myListStatus?.status != null) showQuickActions = true
+                        else isAnimating = true
+                    }
                 ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -1640,8 +1942,17 @@ fun HorizontalCard(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(4.dp)
+                        .height(92.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.88f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                    verticalArrangement = Arrangement.Bottom
                 ) {
                     Text(
                         text = anime.node.getPreferredTitle(titleLanguage),
@@ -1701,6 +2012,25 @@ fun HorizontalCard(
                 }
             }
         }
+        DropdownMenu(
+            expanded = showQuickActions,
+            onDismissRequest = { showQuickActions = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("+1") },
+                onClick = {
+                    showQuickActions = false
+                    isAnimating = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showQuickActions = false
+                    onEditStatus()
+                }
+            )
+        }
         if (isAnimating) {
             Text(
                 text = "+1",
@@ -1720,45 +2050,64 @@ fun AnimeItem(
     anilistMedia: AniListMedia?,
     titleLanguage: TitleLanguage,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onPlusOne: () -> Unit,
+    onEditStatus: () -> Unit
 ) {
     var isAnimating by remember { mutableStateOf(false) }
+    var showQuickActions by remember { mutableStateOf(false) }
     val alpha by animateFloatAsState(targetValue = if (isAnimating) 0.3f else 1f, animationSpec = tween(500))
     val scale by animateFloatAsState(targetValue = if (isAnimating) 1.5f else 0f, animationSpec = tween(500))
 
     LaunchedEffect(isAnimating) {
         if (isAnimating) {
             delay(600)
-            onLongClick()
+            onPlusOne()
             isAnimating = false
         }
     }
 
     Box(contentAlignment = Alignment.Center) {
-        Card(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
+                .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { isAnimating = true }
+                    onLongClick = {
+                        if (anime.node.myListStatus?.status != null) showQuickActions = true
+                        else isAnimating = true
+                    }
                 ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            verticalAlignment = Alignment.Top
         ) {
-            Row(modifier = Modifier.padding(8.dp)) {
-                AsyncImage(
-                    model = anime.node.mainPicture?.medium,
-                    contentDescription = null,
+            AsyncImage(
+                model = anime.node.mainPicture?.medium,
+                contentDescription = null,
+                modifier = Modifier
+                    .width(86.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(12.dp)),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 108.dp),
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
                     modifier = Modifier
-                        .size(72.dp, 108.dp),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
                     Text(
                         text = anime.node.getPreferredTitle(titleLanguage),
                         style = MaterialTheme.typography.titleMedium,
+                        minLines = 2,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1771,55 +2120,64 @@ fun AnimeItem(
                         text = "Members: ${formatMembersCount(anime.node.numListUsers)}",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    
-                    if (anime.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
+
+                    val nextEpisodeLine = if (anime.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
                         val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
                         val days = timeUntil / 86400
                         val hours = (timeUntil % 86400) / 3600
                         val mins = (timeUntil % 3600) / 60
                         val countdown = if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
-                        
-                        Text(
-                            text = "Next Ep ${anilistMedia.nextAiringEpisode.episode}: $countdown",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
+                        "Next Ep ${anilistMedia.nextAiringEpisode.episode}: $countdown"
+                    } else {
+                        " "
                     }
-
                     Text(
-                        text = "MAL Score: ${anime.node.meanScore ?: "N/A"}",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = nextEpisodeLine,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (nextEpisodeLine.isBlank()) Color.Transparent else MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    
-                    anime.node.myListStatus?.let { status ->
-                        if (status.status != null) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "MAL Score: ${anime.node.meanScore ?: "N/A"}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        anime.node.myListStatus?.let { status ->
+                            if (status.status != null) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    @Suppress("DEPRECATION")
-                                    Icon(
-                                        imageVector = getStatusIcon(status.status),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp),
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    if (status.score > 0) {
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Icon(Icons.Default.Star, null, tint = Color.Yellow, modifier = Modifier.size(12.dp))
-                                        Text(
-                                            text = status.score.toString(),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            fontWeight = FontWeight.Bold
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        @Suppress("DEPRECATION")
+                                        Icon(
+                                            imageVector = getStatusIcon(status.status),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp),
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
+                                        if (status.score > 0) {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Icon(Icons.Default.Star, null, tint = Color.Yellow, modifier = Modifier.size(12.dp))
+                                            Text(
+                                                text = status.score.toString(),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1827,6 +2185,25 @@ fun AnimeItem(
                     }
                 }
             }
+        }
+        DropdownMenu(
+            expanded = showQuickActions,
+            onDismissRequest = { showQuickActions = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("+1") },
+                onClick = {
+                    showQuickActions = false
+                    isAnimating = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text("Edit") },
+                onClick = {
+                    showQuickActions = false
+                    onEditStatus()
+                }
+            )
         }
         if (isAnimating) {
             Text(

@@ -37,6 +37,19 @@ class AnimeViewModel @Inject constructor(
     private val repository: AnimeRepository,
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
+    companion object {
+        private const val HOME_CACHE_TTL_MS = 2 * 60 * 1000L
+        private const val DISCOVERY_CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val SEARCH_CACHE_TTL_MS = 5 * 60 * 1000L
+        private val globalHomeCache = mutableMapOf<String, Pair<Long, AnimeUiState.HomeSuccess>>()
+        private val seasonalRawCache = mutableMapOf<String, Pair<Long, List<AnimeData>>>()
+        private var publishingMangaCache: Pair<Long, List<MangaData>>? = null
+        private val topAnimeRawCache = mutableMapOf<String, Pair<Long, List<AnimeData>>>()
+        private val topMangaRawCache = mutableMapOf<String, Pair<Long, List<MangaData>>>()
+        private val animeSearchCache = mutableMapOf<String, Pair<Long, List<AnimeData>>>()
+        private val mangaSearchCache = mutableMapOf<String, Pair<Long, List<MangaData>>>()
+    }
+
     private val _uiState = MutableStateFlow<AnimeUiState>(AnimeUiState.Loading)
     val uiState: StateFlow<AnimeUiState> = _uiState.asStateFlow()
 
@@ -84,6 +97,7 @@ class AnimeViewModel @Inject constructor(
     private var currentDiscoverySort = "members"
     private var lastHomeLoadAtMs: Long = 0L
     private var cachedHomeState: AnimeUiState.HomeSuccess? = null
+    private var randomAnimeJob: Job? = null
 
     init {
         fetchUserPfp()
@@ -91,7 +105,7 @@ class AnimeViewModel @Inject constructor(
         // Respond to NSFW setting changes without resetting UI state unnecessarily
         viewModelScope.launch {
             prefsManager.nsfwFlow.drop(1).collect {
-                refreshCurrentView()
+                refreshCurrentView(forceRefresh = true)
             }
         }
     }
@@ -106,12 +120,20 @@ class AnimeViewModel @Inject constructor(
         }
     }
 
-    fun loadHomeData() {
+    fun loadHomeData(forceRefresh: Boolean = false) {
         val now = SystemClock.elapsedRealtime()
-        if (_uiState.value is AnimeUiState.Loading && now - lastHomeLoadAtMs < 10_000L) return
-        if (_uiState.value is AnimeUiState.HomeSuccess && now - lastHomeLoadAtMs < 60_000L) return
-        if (cachedHomeState != null && now - lastHomeLoadAtMs < 60_000L) {
+        val homeCacheKey = "home_default"
+        val cachedGlobalHome = globalHomeCache[homeCacheKey]
+        if (!forceRefresh && _uiState.value is AnimeUiState.Loading && now - lastHomeLoadAtMs < 10_000L) return
+        if (!forceRefresh && _uiState.value is AnimeUiState.HomeSuccess && now - lastHomeLoadAtMs < HOME_CACHE_TTL_MS) return
+        if (!forceRefresh && cachedHomeState != null && now - lastHomeLoadAtMs < HOME_CACHE_TTL_MS) {
             _uiState.value = cachedHomeState!!
+            return
+        }
+        if (!forceRefresh && cachedGlobalHome != null && now - cachedGlobalHome.first < HOME_CACHE_TTL_MS) {
+            cachedHomeState = cachedGlobalHome.second
+            lastHomeLoadAtMs = cachedGlobalHome.first
+            _uiState.value = cachedGlobalHome.second
             return
         }
 
@@ -195,6 +217,7 @@ class AnimeViewModel @Inject constructor(
                         canGoNext = canGoToNextSeason(currentYear, currentSeason)
                     )
                     cachedHomeState = successState
+                    globalHomeCache[homeCacheKey] = SystemClock.elapsedRealtime() to successState
                     _uiState.value = successState
                     lastHomeLoadAtMs = SystemClock.elapsedRealtime()
 
@@ -260,11 +283,11 @@ class AnimeViewModel @Inject constructor(
     }
 
     fun openRandomAnime() {
-        viewModelScope.launch {
+        if (randomAnimeJob?.isActive == true) return
+        randomAnimeJob = viewModelScope.launch {
             try {
-                val pool = repository.getTopAnime(limit = 100, rankingType = "all").data
-                val randomId = pool.randomOrNull()?.node?.id
-                if (randomId != null) {
+                val randomId = repository.getRandomAnimeId()
+                if (randomId > 0) {
                     _randomAnimeNavigation.value = randomId
                 } else {
                     _errorMessage.value = "Could not find a random anime right now. Please try again."
@@ -426,13 +449,21 @@ class AnimeViewModel @Inject constructor(
         }
     }
 
-    fun showSeasonalDetails(sort: String = "members") {
+    fun showSeasonalDetails(sort: String = "members", forceRefresh: Boolean = false) {
         currentSeasonalSort = sort
         viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {
-                val response = repository.getSeasonalAnime(currentYear, currentSeason, loadAllPages = true)
-                currentSeasonalData = response.data
+                val cacheKey = "$currentYear|$currentSeason"
+                val now = SystemClock.elapsedRealtime()
+                val cached = seasonalRawCache[cacheKey]
+                currentSeasonalData = if (!forceRefresh && cached != null && now - cached.first < DISCOVERY_CACHE_TTL_MS) {
+                    cached.second
+                } else {
+                    repository.getSeasonalAnime(currentYear, currentSeason, loadAllPages = false).data.also {
+                        seasonalRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
+                    }
+                }
                 applyCurrentSeasonalFiltersAndSort()
                 fetchAiringDetails(currentSeasonalData.map { it.node.id })
             } catch (e: Exception) {
@@ -466,18 +497,24 @@ class AnimeViewModel @Inject constructor(
         )
     }
 
-    fun showMangaDiscovery(type: String = "publishing", sort: String = "members") {
+    fun showMangaDiscovery(type: String = "publishing", sort: String = "members", forceRefresh: Boolean = false) {
         currentDiscoveryType = type
         currentDiscoverySort = sort
         if (type == "top") {
-            showTopDiscovery(isAnime = false, sort = sort)
+            showTopDiscovery(isAnime = false, sort = sort, forceRefresh = forceRefresh)
             return
         }
         viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {
-                val mangaList = repository.getPublishingManga(loadAllPages = true).map { it.toMangaData() }
-                currentMangaDiscoveryData = mangaList
+                val now = SystemClock.elapsedRealtime()
+                currentMangaDiscoveryData = if (!forceRefresh && publishingMangaCache != null && now - publishingMangaCache!!.first < DISCOVERY_CACHE_TTL_MS) {
+                    publishingMangaCache!!.second
+                } else {
+                    repository.getPublishingManga(loadAllPages = true).map { it.toMangaData() }.also {
+                        publishingMangaCache = SystemClock.elapsedRealtime() to it
+                    }
+                }
                 applyCurrentMangaDiscoveryFiltersAndSort()
             } catch (e: Exception) {
                 _uiState.value = AnimeUiState.Error(e.message ?: "Unknown Error")
@@ -508,17 +545,32 @@ class AnimeViewModel @Inject constructor(
         )
     }
 
-    fun showTopDiscovery(isAnime: Boolean, sort: String = "members") {
+    fun showTopDiscovery(isAnime: Boolean, sort: String = "members", forceRefresh: Boolean = false) {
         currentDiscoveryType = if (isAnime) "top_anime" else "top_manga"
         currentDiscoverySort = sort
         viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {
                 val rankingType = if (sort == "score") "all" else "bypopularity"
+                val now = SystemClock.elapsedRealtime()
                 if (isAnime) {
-                    currentSeasonalData = repository.getTopAnime(limit = 100, rankingType = rankingType).data
+                    val cacheKey = "top_anime|$rankingType"
+                    currentSeasonalData = if (!forceRefresh && topAnimeRawCache[cacheKey] != null && now - topAnimeRawCache[cacheKey]!!.first < DISCOVERY_CACHE_TTL_MS) {
+                        topAnimeRawCache[cacheKey]!!.second
+                    } else {
+                        repository.getTopAnime(limit = 100, rankingType = rankingType).data.also {
+                            topAnimeRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
+                        }
+                    }
                 } else {
-                    currentMangaDiscoveryData = repository.getTopManga(limit = 100, rankingType = rankingType).data
+                    val cacheKey = "top_manga|$rankingType"
+                    currentMangaDiscoveryData = if (!forceRefresh && topMangaRawCache[cacheKey] != null && now - topMangaRawCache[cacheKey]!!.first < DISCOVERY_CACHE_TTL_MS) {
+                        topMangaRawCache[cacheKey]!!.second
+                    } else {
+                        repository.getTopManga(limit = 100, rankingType = rankingType).data.also {
+                            topMangaRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
+                        }
+                    }
                 }
                 applyCurrentTopDiscoveryFiltersAndSort()
             } catch (e: Exception) {
@@ -558,12 +610,36 @@ class AnimeViewModel @Inject constructor(
         
         if (query.length < 3) return
 
+        val normalized = query.trim().lowercase()
+        val now = SystemClock.elapsedRealtime()
+        if (isAnimeSearch) {
+            val cached = animeSearchCache[normalized]
+            if (cached != null && now - cached.first < SEARCH_CACHE_TTL_MS) {
+                _uiState.value = AnimeUiState.SearchSuccess(
+                    animeList = cached.second,
+                    mangaList = emptyList()
+                )
+                fetchAiringDetails(cached.second.map { it.node.id })
+                return
+            }
+        } else {
+            val cached = mangaSearchCache[normalized]
+            if (cached != null && now - cached.first < SEARCH_CACHE_TTL_MS) {
+                _uiState.value = AnimeUiState.SearchSuccess(
+                    animeList = emptyList(),
+                    mangaList = cached.second
+                )
+                return
+            }
+        }
+
         searchJob = viewModelScope.launch {
             delay(500)
             _uiState.value = AnimeUiState.Loading
             try {
                 if (isAnimeSearch) {
                     val animeResponse = repository.searchAnime(query)
+                    animeSearchCache[normalized] = SystemClock.elapsedRealtime() to animeResponse.data
                     _uiState.value = AnimeUiState.SearchSuccess(
                         animeList = animeResponse.data,
                         mangaList = emptyList()
@@ -571,6 +647,7 @@ class AnimeViewModel @Inject constructor(
                     fetchAiringDetails(animeResponse.data.map { it.node.id })
                 } else {
                     val mangaResponse = repository.searchManga(query)
+                    mangaSearchCache[normalized] = SystemClock.elapsedRealtime() to mangaResponse.data
                     _uiState.value = AnimeUiState.SearchSuccess(
                         animeList = emptyList(),
                         mangaList = mangaResponse.data
@@ -591,7 +668,7 @@ class AnimeViewModel @Inject constructor(
                 val details = repository.getAnimeDetails(animeId)
                 if (details.myListStatus != null && details.myListStatus.status != null) {
                     repository.quickIncrementAnime(animeId)
-                    refreshCurrentView()
+                    refreshCurrentView(forceRefresh = true)
                 } else {
                     _quickUpdateEvent.value = QuickUpdateEvent.ConfirmAdd(animeId, title, isAnime = true)
                 }
@@ -607,12 +684,45 @@ class AnimeViewModel @Inject constructor(
                 val details = repository.getMangaDetails(mangaId)
                 if (details.myListStatus != null && details.myListStatus.status != null) {
                     repository.quickIncrementManga(mangaId)
-                    refreshCurrentView()
+                    refreshCurrentView(forceRefresh = true)
                 } else {
                     _quickUpdateEvent.value = QuickUpdateEvent.ConfirmAdd(mangaId, title, isAnime = false)
                 }
             } catch (e: Exception) {
                 // handle error
+            }
+        }
+    }
+
+    fun prepareAnimeEdit(animeId: Int, title: String) {
+        viewModelScope.launch {
+            try {
+                val details = repository.getAnimeDetails(animeId)
+                _quickUpdateEvent.value = QuickUpdateEvent.ShowActions(
+                    id = animeId,
+                    title = title,
+                    isAnime = true,
+                    animeStatus = details.myListStatus ?: MyListStatus(),
+                    maxEpisodes = details.numEpisodes ?: 0
+                )
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun prepareMangaEdit(mangaId: Int, title: String) {
+        viewModelScope.launch {
+            try {
+                val details = repository.getMangaDetails(mangaId)
+                _quickUpdateEvent.value = QuickUpdateEvent.ShowActions(
+                    id = mangaId,
+                    title = title,
+                    isAnime = false,
+                    mangaStatus = details.myListStatus ?: MyMangaListStatus(),
+                    maxVolumes = details.numVolumes ?: 0,
+                    maxChapters = details.numChapters ?: 0
+                )
+            } catch (_: Exception) {
             }
         }
     }
@@ -623,21 +733,95 @@ class AnimeViewModel @Inject constructor(
                 if (isAnime) repository.quickIncrementAnime(id)
                 else repository.quickIncrementManga(id)
                 _quickUpdateEvent.value = null
-                refreshCurrentView()
+                refreshCurrentView(forceRefresh = true)
             } catch (e: Exception) {
                 // handle error
             }
         }
     }
 
-    private fun refreshCurrentView() {
+    private fun refreshCurrentView(forceRefresh: Boolean = false) {
         val currentState = _uiState.value
         when (currentState) {
-            is AnimeUiState.HomeSuccess -> loadHomeData()
-            is AnimeUiState.SeasonalDetails -> showSeasonalDetails(currentSeasonalSort)
-            is AnimeUiState.MangaDiscoveryDetails -> showMangaDiscovery(currentDiscoveryType, currentDiscoverySort)
-            is AnimeUiState.TopDiscoveryDetails -> showTopDiscovery(currentState.isAnime, currentDiscoverySort)
+            is AnimeUiState.HomeSuccess -> loadHomeData(forceRefresh = forceRefresh)
+            is AnimeUiState.SeasonalDetails -> showSeasonalDetails(currentSeasonalSort, forceRefresh = forceRefresh)
+            is AnimeUiState.MangaDiscoveryDetails -> showMangaDiscovery(currentDiscoveryType, currentDiscoverySort, forceRefresh = forceRefresh)
+            is AnimeUiState.TopDiscoveryDetails -> showTopDiscovery(currentState.isAnime, currentDiscoverySort, forceRefresh = forceRefresh)
             else -> {}
+        }
+    }
+
+    fun updateAnimeListStatus(
+        animeId: Int,
+        status: String? = null,
+        isRewatching: Boolean? = null,
+        score: Int? = null,
+        numWatchedEpisodes: Int? = null,
+        priority: Int? = null,
+        numTimesRewatched: Int? = null,
+        rewatchValue: Int? = null,
+        tags: String? = null,
+        comments: String? = null,
+        startDate: String? = null,
+        finishDate: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.updateMyListStatus(
+                    animeId = animeId,
+                    status = status,
+                    isRewatching = isRewatching,
+                    score = score,
+                    numWatchedEpisodes = numWatchedEpisodes,
+                    priority = priority,
+                    numTimesRewatched = numTimesRewatched,
+                    rewatchValue = rewatchValue,
+                    tags = tags,
+                    comments = comments,
+                    startDate = startDate,
+                    finishDate = finishDate
+                )
+                refreshCurrentView(forceRefresh = true)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun updateMangaListStatus(
+        mangaId: Int,
+        status: String? = null,
+        isRereading: Boolean? = null,
+        score: Int? = null,
+        numVolumesRead: Int? = null,
+        numChaptersRead: Int? = null,
+        priority: Int? = null,
+        numTimesReread: Int? = null,
+        rereadValue: Int? = null,
+        tags: String? = null,
+        comments: String? = null,
+        startDate: String? = null,
+        finishDate: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.updateMyMangaListStatus(
+                    mangaId = mangaId,
+                    status = status,
+                    isRereading = isRereading,
+                    score = score,
+                    numVolumesRead = numVolumesRead,
+                    numChaptersRead = numChaptersRead,
+                    priority = priority,
+                    numTimesReread = numTimesReread,
+                    rereadValue = rereadValue,
+                    tags = tags,
+                    comments = comments,
+                    startDate = startDate,
+                    finishDate = finishDate
+                )
+                refreshCurrentView(forceRefresh = true)
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -767,6 +951,16 @@ class AnimeViewModel @Inject constructor(
 
 sealed interface QuickUpdateEvent {
     data class ConfirmAdd(val id: Int, val title: String, val isAnime: Boolean) : QuickUpdateEvent
+    data class ShowActions(
+        val id: Int,
+        val title: String,
+        val isAnime: Boolean,
+        val animeStatus: MyListStatus? = null,
+        val mangaStatus: MyMangaListStatus? = null,
+        val maxEpisodes: Int = 0,
+        val maxVolumes: Int = 0,
+        val maxChapters: Int = 0
+    ) : QuickUpdateEvent
 }
 
 sealed interface AnimeUiState {
