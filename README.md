@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.0`
+- `v1.2.2`
 
 ## Core Features
 
@@ -88,6 +88,29 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Exit confirmation on root destinations
 - User-list search behavior improvements:
   - Search can be preserved while moving between status tabs
+
+## v1.2.1 Highlights
+
+- Seasonal and Top 100 reliability/performance fixes:
+  - Reduced duplicate navigation/state races
+  - Faster first render for heavy discovery pages
+  - Better cancellation handling for overlapping loads
+- Details page loading improvements:
+  - Two-phase loading strategy to show core content faster
+  - Background metadata hydration for related/recommendation cards
+  - Reduced metadata request fanout to lower network pressure
+- Profile and metadata request throttling:
+  - Lower burst concurrency for favorite metadata lookups
+  - Improved overall responsiveness when navigating between profile/discovery/details
+
+## v1.2.2 Highlights
+
+- Top 100 back-navigation fix:
+  - Prevented stale async responses from reopening Top lists after returning home
+- Top 100 visual header alignment:
+  - Back button and title style now consistent with details-page style direction
+- Additional seasonal/top UX stability polishing:
+  - Better request invalidation and smoother transitions between Home and discovery views
 
 ## Tech Stack
 
