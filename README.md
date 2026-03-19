@@ -127,7 +127,12 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Home resilience fallback:
   - Added soft-timeout behavior to avoid prolonged blank/blocked loading states
 
-## v1.2.4 Highlights
+## Versioning Note
+
+- `v1.2.4` was intentionally skipped on GitHub.
+- Reason: its changes were rolled into `v1.2.5` so the release tag, app `versionName`, and uploaded APK all stay aligned.
+
+## v1.2.5 Highlights
 
 - Search and trigger cleanup:
   - Recent search history now saves only on explicit submit (not typing-triggered calls)
@@ -137,9 +142,6 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Removed delayed/background expansion fetch patterns in Seasonal/Top flows
   - Reduced hidden offscreen list preloading to lower unnecessary work
 - General responsiveness improvements from fewer overlapping data triggers
-
-## v1.2.5 Highlights
-
 - Version alignment and release consistency:
   - App version bumped to `1.2.5` (`versionCode 8`)
   - Release APK updated to match tagged release `v1.2.5`
