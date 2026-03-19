@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.5`
+- `v1.2.6`
 
 ## Core Features
 
@@ -145,6 +145,17 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Version alignment and release consistency:
   - App version bumped to `1.2.5` (`versionCode 8`)
   - Release APK updated to match tagged release `v1.2.5`
+
+## v1.2.6 Highlights
+
+- Stronger force refresh behavior:
+  - User Anime/Manga list refresh now cancels in-flight background backfill jobs before clearing caches
+  - Home now supports explicit force refresh from the toolbar and bypasses cached home payload
+- Faster fallback behavior under slow network:
+  - User Anime/Manga list loads now use a 1.5s soft-timeout strategy
+  - If first response is slow, UI unblocks and continues loading in background instead of feeling stuck
+- List loading path optimization:
+  - Faster first-page render with background full-list completion for smoother initial open
 
 ## Tech Stack
 
