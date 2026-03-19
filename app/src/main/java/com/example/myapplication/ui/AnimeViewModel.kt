@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.awaitAll
@@ -115,7 +116,7 @@ class AnimeViewModel @Inject constructor(
         
         // Respond to NSFW setting changes without resetting UI state unnecessarily
         viewModelScope.launch {
-            prefsManager.nsfwFlow.drop(1).collect {
+            prefsManager.nsfwFlow.distinctUntilChanged().drop(1).collect {
                 refreshCurrentView(forceRefresh = true)
             }
         }
@@ -138,16 +139,16 @@ class AnimeViewModel @Inject constructor(
         seasonalLoadJob?.cancel()
         topDiscoveryRequestId++
         topDiscoveryLoadJob?.cancel()
-        homeLoadJob?.cancel()
+        if (!forceRefresh && homeLoadJob?.isActive == true) return
 
         val homeCacheKey = "home_default"
         if (forceRefresh) {
+            homeLoadJob?.cancel()
             cachedHomeState = null
             globalHomeCache.remove(homeCacheKey)
         }
         val now = SystemClock.elapsedRealtime()
         val cachedGlobalHome = globalHomeCache[homeCacheKey]
-        if (!forceRefresh && _uiState.value is AnimeUiState.Loading && now - lastHomeLoadAtMs < 10_000L) return
         if (!forceRefresh && _uiState.value is AnimeUiState.HomeSuccess && now - lastHomeLoadAtMs < HOME_CACHE_TTL_MS) return
         if (!forceRefresh && cachedHomeState != null && now - lastHomeLoadAtMs < HOME_CACHE_TTL_MS) {
             _uiState.value = cachedHomeState!!
@@ -252,9 +253,10 @@ class AnimeViewModel @Inject constructor(
                 .getOrDefault(emptyList<AnimeData>())
         }
         val mangaSuggestionsDeferred = async {
-            runCatching<List<MangaData>> { repository.getMangaSuggestions(limit = 5).data }
-                .recoverCatching { repository.getFallbackMangaRecommendations(limit = 5) }
-                .getOrDefault(emptyList<MangaData>())
+            runCatching<List<MangaData>> {
+                // MAL manga suggestions endpoint is unreliable/404; use stable fallback directly.
+                repository.getFallbackMangaRecommendations(limit = 5)
+            }.getOrDefault(emptyList<MangaData>())
         }
 
         HomePayload(

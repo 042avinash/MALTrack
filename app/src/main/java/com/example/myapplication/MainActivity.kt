@@ -51,9 +51,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val animeViewModel: AnimeViewModel = hiltViewModel()
-            val userListViewModel: UserListViewModel = hiltViewModel()
-            val userMangaListViewModel: UserMangaListViewModel = hiltViewModel()
-            val profileViewModel: ProfileViewModel = hiltViewModel()
             val themePref by settingsViewModel.themePreference.collectAsState()
             val titleLanguage by settingsViewModel.titleLanguage.collectAsState()
             val userPfp by animeViewModel.userPfp.collectAsState()
@@ -72,7 +69,6 @@ class MainActivity : ComponentActivity() {
                 var showExitDialog by remember { mutableStateOf(false) }
                 var lastBottomNavClickAt by remember { mutableLongStateOf(0L) }
                 val routeHistory = remember { mutableStateListOf<String>() }
-                var hasWarmedSession by remember { mutableStateOf(false) }
                 val showBottomBar = currentDestination?.route != "login" && 
                                     currentDestination?.route != "settings" && 
                                     currentDestination?.route != "feedback" && 
@@ -168,9 +164,6 @@ class MainActivity : ComponentActivity() {
                 }
                 
                 LaunchedEffect(loginUiState) {
-                    if (loginUiState is LoginUiState.Idle) {
-                        hasWarmedSession = false
-                    }
                     if (loginUiState is LoginUiState.Success) {
                         if (navController.currentDestination?.route == "login") {
                             val targetRoute = when (defaultSection) {
@@ -191,14 +184,6 @@ class MainActivity : ComponentActivity() {
                             navController.navigate(targetRoute) {
                                 popUpTo("login") { inclusive = true }
                             }
-                        }
-
-                        if (!hasWarmedSession) {
-                            hasWarmedSession = true
-                            animeViewModel.loadHomeData()
-                            profileViewModel.getProfile(null)
-                            userListViewModel.loadUserList(defaultAnimeStatus, username = null, forceRefresh = false)
-                            userMangaListViewModel.loadUserMangaList(defaultMangaStatus, username = null, forceRefresh = false)
                         }
                     }
                 }
@@ -359,6 +344,8 @@ class MainActivity : ComponentActivity() {
                             val mainTab = backStackEntry.arguments?.getInt("mainTab") ?: 0
                             val subTab = backStackEntry.arguments?.getInt("subTab") ?: 0
                             val username = backStackEntry.arguments?.getString("username")
+                            val userListViewModel: UserListViewModel = hiltViewModel()
+                            val userMangaListViewModel: UserMangaListViewModel = hiltViewModel()
                             
                             UserListScreen(
                                 animeViewModel = userListViewModel,
@@ -432,6 +419,7 @@ class MainActivity : ComponentActivity() {
                             )
                         ) { backStackEntry ->
                             val username = backStackEntry.arguments?.getString("username")
+                            val profileViewModel: ProfileViewModel = hiltViewModel()
                             ProfileScreen(
                                 viewModel = profileViewModel,
                                 username = username,

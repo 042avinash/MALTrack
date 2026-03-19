@@ -27,6 +27,7 @@ class UserListViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val SOFT_TIMEOUT_MS = 1_500L
+        private const val INITIAL_PAGE_LIMIT = 40
         private val globalFullAnimeListCache = mutableMapOf<String, List<UserAnimeData>>()
         private val globalAnimeListCacheComplete = mutableSetOf<String>()
         private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
@@ -116,14 +117,6 @@ class UserListViewModel @Inject constructor(
                 val cachedList = globalFullAnimeListCache[cacheKey]
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
-                    if (!globalAnimeListCacheComplete.contains(cacheKey)) {
-                        launchFullListBackfill(
-                            cacheKey = cacheKey,
-                            statusKey = statusKey,
-                            username = effectiveUsername,
-                            sort = effectiveSort
-                        )
-                    }
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
@@ -133,7 +126,7 @@ class UserListViewModel @Inject constructor(
                                 username = effectiveUsername,
                                 status = if (statusKey == "all") null else statusKey,
                                 sort = effectiveSort,
-                                limit = 100
+                                limit = INITIAL_PAGE_LIMIT
                             )
                         }
                         val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
@@ -150,15 +143,6 @@ class UserListViewModel @Inject constructor(
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
                                     if (resolvedFirstPage.paging.next == null) {
                                         globalAnimeListCacheComplete.add(cacheKey)
-                                    } else {
-                                        val fullList = repository.getAllUserAnimeList(
-                                            username = effectiveUsername,
-                                            status = if (statusKey == "all") null else statusKey,
-                                            sort = effectiveSort
-                                        )
-                                        globalFullAnimeListCache[cacheKey] = fullList
-                                        globalAnimeListCacheComplete.add(cacheKey)
-                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                                     }
                                 }
                             }
@@ -168,13 +152,6 @@ class UserListViewModel @Inject constructor(
                         _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
                         if (firstPage.paging.next == null) {
                             globalAnimeListCacheComplete.add(cacheKey)
-                        } else {
-                            launchFullListBackfill(
-                                cacheKey = cacheKey,
-                                statusKey = statusKey,
-                                username = effectiveUsername,
-                                sort = effectiveSort
-                            )
                         }
 
                         val malIds = firstPage.data

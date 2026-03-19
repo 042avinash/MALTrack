@@ -26,6 +26,7 @@ class UserMangaListViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val SOFT_TIMEOUT_MS = 1_500L
+        private const val INITIAL_PAGE_LIMIT = 40
         private val globalFullMangaListCache = mutableMapOf<String, List<UserMangaData>>()
         private val globalMangaListCacheComplete = mutableSetOf<String>()
         private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
@@ -108,14 +109,6 @@ class UserMangaListViewModel @Inject constructor(
                 val cachedList = globalFullMangaListCache[cacheKey]
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
-                    if (!globalMangaListCacheComplete.contains(cacheKey)) {
-                        launchFullListBackfill(
-                            cacheKey = cacheKey,
-                            statusKey = statusKey,
-                            username = effectiveUsername,
-                            sort = effectiveSort
-                        )
-                    }
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
@@ -125,7 +118,7 @@ class UserMangaListViewModel @Inject constructor(
                                 username = effectiveUsername,
                                 status = if (statusKey == "all") null else statusKey,
                                 sort = effectiveSort,
-                                limit = 100
+                                limit = INITIAL_PAGE_LIMIT
                             )
                         }
                         val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
@@ -142,15 +135,6 @@ class UserMangaListViewModel @Inject constructor(
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
                                     if (resolvedFirstPage.paging.next == null) {
                                         globalMangaListCacheComplete.add(cacheKey)
-                                    } else {
-                                        val fullList = repository.getAllUserMangaList(
-                                            username = effectiveUsername,
-                                            status = if (statusKey == "all") null else statusKey,
-                                            sort = effectiveSort
-                                        )
-                                        globalFullMangaListCache[cacheKey] = fullList
-                                        globalMangaListCacheComplete.add(cacheKey)
-                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                                     }
                                 }
                             }
@@ -160,13 +144,6 @@ class UserMangaListViewModel @Inject constructor(
                         _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
                         if (firstPage.paging.next == null) {
                             globalMangaListCacheComplete.add(cacheKey)
-                        } else {
-                            launchFullListBackfill(
-                                cacheKey = cacheKey,
-                                statusKey = statusKey,
-                                username = effectiveUsername,
-                                sort = effectiveSort
-                            )
                         }
                     } finally {
                         _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
