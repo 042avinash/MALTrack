@@ -86,7 +86,7 @@ class AnimeRepository @Inject constructor(
         val cacheKey = listOf(targetYear, targetSeason, nsfwEnabled, loadAllPages).joinToString("|")
         seasonalAnimeCache[cacheKey]?.let { return it }
 
-        val limit = 50
+        val limit = 100
         val allItems = mutableListOf<com.example.myapplication.data.model.AnimeData>()
         var offset = 0
 

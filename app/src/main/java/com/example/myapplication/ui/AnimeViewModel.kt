@@ -98,6 +98,10 @@ class AnimeViewModel @Inject constructor(
     private var lastHomeLoadAtMs: Long = 0L
     private var cachedHomeState: AnimeUiState.HomeSuccess? = null
     private var randomAnimeJob: Job? = null
+    private var homeLoadJob: Job? = null
+    private var seasonalLoadJob: Job? = null
+    private var seasonalFullLoadJob: Job? = null
+    private var airingFetchJob: Job? = null
 
     init {
         fetchUserPfp()
@@ -138,7 +142,10 @@ class AnimeViewModel @Inject constructor(
         }
 
         searchJob?.cancel()
-        viewModelScope.launch {
+        seasonalLoadJob?.cancel()
+        seasonalFullLoadJob?.cancel()
+        homeLoadJob?.cancel()
+        homeLoadJob = viewModelScope.launch {
             lastHomeLoadAtMs = SystemClock.elapsedRealtime()
             val previousState = cachedHomeState
             if (previousState == null) {
@@ -313,11 +320,23 @@ class AnimeViewModel @Inject constructor(
         }
     }
 
-    private fun fetchAiringDetails(malIds: List<Int>) {
-        viewModelScope.launch {
+    private fun fetchAiringDetails(malIds: List<Int>, replaceExisting: Boolean = false) {
+        val uniqueIds = malIds.distinct()
+        airingFetchJob?.cancel()
+        airingFetchJob = viewModelScope.launch {
             try {
-                val detailsMap = _airingDetails.value.toMutableMap()
-                val chunkedIds = malIds.chunked(50)
+                if (uniqueIds.isEmpty()) {
+                    if (replaceExisting) _airingDetails.value = emptyMap()
+                    return@launch
+                }
+
+                val detailsMap = if (replaceExisting) {
+                    mutableMapOf()
+                } else {
+                    _airingDetails.value.toMutableMap()
+                }
+
+                val chunkedIds = uniqueIds.chunked(50)
                 for (chunk in chunkedIds) {
                     val anilistMedia = repository.getAiringAnimeDetails(chunk)
                     for (media in anilistMedia) {
@@ -325,8 +344,10 @@ class AnimeViewModel @Inject constructor(
                     }
                 }
                 _airingDetails.value = detailsMap
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                e.printStackTrace()
+                // Keep existing UI stable if airing metadata fetch fails.
             }
         }
     }
@@ -451,22 +472,72 @@ class AnimeViewModel @Inject constructor(
 
     fun showSeasonalDetails(sort: String = "members", forceRefresh: Boolean = false) {
         currentSeasonalSort = sort
-        viewModelScope.launch {
-            _uiState.value = AnimeUiState.Loading
+        homeLoadJob?.cancel()
+        seasonalLoadJob?.cancel()
+        seasonalFullLoadJob?.cancel()
+        _uiState.value = AnimeUiState.Loading
+        seasonalLoadJob = viewModelScope.launch {
             try {
                 val cacheKey = "$currentYear|$currentSeason"
                 val now = SystemClock.elapsedRealtime()
                 val cached = seasonalRawCache[cacheKey]
+                val selectedYear = currentYear
+                val selectedSeason = currentSeason
+
                 currentSeasonalData = if (!forceRefresh && cached != null && now - cached.first < DISCOVERY_CACHE_TTL_MS) {
                     cached.second
                 } else {
-                    repository.getSeasonalAnime(currentYear, currentSeason, loadAllPages = false).data.also {
-                        seasonalRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
-                    }
+                    // Fast first paint: load first page immediately, then fill remaining pages in background.
+                    repository.getSeasonalAnime(selectedYear, selectedSeason, loadAllPages = false).data
                 }
                 applyCurrentSeasonalFiltersAndSort()
-                fetchAiringDetails(currentSeasonalData.map { it.node.id })
+                fetchAiringDetails(
+                    malIds = currentSeasonalData
+                        .asSequence()
+                        .filter { it.node.status.equals("currently_airing", ignoreCase = true) }
+                        .map { it.node.id }
+                        .distinct()
+                        .take(150)
+                        .toList(),
+                    replaceExisting = true
+                )
+
+                if (forceRefresh || cached == null || now - cached.first >= DISCOVERY_CACHE_TTL_MS) {
+                    seasonalFullLoadJob = viewModelScope.launch {
+                        try {
+                            val fullData = repository.getSeasonalAnime(
+                                year = selectedYear,
+                                season = selectedSeason,
+                                loadAllPages = true
+                            ).data
+
+                            if (selectedYear != currentYear || selectedSeason != currentSeason) return@launch
+                            if (fullData.size <= currentSeasonalData.size) return@launch
+
+                            currentSeasonalData = fullData
+                            seasonalRawCache[cacheKey] = SystemClock.elapsedRealtime() to fullData
+                            applyCurrentSeasonalFiltersAndSort()
+                            fetchAiringDetails(
+                                malIds = fullData
+                                    .asSequence()
+                                    .filter { it.node.status.equals("currently_airing", ignoreCase = true) }
+                                    .map { it.node.id }
+                                    .distinct()
+                                    .take(150)
+                                    .toList(),
+                                replaceExisting = true
+                            )
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Keep fast data shown; full expansion can fail silently.
+                        }
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                _errorMessage.value = getFriendlyErrorMessage(e)
                 _uiState.value = AnimeUiState.Error(e.message ?: "Unknown Error")
             }
         }
@@ -500,6 +571,7 @@ class AnimeViewModel @Inject constructor(
     fun showMangaDiscovery(type: String = "publishing", sort: String = "members", forceRefresh: Boolean = false) {
         currentDiscoveryType = type
         currentDiscoverySort = sort
+        homeLoadJob?.cancel()
         if (type == "top") {
             showTopDiscovery(isAnime = false, sort = sort, forceRefresh = forceRefresh)
             return
@@ -548,6 +620,7 @@ class AnimeViewModel @Inject constructor(
     fun showTopDiscovery(isAnime: Boolean, sort: String = "members", forceRefresh: Boolean = false) {
         currentDiscoveryType = if (isAnime) "top_anime" else "top_manga"
         currentDiscoverySort = sort
+        homeLoadJob?.cancel()
         viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {

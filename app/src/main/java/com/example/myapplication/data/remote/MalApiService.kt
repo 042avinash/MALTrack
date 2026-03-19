@@ -36,7 +36,7 @@ interface MalApiService {
         @Header("X-MAL-CLIENT-ID") clientId: String,
         @Path("year") year: Int,
         @Path("season") season: String,
-        @Query("limit") limit: Int = 50,
+        @Query("limit") limit: Int = 100,
         @Query("offset") offset: Int = 0,
         @Query("nsfw") nsfw: Boolean = false,
         @Query("fields") fields: String = "id,title,main_picture,mean,num_list_users,synopsis,media_type,alternative_titles,my_list_status"

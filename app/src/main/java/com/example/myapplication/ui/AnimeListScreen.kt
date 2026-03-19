@@ -74,6 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalFocusManager
@@ -126,6 +127,7 @@ fun AnimeListScreen(
     var pendingAnimeEdit by remember { mutableStateOf<QuickAnimeEdit?>(null) }
     var pendingMangaEdit by remember { mutableStateOf<QuickMangaEdit?>(null) }
     var loadingViewContext by remember { mutableStateOf(LoadingViewContext.HOME) }
+    var hasRequestedInitialHomeLoad by rememberSaveable { mutableStateOf(false) }
     var searchMediaType by remember(initialTab) {
         mutableStateOf(if (initialTab == 0) SearchMediaType.ANIME else SearchMediaType.MANGA)
     }
@@ -140,8 +142,8 @@ fun AnimeListScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (uiState is AnimeUiState.Loading && searchQuery.isEmpty()) {
-            loadingViewContext = LoadingViewContext.HOME
+        if (!hasRequestedInitialHomeLoad && uiState is AnimeUiState.Loading && searchQuery.isEmpty()) {
+            hasRequestedInitialHomeLoad = true
             viewModel.loadHomeData()
         }
     }
@@ -310,11 +312,20 @@ fun AnimeListScreen(
                 },
                 onSearchQueryChange = {
                     searchQuery = it
-                    loadingViewContext = if (it.isBlank()) LoadingViewContext.HOME else LoadingViewContext.SEARCH
-                    viewModel.searchAnime(
-                        it,
-                        isAnimeSearch = searchMediaType == SearchMediaType.ANIME
-                    )
+                    if (it.isBlank()) {
+                        // Avoid accidental discovery->home jumps caused by blank-search callbacks
+                        // while opening seasonal/top pages.
+                        if (uiState is AnimeUiState.SearchSuccess) {
+                            loadingViewContext = LoadingViewContext.HOME
+                            viewModel.loadHomeData()
+                        }
+                    } else {
+                        loadingViewContext = LoadingViewContext.SEARCH
+                        viewModel.searchAnime(
+                            it,
+                            isAnimeSearch = searchMediaType == SearchMediaType.ANIME
+                        )
+                    }
                 },
                 onSettingsClick = onSettingsClick
             )
@@ -447,37 +458,64 @@ fun AnimeListScreen(
                     }
                 }
                 is AnimeUiState.SeasonalDetails -> {
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        loadingViewContext = LoadingViewContext.HOME
+                                        viewModel.loadHomeData()
+                                    }
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                }
+                                Text(
+                                    text = "Seasonal Chart",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            SeasonalActionToolbar(
+                                isGridView = currentDiscoveryIsGrid,
+                                onGridClick = { viewModel.setDiscoveryGridMode(isAnime = true, isGrid = !currentDiscoveryIsGrid) },
+                                currentSort = state.currentSort,
+                                onSortChange = {
+                                    loadingViewContext = LoadingViewContext.DISCOVERY
+                                    viewModel.setDiscoverySort(isAnime = true, sort = it)
+                                    viewModel.showSeasonalDetails(it)
+                                },
+                                listFilters = listFilters,
+                                onFilterToggle = { viewModel.toggleFilter(it) }
+                            )
+
+                            SeasonalDetailsView(
+                                categorizedAnime = state.categorizedAnime,
+                                airingDetails = airingDetails,
+                                titleLanguage = titleLanguage,
+                                isGridView = currentDiscoveryIsGrid,
+                                onAnimeClick = onAnimeClick,
+                                onAnimePlusOne = { id, title -> viewModel.onLongPressAnime(id, title) },
+                                onAnimeEditStatus = { id, title -> viewModel.prepareAnimeEdit(id, title) },
+                                extraBottomPadding = 84.dp
+                            )
+                        }
+
                         SeasonNavigation(
                             year = state.year,
                             season = state.season,
                             canGoNext = state.canGoNext,
                             onPrevious = { viewModel.changeSeason(-1) },
                             onNext = { viewModel.changeSeason(1) },
-                            onPick = { showSeasonPicker = true }
-                        )
-                        
-                        SeasonalActionToolbar(
-                            isGridView = currentDiscoveryIsGrid,
-                            onGridClick = { viewModel.setDiscoveryGridMode(isAnime = true, isGrid = !currentDiscoveryIsGrid) },
-                            currentSort = state.currentSort,
-                            onSortChange = {
-                                loadingViewContext = LoadingViewContext.DISCOVERY
-                                viewModel.setDiscoverySort(isAnime = true, sort = it)
-                                viewModel.showSeasonalDetails(it)
-                            },
-                            listFilters = listFilters,
-                            onFilterToggle = { viewModel.toggleFilter(it) }
-                        )
-
-                        SeasonalDetailsView(
-                            categorizedAnime = state.categorizedAnime,
-                            airingDetails = airingDetails,
-                            titleLanguage = titleLanguage,
-                            isGridView = currentDiscoveryIsGrid,
-                            onAnimeClick = onAnimeClick,
-                            onAnimePlusOne = { id, title -> viewModel.onLongPressAnime(id, title) },
-                            onAnimeEditStatus = { id, title -> viewModel.prepareAnimeEdit(id, title) }
+                            onPick = { showSeasonPicker = true },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(12.dp)
                         )
                     }
                 }
@@ -1106,16 +1144,19 @@ fun SeasonNavigation(
     canGoNext: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onPick: () -> Unit
+    onPick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(999.dp),
+        tonalElevation = 3.dp,
+        shadowElevation = 4.dp,
+        modifier = modifier
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1125,7 +1166,7 @@ fun SeasonNavigation(
             TextButton(onClick = onPick) {
                 Text(
                     text = "${season.replaceFirstChar { it.uppercase() }} $year",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -1715,7 +1756,8 @@ fun SeasonalDetailsView(
     isGridView: Boolean,
     onAnimeClick: (Int) -> Unit,
     onAnimePlusOne: (Int, String) -> Unit,
-    onAnimeEditStatus: (Int, String) -> Unit
+    onAnimeEditStatus: (Int, String) -> Unit,
+    extraBottomPadding: Dp = 0.dp
 ) {
     val collapsedSections = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -1723,7 +1765,7 @@ fun SeasonalDetailsView(
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + extraBottomPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1770,7 +1812,7 @@ fun SeasonalDetailsView(
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + extraBottomPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             categorizedAnime.forEach { (type, animeList) ->
