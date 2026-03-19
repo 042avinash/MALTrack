@@ -8,7 +8,6 @@ import com.example.myapplication.data.remote.JikanFriend
 import com.example.myapplication.data.repository.AnimeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -175,32 +174,36 @@ class ProfileViewModel @Inject constructor(
     private suspend fun loadFavoriteMeta(
         fullProfile: JikanFullUserProfile
     ): Pair<Map<Int, FavoriteMediaMeta>, Map<Int, FavoriteMediaMeta>> = supervisorScope {
-        val animeIds = fullProfile.favorites?.anime.orEmpty().map { it.mal_id }.distinct()
-        val mangaIds = fullProfile.favorites?.manga.orEmpty().map { it.mal_id }.distinct()
+        val animeIds = fullProfile.favorites?.anime.orEmpty().map { it.mal_id }.distinct().take(6)
+        val mangaIds = fullProfile.favorites?.manga.orEmpty().map { it.mal_id }.distinct().take(6)
 
-        val animeMeta = animeIds
-            .map { id ->
+        val animeMeta = mutableMapOf<Int, FavoriteMediaMeta>()
+        animeIds.chunked(2).forEach { batch ->
+            batch.map { id ->
                 async {
                     id to runCatching { repository.getAnimeDetails(id) }
                         .getOrNull()
                         ?.let { FavoriteMediaMeta(it.mean, it.numListUsers) }
                 }
+            }.forEach { deferred ->
+                val (id, meta) = deferred.await()
+                if (meta != null) animeMeta[id] = meta
             }
-            .awaitAll()
-            .mapNotNull { (id, meta) -> meta?.let { id to it } }
-            .toMap()
+        }
 
-        val mangaMeta = mangaIds
-            .map { id ->
+        val mangaMeta = mutableMapOf<Int, FavoriteMediaMeta>()
+        mangaIds.chunked(2).forEach { batch ->
+            batch.map { id ->
                 async {
                     id to runCatching { repository.getMangaDetails(id) }
                         .getOrNull()
                         ?.let { FavoriteMediaMeta(it.mean, it.numListUsers) }
                 }
+            }.forEach { deferred ->
+                val (id, meta) = deferred.await()
+                if (meta != null) mangaMeta[id] = meta
             }
-            .awaitAll()
-            .mapNotNull { (id, meta) -> meta?.let { id to it } }
-            .toMap()
+        }
 
         animeMeta to mangaMeta
     }

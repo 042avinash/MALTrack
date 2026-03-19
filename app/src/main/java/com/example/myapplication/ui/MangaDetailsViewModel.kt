@@ -8,6 +8,8 @@ import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MyMangaListStatus
 import com.example.myapplication.data.repository.AnimeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +30,7 @@ class MangaDetailsViewModel @Inject constructor(
     }
 
     private val mangaId: Int = checkNotNull(savedStateHandle["mangaId"])
+    private var cardMetaJob: Job? = null
 
     private val _uiState = MutableStateFlow<MangaDetailsUiState>(MangaDetailsUiState.Loading)
     val uiState: StateFlow<MangaDetailsUiState> = _uiState.asStateFlow()
@@ -44,6 +47,9 @@ class MangaDetailsViewModel @Inject constructor(
                     val cached = detailsCache[mangaId]
                     if (cached != null && now - cached.first < CACHE_TTL_MS) {
                         _uiState.value = cached.second
+                        if (cached.second.cardMeta.isEmpty()) {
+                            launchCardMetaRefresh(cached.second.details)
+                        }
                         return@launch
                     }
                 }
@@ -54,10 +60,12 @@ class MangaDetailsViewModel @Inject constructor(
                 }
                 
                 val details = repository.getMangaDetails(mangaId)
-                val cardMeta = getMangaCardMeta(details)
-                val successState = MangaDetailsUiState.Success(details, cardMeta)
+                val successState = MangaDetailsUiState.Success(details)
                 detailsCache[mangaId] = SystemClock.elapsedRealtime() to successState
                 _uiState.value = successState
+                launchCardMetaRefresh(details)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = MangaDetailsUiState.Error(e.message ?: "Failed to load details")
             }
@@ -72,31 +80,52 @@ class MangaDetailsViewModel @Inject constructor(
                 details.recommendations.orEmpty().map { it.node.id }
             )
             .distinct()
-            .take(24)
+            .take(8)
         if (targetIds.isEmpty()) return@supervisorScope emptyMap()
 
         val now = SystemClock.elapsedRealtime()
-        targetIds
-            .map { mangaId ->
-                async {
-                    val cached = mangaCardMetaCache[mangaId]
-                    if (cached != null && now - cached.first < CACHE_TTL_MS) {
-                        return@async mangaId to cached.second
+        val result = mutableMapOf<Int, MangaCardMeta>()
+        targetIds.chunked(2).forEach { batch ->
+            batch
+                .map { mangaId ->
+                    async {
+                        val cached = mangaCardMetaCache[mangaId]
+                        if (cached != null && now - cached.first < CACHE_TTL_MS) {
+                            return@async mangaId to cached.second
+                        }
+                        val fetched = runCatching { repository.getMangaDetails(mangaId) }.getOrNull()
+                        val meta = fetched?.let {
+                            MangaCardMeta(
+                                mean = it.mean,
+                                members = it.numListUsers,
+                                myListStatus = it.myListStatus
+                            )
+                        } ?: MangaCardMeta()
+                        mangaCardMetaCache[mangaId] = SystemClock.elapsedRealtime() to meta
+                        mangaId to meta
                     }
-                    val fetched = runCatching { repository.getMangaDetails(mangaId) }.getOrNull()
-                    val meta = fetched?.let {
-                        MangaCardMeta(
-                            mean = it.mean,
-                            members = it.numListUsers,
-                            myListStatus = it.myListStatus
-                        )
-                    } ?: MangaCardMeta()
-                    mangaCardMetaCache[mangaId] = SystemClock.elapsedRealtime() to meta
-                    mangaId to meta
                 }
-            }
-            .toList()
-            .associate { it.await() }
+                .forEach { deferred ->
+                    val (id, meta) = deferred.await()
+                    result[id] = meta
+                }
+        }
+        result
+    }
+
+    private fun launchCardMetaRefresh(details: MangaDetailsResponse) {
+        cardMetaJob?.cancel()
+        cardMetaJob = viewModelScope.launch {
+            val meta = runCatching { getMangaCardMeta(details) }.getOrDefault(emptyMap())
+            if (meta.isEmpty()) return@launch
+            val current = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
+            if (current.details.id != details.id) return@launch
+            val merged = current.cardMeta + meta
+            if (merged == current.cardMeta) return@launch
+            val updated = current.copy(cardMeta = merged)
+            detailsCache[mangaId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
     }
 
     fun updateListStatus(

@@ -101,6 +101,8 @@ class AnimeViewModel @Inject constructor(
     private var homeLoadJob: Job? = null
     private var seasonalLoadJob: Job? = null
     private var seasonalFullLoadJob: Job? = null
+    private var topDiscoveryLoadJob: Job? = null
+    private var topDiscoveryFullLoadJob: Job? = null
     private var airingFetchJob: Job? = null
 
     init {
@@ -144,6 +146,8 @@ class AnimeViewModel @Inject constructor(
         searchJob?.cancel()
         seasonalLoadJob?.cancel()
         seasonalFullLoadJob?.cancel()
+        topDiscoveryLoadJob?.cancel()
+        topDiscoveryFullLoadJob?.cancel()
         homeLoadJob?.cancel()
         homeLoadJob = viewModelScope.launch {
             lastHomeLoadAtMs = SystemClock.elapsedRealtime()
@@ -473,6 +477,8 @@ class AnimeViewModel @Inject constructor(
     fun showSeasonalDetails(sort: String = "members", forceRefresh: Boolean = false) {
         currentSeasonalSort = sort
         homeLoadJob?.cancel()
+        topDiscoveryLoadJob?.cancel()
+        topDiscoveryFullLoadJob?.cancel()
         seasonalLoadJob?.cancel()
         seasonalFullLoadJob?.cancel()
         _uiState.value = AnimeUiState.Loading
@@ -572,6 +578,8 @@ class AnimeViewModel @Inject constructor(
         currentDiscoveryType = type
         currentDiscoverySort = sort
         homeLoadJob?.cancel()
+        topDiscoveryLoadJob?.cancel()
+        topDiscoveryFullLoadJob?.cancel()
         if (type == "top") {
             showTopDiscovery(isAnime = false, sort = sort, forceRefresh = forceRefresh)
             return
@@ -621,32 +629,80 @@ class AnimeViewModel @Inject constructor(
         currentDiscoveryType = if (isAnime) "top_anime" else "top_manga"
         currentDiscoverySort = sort
         homeLoadJob?.cancel()
-        viewModelScope.launch {
+        topDiscoveryLoadJob?.cancel()
+        topDiscoveryFullLoadJob?.cancel()
+        topDiscoveryLoadJob = viewModelScope.launch {
             _uiState.value = AnimeUiState.Loading
             try {
                 val rankingType = if (sort == "score") "all" else "bypopularity"
                 val now = SystemClock.elapsedRealtime()
+                val requestedType = if (isAnime) "top_anime" else "top_manga"
+                val requestedSort = sort
                 if (isAnime) {
                     val cacheKey = "top_anime|$rankingType"
-                    currentSeasonalData = if (!forceRefresh && topAnimeRawCache[cacheKey] != null && now - topAnimeRawCache[cacheKey]!!.first < DISCOVERY_CACHE_TTL_MS) {
-                        topAnimeRawCache[cacheKey]!!.second
-                    } else {
-                        repository.getTopAnime(limit = 100, rankingType = rankingType).data.also {
-                            topAnimeRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
+                    val cached = topAnimeRawCache[cacheKey]
+                    if (!forceRefresh && cached != null && now - cached.first < DISCOVERY_CACHE_TTL_MS) {
+                        currentSeasonalData = cached.second
+                        applyCurrentTopDiscoveryFiltersAndSort()
+                        return@launch
+                    }
+
+                    // Fast first paint, then full 100 in background.
+                    currentSeasonalData = repository.getTopAnime(limit = 40, rankingType = rankingType).data
+                    applyCurrentTopDiscoveryFiltersAndSort()
+
+                    topDiscoveryFullLoadJob = viewModelScope.launch {
+                        try {
+                            // Give users time to stay on this page before running heavier background expansion.
+                            delay(700)
+                            if (currentDiscoveryType != requestedType || currentDiscoverySort != requestedSort) return@launch
+                            val fullData = repository.getTopAnime(limit = 100, rankingType = rankingType).data
+                            if (currentDiscoveryType != requestedType || currentDiscoverySort != requestedSort) return@launch
+                            if (fullData.size <= currentSeasonalData.size) return@launch
+                            currentSeasonalData = fullData
+                            topAnimeRawCache[cacheKey] = SystemClock.elapsedRealtime() to fullData
+                            applyCurrentTopDiscoveryFiltersAndSort()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Keep initial results visible if background expansion fails.
                         }
                     }
                 } else {
                     val cacheKey = "top_manga|$rankingType"
-                    currentMangaDiscoveryData = if (!forceRefresh && topMangaRawCache[cacheKey] != null && now - topMangaRawCache[cacheKey]!!.first < DISCOVERY_CACHE_TTL_MS) {
-                        topMangaRawCache[cacheKey]!!.second
-                    } else {
-                        repository.getTopManga(limit = 100, rankingType = rankingType).data.also {
-                            topMangaRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
+                    val cached = topMangaRawCache[cacheKey]
+                    if (!forceRefresh && cached != null && now - cached.first < DISCOVERY_CACHE_TTL_MS) {
+                        currentMangaDiscoveryData = cached.second
+                        applyCurrentTopDiscoveryFiltersAndSort()
+                        return@launch
+                    }
+
+                    // Fast first paint, then full 100 in background.
+                    currentMangaDiscoveryData = repository.getTopManga(limit = 40, rankingType = rankingType).data
+                    applyCurrentTopDiscoveryFiltersAndSort()
+
+                    topDiscoveryFullLoadJob = viewModelScope.launch {
+                        try {
+                            // Give users time to stay on this page before running heavier background expansion.
+                            delay(700)
+                            if (currentDiscoveryType != requestedType || currentDiscoverySort != requestedSort) return@launch
+                            val fullData = repository.getTopManga(limit = 100, rankingType = rankingType).data
+                            if (currentDiscoveryType != requestedType || currentDiscoverySort != requestedSort) return@launch
+                            if (fullData.size <= currentMangaDiscoveryData.size) return@launch
+                            currentMangaDiscoveryData = fullData
+                            topMangaRawCache[cacheKey] = SystemClock.elapsedRealtime() to fullData
+                            applyCurrentTopDiscoveryFiltersAndSort()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Keep initial results visible if background expansion fails.
                         }
                     }
                 }
-                applyCurrentTopDiscoveryFiltersAndSort()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                _errorMessage.value = getFriendlyErrorMessage(e)
                 _uiState.value = AnimeUiState.Error(e.message ?: "Unknown Error")
             }
         }
