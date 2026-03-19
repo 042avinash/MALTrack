@@ -154,7 +154,9 @@ class MainActivity : ComponentActivity() {
                         val shouldAvoidSingleTop =
                             route.startsWith("anime_details/") ||
                                 route.startsWith("manga_details/") ||
-                                route.startsWith("all_reviews/")
+                                route.startsWith("all_reviews/") ||
+                                (route.startsWith("profile_route?username=") &&
+                                    !route.endsWith("username=null"))
                         if (shouldAvoidSingleTop) {
                             runCatching { navController.navigate(route) }
                         } else {

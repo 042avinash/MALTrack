@@ -89,6 +89,7 @@ import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.MyMangaListStatus
 import kotlinx.coroutines.delay
+import java.util.Calendar
 
 private enum class LoadingViewContext { HOME, DISCOVERY, SEARCH }
 
@@ -133,6 +134,14 @@ fun AnimeListScreen(
     var hasRequestedInitialHomeLoad by rememberSaveable { mutableStateOf(false) }
     var searchMediaType by remember(initialTab) {
         mutableStateOf(if (initialTab == 0) SearchMediaType.ANIME else SearchMediaType.MANGA)
+    }
+    val currentCalendar = Calendar.getInstance()
+    val homeLabelYear = currentCalendar.get(Calendar.YEAR)
+    val homeLabelSeason = when (currentCalendar.get(Calendar.MONTH)) {
+        in 0..2 -> "winter"
+        in 3..5 -> "spring"
+        in 6..8 -> "summer"
+        else -> "fall"
     }
 
     val focusManager = LocalFocusManager.current
@@ -412,8 +421,8 @@ fun AnimeListScreen(
                             if (homeDiscoveryButtonsEnabled) {
                                 item {
                                     DiscoveryButtonCluster(
-                                        season = state.season,
-                                        year = state.year,
+                                        season = homeLabelSeason,
+                                        year = homeLabelYear,
                                         onSeasonalClick = {
                                             loadingViewContext = LoadingViewContext.DISCOVERY
                                             viewModel.showSeasonalDetails(animeDiscoverySort)
@@ -476,6 +485,14 @@ fun AnimeListScreen(
                     }
                 }
                 is AnimeUiState.SeasonalDetails -> {
+                    val seasonalCalendar = Calendar.getInstance()
+                    val currentSeasonYear = seasonalCalendar.get(Calendar.YEAR)
+                    val currentSeasonValue = when (seasonalCalendar.get(Calendar.MONTH)) {
+                        in 0..2 -> "winter"
+                        in 3..5 -> "spring"
+                        in 6..8 -> "summer"
+                        else -> "fall"
+                    }
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             Row(
@@ -524,17 +541,48 @@ fun AnimeListScreen(
                             )
                         }
 
-                        SeasonNavigation(
-                            year = state.year,
-                            season = state.season,
-                            canGoNext = state.canGoNext,
-                            onPrevious = { viewModel.changeSeason(-1) },
-                            onNext = { viewModel.changeSeason(1) },
-                            onPick = { showSeasonPicker = true },
+                        Row(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(12.dp)
-                        )
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SeasonNavigation(
+                                year = state.year,
+                                season = state.season,
+                                canGoNext = state.canGoNext,
+                                onPrevious = { viewModel.changeSeason(-1) },
+                                onNext = { viewModel.changeSeason(1) },
+                                onPick = { showSeasonPicker = true }
+                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                                shape = RoundedCornerShape(999.dp),
+                                tonalElevation = 3.dp,
+                                shadowElevation = 4.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            loadingViewContext = LoadingViewContext.DISCOVERY
+                                            viewModel.selectSpecificSeason(currentSeasonYear, currentSeasonValue)
+                                        },
+                                        modifier = Modifier.height(48.dp),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp)
+                                    ) {
+                                        Text(
+                                            text = "Jump to Current",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 is AnimeUiState.MangaDiscoveryDetails -> {
@@ -1262,10 +1310,13 @@ fun SeasonPicker(
     onDismiss: () -> Unit,
     onSeasonSelected: (Int, String) -> Unit
 ) {
-    var yearText by remember { mutableStateOf("2024") }
+    var yearText by remember { mutableStateOf("") }
     val seasons = listOf("Winter", "Spring", "Summer", "Fall")
     var expanded by remember { mutableStateOf(false) }
     var selectedSeason by remember { mutableStateOf(seasons[0]) }
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val minYear = 1917
+    val maxYear = currentYear + 1
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1274,7 +1325,21 @@ fun SeasonPicker(
             Column {
                 OutlinedTextField(
                     value = yearText,
-                    onValueChange = { yearText = it },
+                    onValueChange = { input ->
+                        val digits = input.filter { it.isDigit() }.take(4)
+                        if (digits.isEmpty()) {
+                            yearText = ""
+                        } else {
+                            val parsed = digits.toIntOrNull()
+                            yearText = when {
+                                parsed == null -> yearText
+                                digits.length < 4 -> digits
+                                parsed < minYear -> minYear.toString()
+                                parsed > maxYear -> maxYear.toString()
+                                else -> digits
+                            }
+                        }
+                    },
                     label = { Text("Year") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
@@ -1306,7 +1371,8 @@ fun SeasonPicker(
         },
         confirmButton = {
             TextButton(onClick = {
-                val year = yearText.toIntOrNull() ?: 2024
+                val parsedYear = yearText.toIntOrNull()
+                val year = (parsedYear ?: currentYear).coerceIn(minYear, maxYear)
                 onSeasonSelected(year, selectedSeason.lowercase())
             }) {
                 Text("View")

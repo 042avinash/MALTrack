@@ -153,6 +153,7 @@ fun ListActionToolbar(
     onSearchQueryChange: (String) -> Unit,
     isSearchExpanded: Boolean,
     onSearchExpandChange: (Boolean) -> Unit,
+    onSearchClear: () -> Unit,
     onSearchSubmit: () -> Unit,
     recentSearches: List<String>,
     onRecentSearchSelected: (String) -> Unit,
@@ -202,6 +203,7 @@ fun ListActionToolbar(
                             IconButton(onClick = {
                                 onSearchQueryChange("")
                                 onSearchExpandChange(false)
+                                onSearchClear()
                             }) {
                                 Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(20.dp))
                             }
@@ -365,6 +367,11 @@ fun UserAnimeSection(
                     onSearchQueryChange = { searchQuery = it },
                     isSearchExpanded = isSearchExpanded,
                     onSearchExpandChange = { isSearchExpanded = it },
+                    onSearchClear = {
+                        submittedSearchQuery = ""
+                        isSearchTransitionLoading = false
+                        viewModel.clearSearch()
+                    },
                     onSearchSubmit = {
                         val query = searchQuery.trim()
                         if (query.isBlank()) {
@@ -618,6 +625,11 @@ fun UserMangaSection(
                     onSearchQueryChange = { searchQuery = it },
                     isSearchExpanded = isSearchExpanded,
                     onSearchExpandChange = { isSearchExpanded = it },
+                    onSearchClear = {
+                        submittedSearchQuery = ""
+                        isSearchTransitionLoading = false
+                        viewModel.clearSearch()
+                    },
                     onSearchSubmit = {
                         val query = searchQuery.trim()
                         if (query.isBlank()) {
