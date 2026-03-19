@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.6`
+- `v1.2.7`
 
 ## Core Features
 
@@ -156,6 +156,19 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - If first response is slow, UI unblocks and continues loading in background instead of feeling stuck
 - List loading path optimization:
   - Faster first-page render with background full-list completion for smoother initial open
+
+## v1.2.7 Highlights
+
+- Startup load pressure reduction:
+  - Removed eager prefetch fanout at login so only the selected startup surface initializes
+  - Profile data is no longer prefetched globally at startup
+- User list first-load optimization:
+  - Reduced initial User Anime/Manga list page size to lightweight first fetches (`limit=40`)
+  - Removed immediate full backfill expansion on initial list open
+- Home startup/network cleanup:
+  - Added duplicate-load guarding for Home fetch calls
+  - Reduced redundant refresh triggers from preference flow churn
+  - Switched manga recommendation startup path to fallback source to avoid repeated MAL `manga/suggestions` 404 noise
 
 ## Tech Stack
 
