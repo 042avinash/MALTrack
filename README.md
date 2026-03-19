@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.7`
+- `v1.2.8`
 
 ## Core Features
 
@@ -169,6 +169,18 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Added duplicate-load guarding for Home fetch calls
   - Reduced redundant refresh triggers from preference flow churn
   - Switched manga recommendation startup path to fallback source to avoid repeated MAL `manga/suggestions` 404 noise
+
+## v1.2.8 Highlights
+
+- User List search behavior fix:
+  - Clearing search via `X` now properly clears active filtering state
+  - Returning from search no longer leaves stale list filters applied
+- Profile navigation polish:
+  - Added proper back navigation on other-user profile pages
+- Seasonal UI/label fixes:
+  - Home seasonal subtitle stabilized to current season/year label behavior
+  - Seasonal picker year input now constrained to `1917..(current year + 1)`
+  - Added `Jump to Current` seasonal action and aligned its pill styling/height with season switcher controls
 
 ## Tech Stack
 
