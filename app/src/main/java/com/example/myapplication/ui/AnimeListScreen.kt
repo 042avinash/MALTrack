@@ -564,7 +564,7 @@ fun AnimeListScreen(
                 is AnimeUiState.TopDiscoveryDetails -> {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            color = MaterialTheme.colorScheme.surface,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -585,10 +585,9 @@ fun AnimeListScreen(
                                     text = state.title,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f),
-                                    textAlign = TextAlign.Center
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                Spacer(modifier = Modifier.size(48.dp))
                             }
                         }
                         
