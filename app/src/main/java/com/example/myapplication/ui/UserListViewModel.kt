@@ -118,6 +118,7 @@ class UserListViewModel @Inject constructor(
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
+                    fetchMissingAiringDetails(cachedList)
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
@@ -374,6 +375,22 @@ class UserListViewModel @Inject constructor(
         viewModelScope.launch {
             prefsManager.saveRecentSearch(cleaned)
         }
+    }
+
+    private suspend fun fetchMissingAiringDetails(entries: List<UserAnimeData>) {
+        val missingIds = entries
+            .asSequence()
+            .filter { it.node.status == "currently_airing" }
+            .map { it.node.id }
+            .filter { it !in _airingDetails.value.keys }
+            .toList()
+
+        if (missingIds.isEmpty()) return
+
+        val airingDetails = repository.getAiringAnimeDetails(missingIds)
+            .filter { it.idMal != null }
+            .associateBy { it.idMal!! }
+        _airingDetails.value = _airingDetails.value + airingDetails
     }
 
     fun updateListStatus(

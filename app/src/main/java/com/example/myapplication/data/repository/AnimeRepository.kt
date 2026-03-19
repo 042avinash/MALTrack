@@ -28,6 +28,7 @@ import com.example.myapplication.data.remote.JikanThemesResponse
 import com.example.myapplication.data.remote.MalApiService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import retrofit2.HttpException
 import java.net.SocketTimeoutException
 import java.io.IOException
@@ -45,9 +46,17 @@ class AnimeRepository @Inject constructor(
     private val jikanApiService: JikanApiService,
     private val prefsManager: UserPreferencesManager
 ) {
+    companion object {
+        private const val ANILIST_AIRING_SOFT_TIMEOUT_MS = 2_500L
+        private const val ANILIST_AIRING_BATCH_SIZE = 25
+        private const val ANILIST_AIRING_CACHE_TTL_MS = 15 * 60 * 1000L
+    }
+
     private val clientId = "16b21f717a3e9f733f121971c122db16"
     private val seasonalAnimeCache = mutableMapOf<String, AnimeResponse>()
     private val publishingMangaCache = mutableMapOf<String, List<JikanMangaData>>()
+    private val anilistAiringCache = mutableMapOf<Int, Pair<Long, AniListMedia>>()
+    private val anilistAiringCacheLock = Any()
 
     private suspend fun isNsfw(): Boolean {
         return prefsManager.nsfwFlow.first()
@@ -463,7 +472,7 @@ class AnimeRepository @Inject constructor(
 
     suspend fun getAiringAnimeDetails(malIds: List<Int>): List<AniListMedia> {
         if (malIds.isEmpty()) return emptyList()
-        
+
         val query = """
             query(${'$'}malIds: [Int]) {
               Page(page: 1, perPage: 50) {
@@ -478,9 +487,56 @@ class AnimeRepository @Inject constructor(
               }
             }
         """.trimIndent()
-        
-        val request = AniListRequest(query, AniListVariables(malIds))
-        val response = anilistApiService.getAnimeDetails(request)
-        return response.data?.Page?.media ?: emptyList()
+
+        val nowMs = System.currentTimeMillis()
+        val ids = malIds.distinct()
+        val results = mutableListOf<AniListMedia>()
+        val idsToFetch = mutableListOf<Int>()
+
+        synchronized(anilistAiringCacheLock) {
+            ids.forEach { id ->
+                val cached = anilistAiringCache[id]
+                if (cached != null && nowMs - cached.first < ANILIST_AIRING_CACHE_TTL_MS) {
+                    results += cached.second
+                } else {
+                    idsToFetch += id
+                }
+            }
+        }
+
+        if (idsToFetch.isEmpty()) return results
+
+        idsToFetch.chunked(ANILIST_AIRING_BATCH_SIZE).forEach { batch ->
+            val request = AniListRequest(query, AniListVariables(batch))
+            val response = withTimeoutOrNull(ANILIST_AIRING_SOFT_TIMEOUT_MS) {
+                runCatching { anilistApiService.getAnimeDetails(request) }.getOrNull()
+            }
+            val media = response?.data?.Page?.media.orEmpty()
+            if (media.isNotEmpty()) {
+                results += media
+                synchronized(anilistAiringCacheLock) {
+                    media.forEach { item ->
+                        val id = item.idMal ?: return@forEach
+                        anilistAiringCache[id] = nowMs to item
+                    }
+                }
+            }
+
+            // Cache misses as null-airing placeholders to avoid repeated retries for absent IDs.
+            val returnedIds = media.mapNotNull { it.idMal }.toSet()
+            val missingFromBatch = batch.filter { it !in returnedIds }
+            if (missingFromBatch.isNotEmpty()) {
+                synchronized(anilistAiringCacheLock) {
+                    missingFromBatch.forEach { missingId ->
+                        anilistAiringCache[missingId] = nowMs to AniListMedia(
+                            idMal = missingId,
+                            nextAiringEpisode = null
+                        )
+                    }
+                }
+            }
+        }
+
+        return results
     }
 }
