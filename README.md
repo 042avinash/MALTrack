@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.9`
+- `v1.2.10`
 
 ## Core Features
 
@@ -204,6 +204,14 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Added soft-timeout guard for AniList GraphQL airing lookups to avoid long UI stalls
   - Added batched AniList ID fetches for more stable response behavior under load
   - Added short-lived airing metadata cache (`airingAt` source data) to reduce repeat network latency
+
+## v1.2.10 Highlights
+
+- User-list countdown persistence fix:
+  - Restored missing airing metadata when returning to cached user-list pages (no manual refresh needed)
+- AniList airing data reliability update:
+  - Added bounded-time AniList enrichment fetches with cache-aware reuse to reduce long blocking waits
+  - Improved countdown stability across root navigation (Home/Profile/User List transitions)
 
 ## Tech Stack
 
