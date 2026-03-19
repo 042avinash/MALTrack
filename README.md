@@ -38,6 +38,27 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Home section visibility
 - Image download from details pages
 
+## v1.1.0 Highlights
+
+- Major app foundation expansion:
+  - MyAnimeList OAuth flow and authenticated account integration
+  - Home, User List, and Profile as core day-to-day surfaces
+- Discovery and browsing upgrades:
+  - Seasonal and Top 100 exploration flows
+  - Random anime discovery and refreshed recommendation sections
+- Details and list-management baseline:
+  - Rich Anime/Manga detail pages
+  - My List add/edit/delete and progress tracking workflows
+- Airing and progress intelligence:
+  - Airing schedule awareness
+  - Episode progress tracking for currently airing shows
+- Notifications and settings system:
+  - Episode notification worker pipeline
+  - App-level preferences for theme, language, NSFW, startup defaults, and visibility toggles
+- Performance and architecture groundwork:
+  - Repository + caching improvements for repeated navigation and data reuse
+  - Better state persistence and session continuity
+
 ## v1.2.0 Highlights
 
 - Unified details-page card system:
