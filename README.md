@@ -1,28 +1,82 @@
 # MALTrack
 
-MALTrack is a Kotlin Android app for tracking anime and manga with MyAnimeList.  
-It combines MyAnimeList account features with Jikan and AniList data for discovery, list management, airing updates, and profile browsing.
+MALTrack is a Kotlin + Jetpack Compose Android app for tracking anime and manga with MyAnimeList.
+It blends official MAL account data with Jikan and AniList signals for discovery, list management, profile browsing, and airing tracking.
 
-## Features
+## Current Version
+
+- `v1.2.0`
+
+## Core Features
 
 - MyAnimeList OAuth login
-- Personalized Home sections:
-    - Continue Watching
-    - Continue Reading
-    - Discovery quick actions (Seasonal / Top 100)
-    - Random Anime
-    - Personalized Anime Picks / Manga Picks
-- Refreshable recommendation rows (`Refresh Picks`)
-- Seasonal anime chart
-- Top 100 Anime / Top 100 Manga discovery
-- Anime and manga detail pages
-- User lists with tabs, search, filters, grid/list layouts, and manual refresh
-- Profile page with favorites, friends, and MAL profile linking
-- Airing countdowns and released-episode progress for currently airing anime
-- Episode notifications for anime in your watching list
-- Test notification option in Settings
-- Persistent settings for theme, startup page, title language, NSFW toggle, defaults, and Home section visibility
-- Image download support from anime details
+- Personalized Home experience:
+  - Continue Watching / Continue Reading
+  - Discovery quick links (Seasonal / Top 100)
+  - Random Anime
+  - Personalized anime and manga picks
+- Refreshable recommendation sections
+- Seasonal chart and Top 100 discovery pages
+- Full Anime Details and Manga Details flows
+- User List and User Manga List:
+  - Status tabs
+  - Search
+  - Grid/List layouts
+  - Manual refresh
+  - Countdown support for airing entries
+- Profile screen:
+  - Stats
+  - Favorites
+  - Friends
+  - MAL profile linking
+- Episode notifications for watching list
+- Settings for:
+  - Theme
+  - Startup/default page behavior
+  - Title language
+  - NSFW toggle
+  - Home section visibility
+- Image download from details pages
+
+## v1.2.0 Highlights
+
+- Unified details-page card system:
+  - Recommendations and Related sections now use fixed grid cards
+  - Members and MAL score shown consistently
+  - User list status icon and user score shown on cards (with metadata fallback)
+- Related cards now include relation-type chips (rounded rectangular labels)
+- Manga Details brought closer to Anime Details UX:
+  - MAL quick-open button
+  - My List status/update parity
+  - Updated related/recommendation cards and navigation
+- Home/User List card presentation refinements:
+  - More consistent poster sizing and alignment
+  - Improved two-line title consistency
+  - Cleaner status/score placement
+  - Better shadow/overlay readability in grid cards
+- Profile page polish:
+  - Better action labeling
+  - Cleaner friend row presentation
+  - Favorites updated to consistent card patterns
+  - Improved tab styling and behavior
+- Loading-state improvements:
+  - Skeleton shimmer loaders added across major pages (home, profile, settings, seasonal/top, user lists)
+- Navigation stability improvements:
+  - Better back-stack handling
+  - Reduced duplicate destination instances
+  - Exit confirmation on root destinations
+- User-list search behavior improvements:
+  - Search can be preserved while moving between status tabs
+
+## Tech Stack
+
+- Kotlin
+- Jetpack Compose + Material 3
+- Hilt (DI)
+- Retrofit + Kotlinx Serialization
+- Coroutines + StateFlow
+- DataStore (preferences/tokens)
+- WorkManager (notifications/background work)
 
 ## Project Structure
 
@@ -38,3 +92,10 @@ app/src/main/java/com/example/myapplication/
 |- ui/               # Compose screens and ViewModels
 |- MainActivity.kt   # App navigation shell
 |- MalApplication.kt # Application setup
+```
+
+## Build
+
+- Open in Android Studio
+- Sync Gradle
+- Build/run `app` module
