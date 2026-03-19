@@ -231,8 +231,24 @@ class AnimeRepository @Inject constructor(
         return apiService.getAnimeDetails(clientId = clientId, animeId = id)
     }
 
+    suspend fun getAnimeDetailsLite(id: Int): AnimeDetailsResponse {
+        return apiService.getAnimeDetailsLite(clientId = clientId, animeId = id)
+    }
+
+    suspend fun getAnimeRecommendationsOnly(id: Int): AnimeDetailsResponse {
+        return apiService.getAnimeRecommendationsOnly(clientId = clientId, animeId = id)
+    }
+
     suspend fun getMangaDetails(id: Int): MangaDetailsResponse {
         return apiService.getMangaDetails(clientId = clientId, mangaId = id)
+    }
+
+    suspend fun getMangaDetailsLite(id: Int): MangaDetailsResponse {
+        return apiService.getMangaDetailsLite(clientId = clientId, mangaId = id)
+    }
+
+    suspend fun getMangaRecommendationsOnly(id: Int): MangaDetailsResponse {
+        return apiService.getMangaRecommendationsOnly(clientId = clientId, mangaId = id)
     }
 
     suspend fun updateMyListStatus(
@@ -375,6 +391,10 @@ class AnimeRepository @Inject constructor(
 
     suspend fun getAnimeReviews(id: Int): JikanReviewsResponse {
         return jikanApiService.getAnimeReviews(id, preliminary = true)
+    }
+
+    suspend fun getMangaReviews(id: Int): JikanReviewsResponse {
+        return jikanApiService.getMangaReviews(id, preliminary = true)
     }
 
     suspend fun getAnimeStreaming(id: Int): JikanStreamingResponse {

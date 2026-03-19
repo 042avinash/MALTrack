@@ -58,7 +58,9 @@ import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.data.local.getPreferredTitle
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaNode
+import com.example.myapplication.data.model.MangaRecommendation
 import com.example.myapplication.data.model.MyMangaListStatus
+import com.example.myapplication.data.remote.JikanReviewData
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -162,7 +164,16 @@ fun MangaDetailsScreen(
                     MangaDetailsContent(
                         details = state.details, 
                         cardMeta = state.cardMeta,
+                        recommendations = state.recommendations,
+                        reviews = state.reviews,
+                        allReviewsCount = state.allReviewsCount,
+                        isRecommendationsLoaded = state.isRecommendationsLoaded,
+                        isRecommendationsLoading = state.isRecommendationsLoading,
+                        isReviewsLoaded = state.isReviewsLoaded,
+                        isReviewsLoading = state.isReviewsLoading,
                         titleLanguage = titleLanguage,
+                        onLoadRecommendations = { viewModel.loadRecommendations() },
+                        onLoadReviews = { viewModel.loadReviews() },
                         onMangaClick = onMangaClick,
                         onUpdateStatus = { status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish ->
                             viewModel.updateListStatus(status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish)
@@ -179,7 +190,16 @@ fun MangaDetailsScreen(
 fun MangaDetailsContent(
     details: MangaDetailsResponse, 
     cardMeta: Map<Int, MangaCardMeta> = emptyMap(),
+    recommendations: List<MangaRecommendation>,
+    reviews: List<JikanReviewData>,
+    allReviewsCount: Int,
+    isRecommendationsLoaded: Boolean,
+    isRecommendationsLoading: Boolean,
+    isReviewsLoaded: Boolean,
+    isReviewsLoading: Boolean,
     titleLanguage: TitleLanguage,
+    onLoadRecommendations: () -> Unit,
+    onLoadReviews: () -> Unit,
     onMangaClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
     onDeleteStatus: () -> Unit
@@ -521,17 +541,42 @@ fun MangaDetailsContent(
         }
 
         // Recommendations
-        if (!details.recommendations.isNullOrEmpty()) {
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = "Recommendations",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
+                    if (!isRecommendationsLoaded) {
+                        FilledTonalButton(
+                            onClick = onLoadRecommendations,
+                            enabled = !isRecommendationsLoading
+                        ) {
+                            if (isRecommendationsLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(
+                                text = if (isRecommendationsLoading) "Loading..." else "Load Recommendations",
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+                if (isRecommendationsLoaded && recommendations.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(details.recommendations) { rec ->
+                        items(recommendations) { rec ->
                             MangaGridCard(
                                 manga = rec.node,
                                 meta = cardMeta[rec.node.id],
@@ -567,6 +612,123 @@ fun MangaDetailsContent(
                                 contentScale = ContentScale.Fit
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // Reviews
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Top Reviews",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (!isReviewsLoaded) {
+                    FilledTonalButton(
+                        onClick = onLoadReviews,
+                        enabled = !isReviewsLoading
+                    ) {
+                        if (isReviewsLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(
+                            text = if (isReviewsLoading) "Loading..." else "Load Reviews",
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else if (allReviewsCount > 0) {
+                    Text(
+                        text = "$allReviewsCount total",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        if (isReviewsLoaded && reviews.isNotEmpty()) {
+            items(reviews) { review ->
+                var expanded by remember { mutableStateOf(false) }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp).animateContentSize()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AsyncImage(
+                                model = review.user.images.jpg?.image_url,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    review.user.username,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(review.date.take(10), style = MaterialTheme.typography.labelSmall)
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val tag = review.tags.firstOrNull() ?: ""
+                                if (tag.isNotEmpty()) {
+                                    val tagColor = when {
+                                        tag.contains("Not", ignoreCase = true) -> Color.Red
+                                        tag.contains("Mixed", ignoreCase = true) -> Color.Gray
+                                        else -> Color(0xFF4CAF50)
+                                    }
+                                    Text(
+                                        text = tag,
+                                        color = tagColor,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(end = 8.dp)
+                                    )
+                                }
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = "Score",
+                                    tint = Color.Yellow,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("${review.score}", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = if (review.is_spoiler && !expanded) "[Contains Spoilers] Click to read" else review.review,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = if (expanded) Int.MAX_VALUE else 4,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = if (expanded) "Show Less" else "Read More",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { expanded = !expanded }
+                                .padding(top = 4.dp)
+                        )
                     }
                 }
             }

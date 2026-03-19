@@ -128,6 +128,16 @@ class AnimeViewModel @Inject constructor(
     }
 
     fun loadHomeData(forceRefresh: Boolean = false) {
+        // Invalidate/cancel discovery requests first so stale Top/Seasonal results
+        // can never overwrite Home even when we return early from cache.
+        searchJob?.cancel()
+        seasonalLoadJob?.cancel()
+        seasonalFullLoadJob?.cancel()
+        topDiscoveryRequestId++
+        topDiscoveryLoadJob?.cancel()
+        topDiscoveryFullLoadJob?.cancel()
+        homeLoadJob?.cancel()
+
         val now = SystemClock.elapsedRealtime()
         val homeCacheKey = "home_default"
         val cachedGlobalHome = globalHomeCache[homeCacheKey]
@@ -143,14 +153,6 @@ class AnimeViewModel @Inject constructor(
             _uiState.value = cachedGlobalHome.second
             return
         }
-
-        searchJob?.cancel()
-        seasonalLoadJob?.cancel()
-        seasonalFullLoadJob?.cancel()
-        topDiscoveryRequestId++
-        topDiscoveryLoadJob?.cancel()
-        topDiscoveryFullLoadJob?.cancel()
-        homeLoadJob?.cancel()
         homeLoadJob = viewModelScope.launch {
             lastHomeLoadAtMs = SystemClock.elapsedRealtime()
             val previousState = cachedHomeState

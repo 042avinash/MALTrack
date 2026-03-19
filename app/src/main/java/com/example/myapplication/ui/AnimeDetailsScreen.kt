@@ -68,6 +68,7 @@ import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.AnimeNode
 import com.example.myapplication.data.model.MyListStatus
+import com.example.myapplication.data.model.Recommendation
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
 import com.example.myapplication.data.remote.JikanStreamingData
@@ -198,14 +199,21 @@ fun AnimeDetailsScreen(
                     AnimeDetailsContent(
                         details = state.details, 
                         characters = state.characters,
+                        recommendations = state.recommendations,
                         themes = state.themes,
                         reviews = state.reviews,
                         allReviewsCount = state.allReviewsCount,
+                        isRecommendationsLoaded = state.isRecommendationsLoaded,
+                        isRecommendationsLoading = state.isRecommendationsLoading,
+                        isReviewsLoaded = state.isReviewsLoaded,
+                        isReviewsLoading = state.isReviewsLoading,
                         streaming = state.streaming,
                         airingMedia = state.airingMedia,
                         recommendationMeta = state.recommendationMeta,
                         titleLanguage = titleLanguage,
                         onReviewsClick = { onReviewsClick(state.details.id) },
+                        onLoadReviews = { viewModel.loadReviews() },
+                        onLoadRecommendations = { viewModel.loadRecommendations() },
                         onAnimeClick = onAnimeClick,
                         onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
                             viewModel.updateListStatus(status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish)
@@ -222,14 +230,21 @@ fun AnimeDetailsScreen(
 fun AnimeDetailsContent(
     details: AnimeDetailsResponse, 
     characters: List<JikanCharacterData>,
+    recommendations: List<Recommendation>,
     themes: JikanThemesData?,
     reviews: List<JikanReviewData>,
     allReviewsCount: Int,
+    isRecommendationsLoaded: Boolean,
+    isRecommendationsLoading: Boolean,
+    isReviewsLoaded: Boolean,
+    isReviewsLoading: Boolean,
     streaming: List<JikanStreamingData>,
     airingMedia: AniListMedia?,
     recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
     titleLanguage: TitleLanguage,
     onReviewsClick: () -> Unit,
+    onLoadReviews: () -> Unit,
+    onLoadRecommendations: () -> Unit,
     onAnimeClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
     onDeleteStatus: () -> Unit
@@ -842,17 +857,42 @@ fun AnimeDetailsContent(
         }
 
         // Recommendations
-        if (!details.recommendations.isNullOrEmpty()) {
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = "Recommendations",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
+                    if (!isRecommendationsLoaded) {
+                        FilledTonalButton(
+                            onClick = onLoadRecommendations,
+                            enabled = !isRecommendationsLoading
+                        ) {
+                            if (isRecommendationsLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(
+                                text = if (isRecommendationsLoading) "Loading..." else "Load Recommendations",
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+                if (isRecommendationsLoaded && recommendations.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(details.recommendations) { rec ->
+                        items(recommendations) { rec ->
                             RecommendationGridCard(
                                 anime = rec.node,
                                 meta = recommendationMeta[rec.node.id],
@@ -894,27 +934,48 @@ fun AnimeDetailsContent(
         }
 
         // Reviews
-        if (reviews.isNotEmpty()) {
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Top Reviews",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (allReviewsCount > 0) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Top Reviews",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                when {
+                    !isReviewsLoaded -> {
+                        FilledTonalButton(
+                            onClick = onLoadReviews,
+                            enabled = !isReviewsLoading
+                        ) {
+                            if (isReviewsLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(
+                                text = if (isReviewsLoading) "Loading..." else "Load Reviews",
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    allReviewsCount > 0 -> {
                         TextButton(onClick = onReviewsClick) {
                             Text("All Reviews ($allReviewsCount)")
                         }
                     }
                 }
             }
+        }
+        if (isReviewsLoaded && reviews.isNotEmpty()) {
             items(reviews) { review ->
                 var expanded by remember { mutableStateOf(false) }
                 Card(

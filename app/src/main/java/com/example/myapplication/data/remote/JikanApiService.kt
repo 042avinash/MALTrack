@@ -22,6 +22,12 @@ interface JikanApiService {
         @Query("preliminary") preliminary: Boolean = true
     ): JikanReviewsResponse
 
+    @GET("manga/{id}/reviews")
+    suspend fun getMangaReviews(
+        @Path("id") id: Int,
+        @Query("preliminary") preliminary: Boolean = true
+    ): JikanReviewsResponse
+
     @GET("anime/{id}/streaming")
     suspend fun getAnimeStreaming(@Path("id") id: Int): JikanStreamingResponse
 
