@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.2`
+- `v1.2.5`
 
 ## Core Features
 
@@ -21,6 +21,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - User List and User Manga List:
   - Status tabs
   - Search
+  - Recent submitted search history (dropdown)
   - Grid/List layouts
   - Manual refresh
   - Countdown support for airing entries
@@ -37,6 +38,9 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - NSFW toggle
   - Home section visibility
 - Image download from details pages
+- On-demand Details extras loading:
+  - Reviews load only when requested
+  - Recommendations load only when requested
 
 ## v1.1.0 Highlights
 
@@ -111,6 +115,34 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Back button and title style now consistent with details-page style direction
 - Additional seasonal/top UX stability polishing:
   - Better request invalidation and smoother transitions between Home and discovery views
+
+## v1.2.3 Highlights
+
+- Details page network-load optimization:
+  - Reviews switched to manual "Load Reviews" on-demand fetch
+  - Recommendations switched to manual "Load Recommendations" on-demand fetch
+  - Removed automatic prefetch triggers for both reviews and recommendations
+- UI consistency polish for load actions:
+  - Refined "Load Reviews" and "Load Recommendations" button typography/alignment
+- Home resilience fallback:
+  - Added soft-timeout behavior to avoid prolonged blank/blocked loading states
+
+## v1.2.4 Highlights
+
+- Search and trigger cleanup:
+  - Recent search history now saves only on explicit submit (not typing-triggered calls)
+  - Added recent-search dropdown suggestions for Home and User List search
+  - Preserved submitted search while switching User List status tabs
+- Discovery/background load reductions:
+  - Removed delayed/background expansion fetch patterns in Seasonal/Top flows
+  - Reduced hidden offscreen list preloading to lower unnecessary work
+- General responsiveness improvements from fewer overlapping data triggers
+
+## v1.2.5 Highlights
+
+- Version alignment and release consistency:
+  - App version bumped to `1.2.5` (`versionCode 8`)
+  - Release APK updated to match tagged release `v1.2.5`
 
 ## Tech Stack
 
