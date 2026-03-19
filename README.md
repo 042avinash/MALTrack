@@ -200,6 +200,10 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Increased details metadata hydration cap (`8 -> 30`) to reduce `N/A` stats on deeper cards
 - User list countdown stability fix:
   - Unified list/grid countdown formatter and refreshed timer behavior for airing entries
+- AniList airing fetch resilience improvements:
+  - Added soft-timeout guard for AniList GraphQL airing lookups to avoid long UI stalls
+  - Added batched AniList ID fetches for more stable response behavior under load
+  - Added short-lived airing metadata cache (`airingAt` source data) to reduce repeat network latency
 
 ## Tech Stack
 
