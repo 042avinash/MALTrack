@@ -80,6 +80,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -800,6 +801,7 @@ fun UserAnimeList(
     onAnimePlusOne: (UserAnimeData) -> Unit,
     onAnimeEdit: (UserAnimeData) -> Unit
 ) {
+    val nowEpochSeconds by rememberCurrentEpochSeconds()
     val listState = rememberSaveable(listKey, saver = LazyListState.Saver) {
         LazyListState()
     }
@@ -839,6 +841,7 @@ fun UserAnimeList(
                         UserAnimeGridItem(
                             data = item,
                             anilistMedia = anilistMedia,
+                            nowEpochSeconds = nowEpochSeconds,
                             titleLanguage = titleLanguage,
                             isOwnList = isOwnList,
                             onClick = { onAnimeClick(item.node.id) },
@@ -857,6 +860,7 @@ fun UserAnimeList(
                     UserAnimeGridItem(
                         data = item,
                         anilistMedia = anilistMedia,
+                        nowEpochSeconds = nowEpochSeconds,
                         titleLanguage = titleLanguage,
                         isOwnList = isOwnList,
                         onClick = { onAnimeClick(item.node.id) },
@@ -895,6 +899,7 @@ fun UserAnimeList(
                         UserAnimeItem(
                             data = item,
                             anilistMedia = anilistMedia,
+                            nowEpochSeconds = nowEpochSeconds,
                             titleLanguage = titleLanguage,
                             isOwnList = isOwnList,
                             onClick = { onAnimeClick(item.node.id) },
@@ -913,6 +918,7 @@ fun UserAnimeList(
                     UserAnimeItem(
                         data = item,
                         anilistMedia = anilistMedia,
+                        nowEpochSeconds = nowEpochSeconds,
                         titleLanguage = titleLanguage,
                         isOwnList = isOwnList,
                         onClick = { onAnimeClick(item.node.id) },
@@ -1199,6 +1205,7 @@ private fun MangaListStatus.toMyMangaListStatus(): MyMangaListStatus = MyMangaLi
 fun UserAnimeItem(
     data: UserAnimeData,
     anilistMedia: AniListMedia?,
+    nowEpochSeconds: Long,
     titleLanguage: TitleLanguage,
     isOwnList: Boolean = true,
     onClick: () -> Unit,
@@ -1260,7 +1267,7 @@ fun UserAnimeItem(
                         
                         val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
                         val episodesText = if (data.node.status == "currently_airing") {
-                            val aired = if (anilistMedia?.nextAiringEpisode != null) (anilistMedia.nextAiringEpisode.episode - 1).toString() else "?"
+                            val aired = anilistMedia?.nextAiringEpisode?.episode?.let { maxOf(it - 1, 0).toString() } ?: "?"
                             "${data.listStatus.numEpisodesWatched} / $aired / $total"
                         } else {
                             "${data.listStatus.numEpisodesWatched} / $total"
@@ -1272,12 +1279,8 @@ fun UserAnimeItem(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        val countdown = if (data.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
-                            val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
-                            val days = timeUntil / 86400
-                            val hours = (timeUntil % 86400) / 3600
-                            val mins = (timeUntil % 3600) / 60
-                            if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
+                        val countdown = if (data.node.status == "currently_airing") {
+                            formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds)
                         } else null
 
                         Row(
@@ -1480,6 +1483,7 @@ fun UserMangaItem(
 fun UserAnimeGridItem(
     data: UserAnimeData, 
     anilistMedia: AniListMedia?,
+    nowEpochSeconds: Long,
     titleLanguage: TitleLanguage,
     isOwnList: Boolean = true,
     onClick: () -> Unit,
@@ -1583,7 +1587,7 @@ fun UserAnimeGridItem(
                     
                     val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
                     val episodesText = if (data.node.status == "currently_airing") {
-                        val aired = if (anilistMedia?.nextAiringEpisode != null) (anilistMedia.nextAiringEpisode.episode - 1).toString() else "?"
+                        val aired = anilistMedia?.nextAiringEpisode?.episode?.let { maxOf(it - 1, 0).toString() } ?: "?"
                         "${data.listStatus.numEpisodesWatched} / $aired / $total"
                     } else {
                         "${data.listStatus.numEpisodesWatched} / $total"
@@ -1595,13 +1599,10 @@ fun UserAnimeGridItem(
                         style = MaterialTheme.typography.labelSmall
                     )
                     
-                    if (data.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
-                        val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
-                        val days = timeUntil / 86400
-                        val hours = (timeUntil % 86400) / 3600
-                        val mins = (timeUntil % 3600) / 60
-                        val countdown = if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
-                        
+                    val countdown = if (data.node.status == "currently_airing") {
+                        formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds)
+                    } else null
+                    if (countdown != null) {
                         Box(
                             modifier = Modifier
                                 .padding(top = 2.dp)
@@ -1652,6 +1653,29 @@ fun UserAnimeGridItem(
             )
         }
     }
+}
+
+@Composable
+private fun rememberCurrentEpochSeconds(refreshMillis: Long = 60_000L): State<Long> {
+    val now = remember { mutableStateOf(System.currentTimeMillis() / 1000L) }
+    LaunchedEffect(refreshMillis) {
+        while (true) {
+            delay(refreshMillis)
+            now.value = System.currentTimeMillis() / 1000L
+        }
+    }
+    return now
+}
+
+private fun formatNextEpisodeCountdown(anilistMedia: AniListMedia?, nowEpochSeconds: Long): String? {
+    val nextAiring = anilistMedia?.nextAiringEpisode ?: return null
+    val timeUntil = nextAiring.airingAt - nowEpochSeconds
+    if (timeUntil <= 0) return "Soon"
+
+    val days = timeUntil / 86400
+    val hours = (timeUntil % 86400) / 3600
+    val mins = (timeUntil % 3600) / 60
+    return if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
 }
 
 @OptIn(ExperimentalFoundationApi::class)

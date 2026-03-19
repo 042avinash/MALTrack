@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.8`
+- `v1.2.9`
 
 ## Core Features
 
@@ -181,6 +181,25 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Home seasonal subtitle stabilized to current season/year label behavior
   - Seasonal picker year input now constrained to `1917..(current year + 1)`
   - Added `Jump to Current` seasonal action and aligned its pill styling/height with season switcher controls
+- Details-page relation/recommendation UX refresh:
+  - Anime Details now uses 2 pills (`Related Anime`, `Recommendations`) instead of inline rows
+  - Manga Details now uses 2 pills (`Related Manga`, `Recommendations`) with matching behavior
+  - Each pill opens a dedicated popup page with grid cards and consistent card metadata styling
+- Metadata hydration coverage expansion:
+  - Increased related/recommendation card metadata fetch cap from `8` to `30` for better `Members` and `MAL` score population
+
+## v1.2.9 Highlights
+
+- Anime Details relation/recommendation flow update:
+  - Replaced inline rows with 2 pills (`Related Anime`, `Recommendations`)
+  - Added dedicated popup grid pages for both sections
+- Manga Details relation/recommendation flow parity:
+  - Added matching 2-pill flow (`Related Manga`, `Recommendations`)
+  - Added dedicated popup grid pages with consistent card metadata presentation
+- Card metadata population improvement:
+  - Increased details metadata hydration cap (`8 -> 30`) to reduce `N/A` stats on deeper cards
+- User list countdown stability fix:
+  - Unified list/grid countdown formatter and refreshed timer behavior for airing entries
 
 ## Tech Stack
 

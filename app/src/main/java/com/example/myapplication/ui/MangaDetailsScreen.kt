@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -209,6 +212,8 @@ fun MangaDetailsContent(
     var selectedPicture by remember { mutableStateOf<String?>(null) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showRelatedPopup by remember { mutableStateOf(false) }
+    var showRecommendationsPopup by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -231,6 +236,29 @@ fun MangaDetailsContent(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (showRelatedPopup) {
+        MangaDetailsGridPopup(
+            title = "Related Manga",
+            nodes = details.relatedManga.orEmpty().map { it.node },
+            cardMeta = cardMeta,
+            titleLanguage = titleLanguage,
+            onMangaClick = onMangaClick,
+            onDismiss = { showRelatedPopup = false }
+        )
+    }
+
+    if (showRecommendationsPopup) {
+        MangaDetailsGridPopup(
+            title = "Recommendations",
+            nodes = recommendations.map { it.node },
+            cardMeta = cardMeta,
+            titleLanguage = titleLanguage,
+            isLoading = isRecommendationsLoading,
+            onMangaClick = onMangaClick,
+            onDismiss = { showRecommendationsPopup = false }
         )
     }
 
@@ -492,99 +520,36 @@ fun MangaDetailsContent(
             }
         }
 
-        // Related Manga
-        if (!details.relatedManga.isNullOrEmpty()) {
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Related Manga",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(details.relatedManga) { rel ->
-                            Column(
-                                modifier = Modifier.width(124.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                MangaGridCard(
-                                    manga = rel.node,
-                                    meta = cardMeta[rel.node.id],
-                                    titleLanguage = titleLanguage,
-                                    onClick = { onMangaClick(rel.node.id) }
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-                                    tonalElevation = 1.dp
-                                ) {
-                                    Text(
-                                        text = rel.relationTypeFormatted,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Recommendations
         item {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = { showRelatedPopup = true },
+                    modifier = Modifier.weight(1f),
+                    enabled = !details.relatedManga.isNullOrEmpty()
                 ) {
-                    Text(
-                        text = "Recommendations",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (!isRecommendationsLoaded) {
-                        FilledTonalButton(
-                            onClick = onLoadRecommendations,
-                            enabled = !isRecommendationsLoading
-                        ) {
-                            if (isRecommendationsLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-                            Text(
-                                text = if (isRecommendationsLoading) "Loading..." else "Load Recommendations",
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
+                    Text("Related Manga")
                 }
-                if (isRecommendationsLoaded && recommendations.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(recommendations) { rec ->
-                            MangaGridCard(
-                                manga = rec.node,
-                                meta = cardMeta[rec.node.id],
-                                titleLanguage = titleLanguage,
-                                onClick = { onMangaClick(rec.node.id) }
-                            )
-                        }
+                FilledTonalButton(
+                    onClick = {
+                        if (!isRecommendationsLoaded) onLoadRecommendations()
+                        showRecommendationsPopup = true
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isRecommendationsLoading
+                ) {
+                    if (isRecommendationsLoading && !isRecommendationsLoaded) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                     }
+                    Text("Recommendations")
                 }
             }
         }
@@ -860,15 +825,104 @@ fun MangaDetailsContent(
 }
 
 @Composable
+private fun MangaDetailsGridPopup(
+    title: String,
+    nodes: List<MangaNode>,
+    cardMeta: Map<Int, MangaCardMeta>,
+    titleLanguage: TitleLanguage,
+    isLoading: Boolean = false,
+    onMangaClick: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
+                .padding(12.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 4.dp
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                when {
+                    isLoading && nodes.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    nodes.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No entries available")
+                        }
+                    }
+                    else -> {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            gridItems(
+                                items = nodes,
+                                key = { it.id }
+                            ) { node ->
+                                MangaGridCard(
+                                    manga = node,
+                                    meta = cardMeta[node.id],
+                                    titleLanguage = titleLanguage,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = {
+                                        onDismiss()
+                                        onMangaClick(node.id)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MangaGridCard(
     manga: MangaNode,
     meta: MangaCardMeta? = null,
     titleLanguage: TitleLanguage,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .width(124.dp)
+        modifier = modifier
             .aspectRatio(0.7f)
             .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

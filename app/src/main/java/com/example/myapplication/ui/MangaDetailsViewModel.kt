@@ -28,6 +28,7 @@ class MangaDetailsViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val MAX_CARD_META_FETCH = 30
         private val detailsCache = mutableMapOf<Int, Pair<Long, MangaDetailsUiState.Success>>()
         private val mangaCardMetaCache = mutableMapOf<Int, Pair<Long, MangaCardMeta>>()
     }
@@ -178,7 +179,7 @@ class MangaDetailsViewModel @Inject constructor(
                 details.recommendations.orEmpty().map { it.node.id }
             )
             .distinct()
-            .take(8)
+            .take(MAX_CARD_META_FETCH)
         if (targetIds.isEmpty()) return@supervisorScope emptyMap()
 
         val now = SystemClock.elapsedRealtime()
