@@ -14,7 +14,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -23,7 +25,9 @@ class UserMangaListViewModel @Inject constructor(
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
     companion object {
+        private const val SOFT_TIMEOUT_MS = 1_500L
         private val globalFullMangaListCache = mutableMapOf<String, List<UserMangaData>>()
+        private val globalMangaListCacheComplete = mutableSetOf<String>()
         private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
     }
 
@@ -55,6 +59,7 @@ class UserMangaListViewModel @Inject constructor(
     
     private var loadJob: Job? = null
     private var searchJob: Job? = null
+    private val backgroundFullLoadJobs = mutableMapOf<String, Job>()
 
     init {
         preloadSavedPreferences()
@@ -94,37 +99,125 @@ class UserMangaListViewModel @Inject constructor(
                 )
 
                 if (forceRefresh) {
+                    backgroundFullLoadJobs.remove(cacheKey)?.cancel()
                     globalFullMangaListCache.remove(cacheKey)
+                    globalMangaListCacheComplete.remove(cacheKey)
                     _loadedLists.value = _loadedLists.value - cacheKey
                 }
 
                 val cachedList = globalFullMangaListCache[cacheKey]
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    if (!globalMangaListCacheComplete.contains(cacheKey)) {
+                        launchFullListBackfill(
+                            cacheKey = cacheKey,
+                            statusKey = statusKey,
+                            username = effectiveUsername,
+                            sort = effectiveSort
+                        )
+                    }
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
-                        val fullList = repository.getAllUserMangaList(
-                            username = effectiveUsername,
-                            status = if (statusKey == "all") null else statusKey,
-                            sort = effectiveSort
-                        )
-                        globalFullMangaListCache[cacheKey] = fullList
-                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+                        val firstPageDeferred = async {
+                            repository.getUserMangaList(
+                                username = effectiveUsername,
+                                status = if (statusKey == "all") null else statusKey,
+                                sort = effectiveSort,
+                                limit = 100
+                            )
+                        }
+                        val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
+                        if (firstPage == null) {
+                            launchStatsLoad(
+                                username = effectiveUsername,
+                                forceRefresh = forceRefresh
+                            )
+                            backgroundFullLoadJobs[cacheKey]?.cancel()
+                            backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
+                                runCatching {
+                                    val resolvedFirstPage = firstPageDeferred.await()
+                                    globalFullMangaListCache[cacheKey] = resolvedFirstPage.data
+                                    _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
+                                    if (resolvedFirstPage.paging.next == null) {
+                                        globalMangaListCacheComplete.add(cacheKey)
+                                    } else {
+                                        val fullList = repository.getAllUserMangaList(
+                                            username = effectiveUsername,
+                                            status = if (statusKey == "all") null else statusKey,
+                                            sort = effectiveSort
+                                        )
+                                        globalFullMangaListCache[cacheKey] = fullList
+                                        globalMangaListCacheComplete.add(cacheKey)
+                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
+                        globalFullMangaListCache[cacheKey] = firstPage.data
+                        _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
+                        if (firstPage.paging.next == null) {
+                            globalMangaListCacheComplete.add(cacheKey)
+                        } else {
+                            launchFullListBackfill(
+                                cacheKey = cacheKey,
+                                statusKey = statusKey,
+                                username = effectiveUsername,
+                                sort = effectiveSort
+                            )
+                        }
                     } finally {
                         _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                     }
                 }
 
-                val statsCacheKey = effectiveUsername ?: "@me"
+                launchStatsLoad(
+                    username = effectiveUsername,
+                    forceRefresh = forceRefresh
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun launchFullListBackfill(
+        cacheKey: String,
+        statusKey: String,
+        username: String?,
+        sort: String
+    ) {
+        if (globalMangaListCacheComplete.contains(cacheKey)) return
+        backgroundFullLoadJobs[cacheKey]?.cancel()
+        backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
+            try {
+                val fullList = repository.getAllUserMangaList(
+                    username = username,
+                    status = if (statusKey == "all") null else statusKey,
+                    sort = sort
+                )
+                globalFullMangaListCache[cacheKey] = fullList
+                globalMangaListCacheComplete.add(cacheKey)
+                _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun launchStatsLoad(username: String?, forceRefresh: Boolean) {
+        viewModelScope.launch {
+            try {
+                val statsCacheKey = username ?: "@me"
                 val cachedStats = globalStatsCache[statsCacheKey]
                 if (cachedStats != null && !forceRefresh) {
                     _userMangaListState.value = _userMangaListState.value.copy(counts = cachedStats)
                 } else {
                     try {
-                        val profile = if (effectiveUsername != null) {
-                            repository.getUserFullProfile(effectiveUsername).statistics?.manga?.let { jikan ->
+                        val profile = if (username != null) {
+                            repository.getUserFullProfile(username).statistics?.manga?.let { jikan ->
                                 globalStatsCache[statsCacheKey] = mapOf(
                                     "all" to jikan.total_entries,
                                     "reading" to jikan.reading,
@@ -139,7 +232,7 @@ class UserMangaListViewModel @Inject constructor(
                             repository.getMyUserProfile()
                         }
 
-                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || effectiveUsername == null) {
+                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || username == null) {
                             val stats = profile.mangaStatistics
                             globalStatsCache[statsCacheKey] = mapOf(
                                 "all" to (stats?.numItems ?: 0),
@@ -154,8 +247,6 @@ class UserMangaListViewModel @Inject constructor(
                     } catch (_: Exception) {
                     }
                 }
-            } catch (e: CancellationException) {
-                throw e
             } catch (_: Exception) {
             }
         }
@@ -198,7 +289,9 @@ class UserMangaListViewModel @Inject constructor(
             .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
             .toList()
             .forEach {
+                backgroundFullLoadJobs.remove(it)?.cancel()
                 globalFullMangaListCache.remove(it)
+                globalMangaListCacheComplete.remove(it)
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
@@ -228,12 +321,21 @@ class UserMangaListViewModel @Inject constructor(
                     isLoading = true
                 )
 
-                val fullList = globalFullMangaListCache.getOrPut(cacheKey) {
+                if (!globalMangaListCacheComplete.contains(cacheKey)) {
+                    backgroundFullLoadJobs[cacheKey]?.cancel()
+                }
+                val fullList = if (globalMangaListCacheComplete.contains(cacheKey)) {
+                    globalFullMangaListCache[cacheKey].orEmpty()
+                } else {
                     repository.getAllUserMangaList(
                         username = effectiveUsername,
                         status = if (status == "all") null else status,
                         sort = effectiveSort
-                    )
+                    ).also { fetched ->
+                        globalFullMangaListCache[cacheKey] = fetched
+                        globalMangaListCacheComplete.add(cacheKey)
+                        _loadedLists.value = _loadedLists.value + (cacheKey to fetched)
+                    }
                 }
 
                 val lowerQuery = normalizedQuery.lowercase()

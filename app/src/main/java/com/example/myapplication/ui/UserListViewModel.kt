@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -24,7 +26,9 @@ class UserListViewModel @Inject constructor(
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
     companion object {
+        private const val SOFT_TIMEOUT_MS = 1_500L
         private val globalFullAnimeListCache = mutableMapOf<String, List<UserAnimeData>>()
+        private val globalAnimeListCacheComplete = mutableSetOf<String>()
         private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
     }
 
@@ -59,6 +63,7 @@ class UserListViewModel @Inject constructor(
 
     private var loadJob: Job? = null
     private var searchJob: Job? = null
+    private val backgroundFullLoadJobs = mutableMapOf<String, Job>()
 
     init {
         preloadSavedPreferences()
@@ -102,26 +107,77 @@ class UserListViewModel @Inject constructor(
                 )
 
                 if (forceRefresh) {
+                    backgroundFullLoadJobs.remove(cacheKey)?.cancel()
                     globalFullAnimeListCache.remove(cacheKey)
+                    globalAnimeListCacheComplete.remove(cacheKey)
                     _loadedLists.value = _loadedLists.value - cacheKey
                 }
 
                 val cachedList = globalFullAnimeListCache[cacheKey]
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    if (!globalAnimeListCacheComplete.contains(cacheKey)) {
+                        launchFullListBackfill(
+                            cacheKey = cacheKey,
+                            statusKey = statusKey,
+                            username = effectiveUsername,
+                            sort = effectiveSort
+                        )
+                    }
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
-                        val fullList = repository.getAllUserAnimeList(
-                            username = effectiveUsername,
-                            status = if (statusKey == "all") null else statusKey,
-                            sort = effectiveSort
-                        )
-                        globalFullAnimeListCache[cacheKey] = fullList
-                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+                        val firstPageDeferred = async {
+                            repository.getUserAnimeList(
+                                username = effectiveUsername,
+                                status = if (statusKey == "all") null else statusKey,
+                                sort = effectiveSort,
+                                limit = 100
+                            )
+                        }
+                        val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
+                        if (firstPage == null) {
+                            launchStatsLoad(
+                                username = effectiveUsername,
+                                forceRefresh = forceRefresh
+                            )
+                            backgroundFullLoadJobs[cacheKey]?.cancel()
+                            backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
+                                runCatching {
+                                    val resolvedFirstPage = firstPageDeferred.await()
+                                    globalFullAnimeListCache[cacheKey] = resolvedFirstPage.data
+                                    _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
+                                    if (resolvedFirstPage.paging.next == null) {
+                                        globalAnimeListCacheComplete.add(cacheKey)
+                                    } else {
+                                        val fullList = repository.getAllUserAnimeList(
+                                            username = effectiveUsername,
+                                            status = if (statusKey == "all") null else statusKey,
+                                            sort = effectiveSort
+                                        )
+                                        globalFullAnimeListCache[cacheKey] = fullList
+                                        globalAnimeListCacheComplete.add(cacheKey)
+                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
+                        globalFullAnimeListCache[cacheKey] = firstPage.data
+                        _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
+                        if (firstPage.paging.next == null) {
+                            globalAnimeListCacheComplete.add(cacheKey)
+                        } else {
+                            launchFullListBackfill(
+                                cacheKey = cacheKey,
+                                statusKey = statusKey,
+                                username = effectiveUsername,
+                                sort = effectiveSort
+                            )
+                        }
 
-                        val malIds = fullList
+                        val malIds = firstPage.data
                             .asSequence()
                             .filter { it.node.status == "currently_airing" }
                             .map { it.node.id }
@@ -138,14 +194,51 @@ class UserListViewModel @Inject constructor(
                     }
                 }
 
-                val statsCacheKey = effectiveUsername ?: "@me"
+                launchStatsLoad(
+                    username = effectiveUsername,
+                    forceRefresh = forceRefresh
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun launchFullListBackfill(
+        cacheKey: String,
+        statusKey: String,
+        username: String?,
+        sort: String
+    ) {
+        if (globalAnimeListCacheComplete.contains(cacheKey)) return
+        backgroundFullLoadJobs[cacheKey]?.cancel()
+        backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
+            try {
+                val fullList = repository.getAllUserAnimeList(
+                    username = username,
+                    status = if (statusKey == "all") null else statusKey,
+                    sort = sort
+                )
+                globalFullAnimeListCache[cacheKey] = fullList
+                globalAnimeListCacheComplete.add(cacheKey)
+                _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun launchStatsLoad(username: String?, forceRefresh: Boolean) {
+        viewModelScope.launch {
+            try {
+                val statsCacheKey = username ?: "@me"
                 val cachedStats = globalStatsCache[statsCacheKey]
                 if (cachedStats != null && !forceRefresh) {
                     _userListState.value = _userListState.value.copy(counts = cachedStats)
                 } else {
                     try {
-                        val profile = if (effectiveUsername != null) {
-                            repository.getUserFullProfile(effectiveUsername).statistics?.anime?.let { jikan ->
+                        val profile = if (username != null) {
+                            repository.getUserFullProfile(username).statistics?.anime?.let { jikan ->
                                 globalStatsCache[statsCacheKey] = mapOf(
                                     "all" to jikan.total_entries,
                                     "watching" to jikan.watching,
@@ -160,7 +253,7 @@ class UserListViewModel @Inject constructor(
                             repository.getMyUserProfile()
                         }
 
-                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || effectiveUsername == null) {
+                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || username == null) {
                             val stats = profile.animeStatistics
                             globalStatsCache[statsCacheKey] = mapOf(
                                 "all" to (stats?.numItems ?: 0),
@@ -175,8 +268,6 @@ class UserListViewModel @Inject constructor(
                     } catch (_: Exception) {
                     }
                 }
-            } catch (e: CancellationException) {
-                throw e
             } catch (_: Exception) {
             }
         }
@@ -219,7 +310,9 @@ class UserListViewModel @Inject constructor(
             .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
             .toList()
             .forEach {
+                backgroundFullLoadJobs.remove(it)?.cancel()
                 globalFullAnimeListCache.remove(it)
+                globalAnimeListCacheComplete.remove(it)
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
@@ -249,12 +342,21 @@ class UserListViewModel @Inject constructor(
                     isLoading = true
                 )
 
-                val fullList = globalFullAnimeListCache.getOrPut(cacheKey) {
+                if (!globalAnimeListCacheComplete.contains(cacheKey)) {
+                    backgroundFullLoadJobs[cacheKey]?.cancel()
+                }
+                val fullList = if (globalAnimeListCacheComplete.contains(cacheKey)) {
+                    globalFullAnimeListCache[cacheKey].orEmpty()
+                } else {
                     repository.getAllUserAnimeList(
                         username = effectiveUsername,
                         status = if (status == "all") null else status,
                         sort = effectiveSort
-                    )
+                    ).also { fetched ->
+                        globalFullAnimeListCache[cacheKey] = fetched
+                        globalAnimeListCacheComplete.add(cacheKey)
+                        _loadedLists.value = _loadedLists.value + (cacheKey to fetched)
+                    }
                 }
 
                 val lowerQuery = normalizedQuery.lowercase()

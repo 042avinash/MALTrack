@@ -140,8 +140,12 @@ class AnimeViewModel @Inject constructor(
         topDiscoveryLoadJob?.cancel()
         homeLoadJob?.cancel()
 
-        val now = SystemClock.elapsedRealtime()
         val homeCacheKey = "home_default"
+        if (forceRefresh) {
+            cachedHomeState = null
+            globalHomeCache.remove(homeCacheKey)
+        }
+        val now = SystemClock.elapsedRealtime()
         val cachedGlobalHome = globalHomeCache[homeCacheKey]
         if (!forceRefresh && _uiState.value is AnimeUiState.Loading && now - lastHomeLoadAtMs < 10_000L) return
         if (!forceRefresh && _uiState.value is AnimeUiState.HomeSuccess && now - lastHomeLoadAtMs < HOME_CACHE_TTL_MS) return
@@ -257,7 +261,7 @@ class AnimeViewModel @Inject constructor(
             continueWatching = continueWatchingDeferred.await(),
             continueReading = continueReadingDeferred.await(),
             animeSuggestions = animeSuggestionsDeferred.await(),
-            mangaSuggestions = enrichMangaRecommendationStats(mangaSuggestionsDeferred.await())
+            mangaSuggestions = mangaSuggestionsDeferred.await()
         )
     }
 
@@ -279,6 +283,23 @@ class AnimeViewModel @Inject constructor(
         _uiState.value = successState
         lastHomeLoadAtMs = SystemClock.elapsedRealtime()
         fetchAiringDetails(payload.animeSuggestions.map { it.node.id })
+        launchHomeMangaRecommendationEnrichment(homeCacheKey, payload.mangaSuggestions)
+    }
+
+    private fun launchHomeMangaRecommendationEnrichment(homeCacheKey: String, items: List<MangaData>) {
+        if (items.isEmpty()) return
+        viewModelScope.launch {
+            val enriched = runCatching { enrichMangaRecommendationStats(items) }.getOrNull() ?: return@launch
+            if (enriched == items) return@launch
+
+            val currentHome = _uiState.value as? AnimeUiState.HomeSuccess ?: return@launch
+            if (currentHome.mangaRecommendations.map { it.node.id } != items.map { it.node.id }) return@launch
+
+            val updated = currentHome.copy(mangaRecommendations = enriched)
+            cachedHomeState = updated
+            globalHomeCache[homeCacheKey] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
     }
 
     fun refreshAnimeRecommendations() {

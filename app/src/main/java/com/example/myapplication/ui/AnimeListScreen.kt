@@ -341,6 +341,10 @@ fun AnimeListScreen(
                         isAnimeSearch = searchMediaType == SearchMediaType.ANIME
                     )
                 },
+                onForceRefreshClick = {
+                    loadingViewContext = LoadingViewContext.HOME
+                    viewModel.loadHomeData(forceRefresh = true)
+                },
                 onSettingsClick = onSettingsClick
             )
         }
@@ -1027,6 +1031,7 @@ private fun HomeSearchToolbar(
     onSearchSubmit: () -> Unit,
     recentSearches: List<String>,
     onRecentSearchSelected: (String) -> Unit,
+    onForceRefreshClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     val filteredRecent = remember(searchQuery, recentSearches) {
@@ -1096,6 +1101,10 @@ private fun HomeSearchToolbar(
 
                     IconButton(onClick = { onSearchExpandChange(true) }) {
                         Icon(Icons.Default.Search, contentDescription = "Search")
+                    }
+
+                    IconButton(onClick = onForceRefreshClick) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Home")
                     }
 
                     IconButton(onClick = onSettingsClick) {
