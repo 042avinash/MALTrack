@@ -3,9 +3,11 @@
 MALTrack is a Kotlin + Jetpack Compose Android app for tracking anime and manga with MyAnimeList.
 It blends official MAL account data with Jikan and AniList signals for discovery, list management, profile browsing, and airing tracking.
 
+![MALTrack Cover](assets/cover.png)
+
 ## Current Version
 
-- `v1.3.1`
+- `v1.3.2`
 
 ## Core Features
 
@@ -248,6 +250,19 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Applied the same toolbar opacity fix to User Anime/Manga list top bars for consistent appearance
 - Home discovery card polish:
   - Increased discovery card container opacity (`Seasonal`, `Top 100`, `Random Anime`) to remove inner rectangular bleed-through artifacts
+
+## v1.3.2 Highlights
+
+- Branding refresh:
+  - Updated launcher icon source to the new high-resolution brand mark and centered it for adaptive icon rendering
+  - Improved lockscreen/status-bar notification visibility with a thicker, simplified small notification glyph
+- Splash screen update:
+  - Added dedicated launch splash theme with branded splash background image
+  - Wired `MainActivity` to switch from splash theme to app theme at startup
+- Settings/App info assets:
+  - Updated in-app branding assets used in settings/app info surfaces
+- README refresh:
+  - Added new repository cover image and updated current version tracking
 
 ## Tech Stack
 

@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var loginViewModel: LoginViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_MyApplication)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
