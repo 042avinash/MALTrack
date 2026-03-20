@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.0`
+- `v1.3.1`
 
 ## Core Features
 
@@ -239,6 +239,15 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Settings UX update:
   - Moved app branding/version block into a dedicated `App Info` settings item
   - Added an `App Info` popup dialog showing logo, app version, and creator details
+
+## v1.3.1 Highlights
+
+- Home top-bar visual cleanup:
+  - Removed translucent bleed-through artifact in the Home search toolbar by increasing container opacity
+- User List top-bar parity:
+  - Applied the same toolbar opacity fix to User Anime/Manga list top bars for consistent appearance
+- Home discovery card polish:
+  - Increased discovery card container opacity (`Seasonal`, `Top 100`, `Random Anime`) to remove inner rectangular bleed-through artifacts
 
 ## Tech Stack
 
