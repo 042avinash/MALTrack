@@ -259,7 +259,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Splash screen update:
   - Added dedicated launch splash theme with branded splash background image
 
-## Post-v1.3.2 Patch Updates
+## v1.3.3 Highlights
 
 - User List refresh behavior:
   - Reintroduced pull-to-refresh on User Anime/Manga lists with a lightweight trigger flow
