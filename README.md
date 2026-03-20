@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.11`
+- `v1.3.0`
 
 ## Core Features
 
@@ -227,6 +227,18 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Profile favorites metadata coverage:
   - Increased favorite metadata fetch cap so later cards also populate `Members` and `MAL` score
   - Added better spacing between Favorite Characters and Favorite People sections
+
+## v1.3.0 Highlights
+
+- Icon system refresh:
+  - Replaced launcher icon styling with new `square-m` icon direction
+  - Unified launcher icon appearance across light/dark modes (single black-on-white style)
+  - Added dedicated notification small icon resource to avoid blob-like status-bar rendering
+- Notification icon correctness:
+  - Switched episode notification small icon from launcher mipmap to a proper status-bar drawable
+- Settings UX update:
+  - Moved app branding/version block into a dedicated `App Info` settings item
+  - Added an `App Info` popup dialog showing logo, app version, and creator details
 
 ## Tech Stack
 
