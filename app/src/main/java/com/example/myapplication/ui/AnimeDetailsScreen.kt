@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -140,10 +141,20 @@ fun AnimeDetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var isPullRefreshing by remember { mutableStateOf(false) }
 
     val topBarTitle = if (uiState is AnimeDetailsUiState.Success) {
         (uiState as AnimeDetailsUiState.Success).details.getPreferredTitle(titleLanguage)
     } else "Details"
+
+    LaunchedEffect(uiState, isPullRefreshing) {
+        if (!isPullRefreshing) return@LaunchedEffect
+        when (uiState) {
+            is AnimeDetailsUiState.Success,
+            is AnimeDetailsUiState.Error -> isPullRefreshing = false
+            else -> Unit
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -182,47 +193,56 @@ fun AnimeDetailsScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isPullRefreshing,
+            onRefresh = {
+                isPullRefreshing = true
+                viewModel.loadDetails(forceRefresh = true)
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when (val state = uiState) {
-                is AnimeDetailsUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                is AnimeDetailsUiState.Error -> {
-                    Text(
-                        text = state.message,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                is AnimeDetailsUiState.Success -> {
-                    AnimeDetailsContent(
-                        details = state.details, 
-                        characters = state.characters,
-                        recommendations = state.recommendations,
-                        themes = state.themes,
-                        reviews = state.reviews,
-                        allReviewsCount = state.allReviewsCount,
-                        isRecommendationsLoaded = state.isRecommendationsLoaded,
-                        isRecommendationsLoading = state.isRecommendationsLoading,
-                        isReviewsLoaded = state.isReviewsLoaded,
-                        isReviewsLoading = state.isReviewsLoading,
-                        streaming = state.streaming,
-                        airingMedia = state.airingMedia,
-                        recommendationMeta = state.recommendationMeta,
-                        titleLanguage = titleLanguage,
-                        onReviewsClick = { onReviewsClick(state.details.id) },
-                        onLoadReviews = { viewModel.loadReviews() },
-                        onLoadRecommendations = { viewModel.loadRecommendations() },
-                        onAnimeClick = onAnimeClick,
-                        onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
-                            viewModel.updateListStatus(status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish)
-                        },
-                        onDeleteStatus = { viewModel.deleteFromList() }
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (val state = uiState) {
+                    is AnimeDetailsUiState.Loading -> {
+                        if (!isPullRefreshing) {
+                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        }
+                    }
+                    is AnimeDetailsUiState.Error -> {
+                        Text(
+                            text = state.message,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    is AnimeDetailsUiState.Success -> {
+                        AnimeDetailsContent(
+                            details = state.details,
+                            characters = state.characters,
+                            recommendations = state.recommendations,
+                            themes = state.themes,
+                            reviews = state.reviews,
+                            allReviewsCount = state.allReviewsCount,
+                            isRecommendationsLoaded = state.isRecommendationsLoaded,
+                            isRecommendationsLoading = state.isRecommendationsLoading,
+                            isReviewsLoaded = state.isReviewsLoaded,
+                            isReviewsLoading = state.isReviewsLoading,
+                            streaming = state.streaming,
+                            airingMedia = state.airingMedia,
+                            recommendationMeta = state.recommendationMeta,
+                            titleLanguage = titleLanguage,
+                            onReviewsClick = { onReviewsClick(state.details.id) },
+                            onLoadReviews = { viewModel.loadReviews() },
+                            onLoadRecommendations = { viewModel.loadRecommendations() },
+                            onAnimeClick = onAnimeClick,
+                            onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
+                                viewModel.updateListStatus(status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish)
+                            },
+                            onDeleteStatus = { viewModel.deleteFromList() }
+                        )
+                    }
                 }
             }
         }
@@ -319,7 +339,12 @@ fun AnimeDetailsContent(
     if (showRelatedPopup) {
         DetailsGridPopup(
             title = "Related Anime",
-            nodes = details.relatedAnime.orEmpty().map { it.node },
+            entries = details.relatedAnime.orEmpty().map {
+                DetailsPopupEntry(
+                    node = it.node,
+                    relationLabel = it.relationTypeFormatted
+                )
+            },
             recommendationMeta = recommendationMeta,
             titleLanguage = titleLanguage,
             onAnimeClick = onAnimeClick,
@@ -330,7 +355,12 @@ fun AnimeDetailsContent(
     if (showRecommendationsPopup) {
         DetailsGridPopup(
             title = "Recommendations",
-            nodes = recommendations.map { it.node },
+            entries = recommendations.map {
+                DetailsPopupEntry(
+                    node = it.node,
+                    relationLabel = null
+                )
+            },
             recommendationMeta = recommendationMeta,
             titleLanguage = titleLanguage,
             isLoading = isRecommendationsLoading,
@@ -441,10 +471,14 @@ fun AnimeDetailsContent(
         // Action Buttons / My List Status
         item {
             if (details.myListStatus != null) {
-                val statusLabel = details.myListStatus.status
-                    ?.replace("_", " ")
-                    ?.uppercase()
-                    ?: "UNKNOWN"
+                val statusLabel = if (details.myListStatus.isRewatching) {
+                    "REWATCHING"
+                } else {
+                    details.myListStatus.status
+                        ?.replace("_", " ")
+                        ?.uppercase()
+                        ?: "UNKNOWN"
+                }
                 val progressLabel = "${details.myListStatus.numEpisodesWatched}/${details.numEpisodes ?: "?"}"
                 val scoreLabel = if (details.myListStatus.score > 0) "Score ${details.myListStatus.score}" else "Score -"
 
@@ -1235,7 +1269,7 @@ fun AnimeDetailsContent(
 @Composable
 private fun DetailsGridPopup(
     title: String,
-    nodes: List<AnimeNode>,
+    entries: List<DetailsPopupEntry>,
     recommendationMeta: Map<Int, RecommendationCardMeta>,
     titleLanguage: TitleLanguage,
     isLoading: Boolean = false,
@@ -1274,7 +1308,7 @@ private fun DetailsGridPopup(
                 }
 
                 when {
-                    isLoading && nodes.isEmpty() -> {
+                    isLoading && entries.isEmpty() -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -1282,7 +1316,7 @@ private fun DetailsGridPopup(
                             CircularProgressIndicator()
                         }
                     }
-                    nodes.isEmpty() -> {
+                    entries.isEmpty() -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -1299,17 +1333,18 @@ private fun DetailsGridPopup(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             gridItems(
-                                items = nodes,
-                                key = { it.id }
-                            ) { node ->
+                                items = entries,
+                                key = { "${it.node.id}_${it.relationLabel ?: ""}" }
+                            ) { entry ->
                                 RecommendationGridCard(
-                                    anime = node,
-                                    meta = recommendationMeta[node.id],
+                                    anime = entry.node,
+                                    relationLabel = entry.relationLabel,
+                                    meta = recommendationMeta[entry.node.id],
                                     titleLanguage = titleLanguage,
                                     modifier = Modifier.fillMaxWidth(),
                                     onClick = {
                                         onDismiss()
-                                        onAnimeClick(node.id)
+                                        onAnimeClick(entry.node.id)
                                     }
                                 )
                             }
@@ -1321,9 +1356,15 @@ private fun DetailsGridPopup(
     }
 }
 
+private data class DetailsPopupEntry(
+    val node: AnimeNode,
+    val relationLabel: String?
+)
+
 @Composable
 private fun RecommendationGridCard(
     anime: AnimeNode,
+    relationLabel: String? = null,
     meta: RecommendationCardMeta? = null,
     titleLanguage: TitleLanguage,
     modifier: Modifier = Modifier,
@@ -1391,7 +1432,7 @@ private fun RecommendationGridCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .height(92.dp)
+                    .height(if (relationLabel.isNullOrBlank()) 92.dp else 106.dp)
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
@@ -1407,10 +1448,31 @@ private fun RecommendationGridCard(
                     text = anime.getPreferredTitle(titleLanguage),
                     color = Color.White,
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
+                    maxLines = if (relationLabel.isNullOrBlank()) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Medium
                 )
+                if (!relationLabel.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = relationLabel,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
                 val resolvedMean = meta?.mean ?: anime.meanScore
                 val resolvedMembers = meta?.members ?: anime.numListUsers
                 val malScoreText = resolvedMean?.let { String.format("%.2f", it) } ?: "N/A"

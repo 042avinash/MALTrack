@@ -39,9 +39,13 @@ class ProfileViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var favoriteMetaJob: Job? = null
 
-    fun getProfile(username: String? = null) {
+    fun getProfile(username: String? = null, forceRefresh: Boolean = false) {
         val targetUsername = if (username == "null") null else username
         val normalizedUsername = targetUsername ?: "__self__"
+        if (forceRefresh) {
+            globalCachedProfiles.remove(normalizedUsername)
+            globalCachedProfileTimestamps.remove(normalizedUsername)
+        }
         val now = SystemClock.elapsedRealtime()
         val cachedState = globalCachedProfiles[normalizedUsername]
         val cacheTs = globalCachedProfileTimestamps[normalizedUsername]

@@ -73,7 +73,12 @@ class AnimeRepository @Inject constructor(
         }
     }
 
-    suspend fun getSeasonalAnime(year: Int? = null, season: String? = null, loadAllPages: Boolean = false): AnimeResponse {
+    suspend fun getSeasonalAnime(
+        year: Int? = null,
+        season: String? = null,
+        loadAllPages: Boolean = false,
+        forceRefresh: Boolean = false
+    ): AnimeResponse {
         val targetYear: Int
         val targetSeason: String
 
@@ -93,7 +98,11 @@ class AnimeRepository @Inject constructor(
         }
         val nsfwEnabled = isNsfw()
         val cacheKey = listOf(targetYear, targetSeason, nsfwEnabled, loadAllPages).joinToString("|")
-        seasonalAnimeCache[cacheKey]?.let { return it }
+        if (forceRefresh) {
+            seasonalAnimeCache.remove(cacheKey)
+        } else {
+            seasonalAnimeCache[cacheKey]?.let { return it }
+        }
 
         val limit = 100
         val allItems = mutableListOf<com.example.myapplication.data.model.AnimeData>()

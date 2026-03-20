@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -57,6 +58,8 @@ import com.example.myapplication.data.model.JikanFavoriteItem
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.UserProfile
 import com.example.myapplication.data.remote.JikanFriend
+import com.example.myapplication.data.model.AnimeStatistics
+import com.example.myapplication.data.model.MangaStatistics
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -151,36 +154,46 @@ fun ProfileScreen(
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when (val state = uiState) {
-                is ProfileUiState.Loading -> {
-                    ProfileLoadingShimmer(modifier = Modifier.fillMaxSize())
-                }
-                is ProfileUiState.Success -> {
-                    ProfileContent(
-                        malUser = state.malUser, 
-                        jikanUser = state.jikanUser, 
-                        friends = state.friends,
-                        animeFavoriteMeta = state.animeFavoriteMeta,
-                        mangaFavoriteMeta = state.mangaFavoriteMeta,
-                        onAnimeClick = onAnimeClick,
-                        onMangaClick = onMangaClick,
-                        onUserClick = onUserClick
-                    )
-                }
-                is ProfileUiState.Error -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = state.message,
-                            color = MaterialTheme.colorScheme.error,
-                            textAlign = TextAlign.Center
+        PullToRefreshBox(
+            isRefreshing = uiState is ProfileUiState.Loading,
+            onRefresh = { viewModel.getProfile(username, forceRefresh = true) },
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (val state = uiState) {
+                    is ProfileUiState.Loading -> {
+                        ProfileLoadingShimmer(modifier = Modifier.fillMaxSize())
+                    }
+                    is ProfileUiState.Success -> {
+                        ProfileContent(
+                            malUser = state.malUser,
+                            jikanUser = state.jikanUser,
+                            friends = state.friends,
+                            animeFavoriteMeta = state.animeFavoriteMeta,
+                            mangaFavoriteMeta = state.mangaFavoriteMeta,
+                            onAnimeClick = onAnimeClick,
+                            onMangaClick = onMangaClick,
+                            onUserClick = onUserClick
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.getProfile(username) }) {
-                            Text("Retry")
+                    }
+                    is ProfileUiState.Error -> {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = state.message,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = { viewModel.getProfile(username) }) {
+                                Text("Retry")
+                            }
                         }
                     }
                 }
@@ -524,12 +537,14 @@ fun ProfileContent(
         if (selectedTabIndex == 0) {
             animeProfileItems(
                 user = jikanUser,
+                malStats = malUser?.animeStatistics,
                 animeFavoriteMeta = animeFavoriteMeta,
                 onAnimeClick = onAnimeClick
             )
         } else {
             mangaProfileItems(
                 user = jikanUser,
+                malStats = malUser?.mangaStatistics,
                 mangaFavoriteMeta = mangaFavoriteMeta,
                 onMangaClick = onMangaClick
             )
@@ -671,6 +686,7 @@ private fun formatLastOnline(raw: String): String {
 
 fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
     user: JikanFullUserProfile,
+    malStats: AnimeStatistics?,
     animeFavoriteMeta: Map<Int, FavoriteMediaMeta>,
     onAnimeClick: (Int) -> Unit
 ) {
@@ -679,24 +695,24 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
     item {
         Column(modifier = Modifier.padding(16.dp)) {
             val items = listOf(
-                StatPiece(stats.watching, Color(0xFF2196F3), "Watching"),
-                StatPiece(stats.completed, Color(0xFF4CAF50), "Completed"),
-                StatPiece(stats.on_hold, Color(0xFFFFC107), "On Hold"),
-                StatPiece(stats.dropped, Color(0xFFF44336), "Dropped"),
-                StatPiece(stats.plan_to_watch, Color(0xFF9E9E9E), "Planned")
+                StatPiece(malStats?.numWatching ?: stats.watching, Color(0xFF2196F3), "Watching"),
+                StatPiece(malStats?.numCompleted ?: stats.completed, Color(0xFF4CAF50), "Completed"),
+                StatPiece(malStats?.numOnHold ?: stats.on_hold, Color(0xFFFFC107), "On Hold"),
+                StatPiece(malStats?.numDropped ?: stats.dropped, Color(0xFFF44336), "Dropped"),
+                StatPiece(malStats?.numPlanToWatch ?: stats.plan_to_watch, Color(0xFF9E9E9E), "Planned")
             )
-            StatsDonutChart(title = "Anime Stats", total = stats.total_entries, pieces = items)
+            StatsDonutChart(title = "Anime Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
         }
     }
 
     item {
         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                DetailRow("Days Watched", "%.1f".format(stats.days_watched))
-                DetailRow("Mean Score", stats.mean_score.toString())
-                DetailRow("Episodes", "%,d".format(stats.episodes_watched))
-                DetailRow("Rewatched", "%,d".format(stats.rewatched))
-                DetailRow("Total Entries", "%,d".format(stats.total_entries))
+                DetailRow("Days Watched", "%.1f".format(malStats?.numDaysWatched ?: stats.days_watched))
+                DetailRow("Mean Score", (malStats?.meanScore ?: stats.mean_score).toString())
+                DetailRow("Episodes", "%,d".format(malStats?.numEpisodes ?: stats.episodes_watched))
+                DetailRow("Rewatched", "%,d".format(malStats?.numTimesRewatched ?: stats.rewatched))
+                DetailRow("Total Entries", "%,d".format(malStats?.numItems ?: stats.total_entries))
             }
         }
     }
@@ -719,6 +735,7 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
 
 fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
     user: JikanFullUserProfile,
+    malStats: MangaStatistics?,
     mangaFavoriteMeta: Map<Int, FavoriteMediaMeta>,
     onMangaClick: (Int) -> Unit
 ) {
@@ -727,25 +744,25 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
     item {
         Column(modifier = Modifier.padding(16.dp)) {
             val items = listOf(
-                StatPiece(stats.reading, Color(0xFF2196F3), "Reading"),
-                StatPiece(stats.completed, Color(0xFF4CAF50), "Completed"),
-                StatPiece(stats.on_hold, Color(0xFFFFC107), "On Hold"),
-                StatPiece(stats.dropped, Color(0xFFF44336), "Dropped"),
-                StatPiece(stats.plan_to_read, Color(0xFF9E9E9E), "Planned")
+                StatPiece(malStats?.numReading ?: stats.reading, Color(0xFF2196F3), "Reading"),
+                StatPiece(malStats?.numCompleted ?: stats.completed, Color(0xFF4CAF50), "Completed"),
+                StatPiece(malStats?.numOnHold ?: stats.on_hold, Color(0xFFFFC107), "On Hold"),
+                StatPiece(malStats?.numDropped ?: stats.dropped, Color(0xFFF44336), "Dropped"),
+                StatPiece(malStats?.numPlanToRead ?: stats.plan_to_read, Color(0xFF9E9E9E), "Planned")
             )
-            StatsDonutChart(title = "Manga Stats", total = stats.total_entries, pieces = items)
+            StatsDonutChart(title = "Manga Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
         }
     }
 
     item {
         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                DetailRow("Days Read", "%.1f".format(stats.days_read))
-                DetailRow("Mean Score", stats.mean_score.toString())
-                DetailRow("Chapters", "%,d".format(stats.chapters_read))
-                DetailRow("Volumes", "%,d".format(stats.volumes_read))
-                DetailRow("Reread", "%,d".format(stats.reread))
-                DetailRow("Total Entries", "%,d".format(stats.total_entries))
+                DetailRow("Days Read", "%.1f".format(malStats?.numDaysRead ?: stats.days_read))
+                DetailRow("Mean Score", (malStats?.meanScore ?: stats.mean_score).toString())
+                DetailRow("Chapters", "%,d".format(malStats?.numChapters ?: stats.chapters_read))
+                DetailRow("Volumes", "%,d".format(malStats?.numVolumes ?: stats.volumes_read))
+                DetailRow("Reread", "%,d".format(malStats?.numTimesReread ?: stats.reread))
+                DetailRow("Total Entries", "%,d".format(malStats?.numItems ?: stats.total_entries))
             }
         }
     }
@@ -908,7 +925,7 @@ fun FavoriteCharactersSection(items: List<JikanFavoriteItem>) {
             items(items) { item ->
                 Column(
                     modifier = Modifier
-                        .width(80.dp)
+                        .width(76.dp)
                         .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -920,10 +937,11 @@ fun FavoriteCharactersSection(items: List<JikanFavoriteItem>) {
                             .clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = item.title ?: item.name ?: "Unknown",
                         style = MaterialTheme.typography.bodySmall,
+                        minLines = 2,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Medium,
@@ -945,7 +963,7 @@ fun FavoritePeopleSection(items: List<JikanFavoriteItem>) {
             items(items) { item ->
                 Column(
                     modifier = Modifier
-                        .width(80.dp)
+                        .width(76.dp)
                         .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -957,10 +975,11 @@ fun FavoritePeopleSection(items: List<JikanFavoriteItem>) {
                             .clip(CircleShape),
                         contentScale = ContentScale.Crop
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = item.title ?: item.name ?: "Unknown",
                         style = MaterialTheme.typography.bodySmall,
+                        minLines = 2,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         fontWeight = FontWeight.Medium,

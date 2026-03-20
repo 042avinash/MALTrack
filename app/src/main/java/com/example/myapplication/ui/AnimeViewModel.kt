@@ -565,7 +565,12 @@ class AnimeViewModel @Inject constructor(
                 currentSeasonalData = if (!forceRefresh && cached != null && now - cached.first < DISCOVERY_CACHE_TTL_MS) {
                     cached.second
                 } else {
-                    repository.getSeasonalAnime(selectedYear, selectedSeason, loadAllPages = true).data.also {
+                    repository.getSeasonalAnime(
+                        year = selectedYear,
+                        season = selectedSeason,
+                        loadAllPages = true,
+                        forceRefresh = forceRefresh
+                    ).data.also {
                         seasonalRawCache[cacheKey] = SystemClock.elapsedRealtime() to it
                     }
                 }

@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -58,6 +59,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,6 +72,7 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -158,7 +161,6 @@ fun ListActionToolbar(
     onSearchSubmit: () -> Unit,
     recentSearches: List<String>,
     onRecentSearchSelected: (String) -> Unit,
-    onRefreshClick: () -> Unit,
     onOpenSettings: () -> Unit,
     isAnime: Boolean,
     isOwnList: Boolean,
@@ -231,10 +233,6 @@ fun ListActionToolbar(
                         Icon(Icons.Default.Search, contentDescription = "Search")
                     }
 
-                    IconButton(onClick = onRefreshClick) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
-                    }
-
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Open Settings")
                     }
@@ -268,7 +266,7 @@ fun ListActionToolbar(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun UserAnimeSection(
     viewModel: UserListViewModel,
@@ -306,12 +304,29 @@ fun UserAnimeSection(
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
     var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
     var pendingAnimeEdit by remember { mutableStateOf<UserAnimeData?>(null) }
+    var isPullRefreshing by rememberSaveable(username) { mutableStateOf(false) }
+    var pullRefreshRequestToken by rememberSaveable(username) { mutableStateOf(0) }
 
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
     val isGridView by viewModel.getGridModeFlow(currentStatus)
         .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
+
+    val effectiveUsername = (if (username == "null") null else username) ?: "@me"
+    val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
+
+    LaunchedEffect(pullRefreshRequestToken) {
+        if (pullRefreshRequestToken <= 0) return@LaunchedEffect
+        isPullRefreshing = true
+        viewModel.refreshStatus(currentStatus, username = username)
+    }
+
+    LaunchedEffect(isPullRefreshing, loadingStatuses, refreshLoadingKey) {
+        if (isPullRefreshing && loadingStatuses[refreshLoadingKey] != true) {
+            isPullRefreshing = false
+        }
+    }
 
     LaunchedEffect(settledPage, username) {
         if (currentStatus !in loadedStatuses) {
@@ -391,9 +406,6 @@ fun UserAnimeSection(
                         submittedSearchQuery = it
                         isSearchTransitionLoading = true
                     },
-                    onRefreshClick = {
-                        viewModel.refreshStatus(currentStatus, username = username)
-                    },
                     onOpenSettings = onOpenSettings,
                     isAnime = true,
                     isOwnList = username.isNullOrBlank() || username == "@me",
@@ -429,20 +441,29 @@ fun UserAnimeSection(
             }
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isPullRefreshing,
+            onRefresh = { pullRefreshRequestToken += 1 },
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 0
+                beyondViewportPageCount = 1
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userListState.status) userListState.sort else null
                 val pageIsGridView by viewModel.getGridModeFlow(pageStatus)
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
-                val effectiveUsername = (if (username == "null") null else username) ?: "@me"
+                val pageListState = rememberSaveable(
+                    "anime_list_${username ?: "@me"}_$pageStatus",
+                    saver = LazyListState.Saver
+                ) { LazyListState() }
+                val pageGridState = rememberSaveable(
+                    "anime_grid_${username ?: "@me"}_$pageStatus",
+                    saver = LazyGridState.Saver
+                ) { LazyGridState() }
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
                 val pageItems = loadedLists[pageCacheKey]
                     ?: loadedLists.entries.firstOrNull {
@@ -479,6 +500,8 @@ fun UserAnimeSection(
                         onAnimeClick = onAnimeClick,
                         onAnimePlusOne = { item -> viewModel.quickIncrement(item.node.id) },
                         onAnimeEdit = { item -> pendingAnimeEdit = item },
+                        listState = pageListState,
+                        gridState = pageGridState
                     )
 
                     if (
@@ -527,7 +550,7 @@ fun UserAnimeSection(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun UserMangaSection(
     viewModel: UserMangaListViewModel,
@@ -564,12 +587,29 @@ fun UserMangaSection(
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
     var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
     var pendingMangaEdit by remember { mutableStateOf<UserMangaData?>(null) }
+    var isPullRefreshing by rememberSaveable(username) { mutableStateOf(false) }
+    var pullRefreshRequestToken by rememberSaveable(username) { mutableStateOf(0) }
 
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
     val isGridView by viewModel.getGridModeFlow(currentStatus)
         .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
+
+    val effectiveUsername = (if (username == "null") null else username) ?: "@me"
+    val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
+
+    LaunchedEffect(pullRefreshRequestToken) {
+        if (pullRefreshRequestToken <= 0) return@LaunchedEffect
+        isPullRefreshing = true
+        viewModel.refreshStatus(currentStatus, username = username)
+    }
+
+    LaunchedEffect(isPullRefreshing, loadingStatuses, refreshLoadingKey) {
+        if (isPullRefreshing && loadingStatuses[refreshLoadingKey] != true) {
+            isPullRefreshing = false
+        }
+    }
 
     LaunchedEffect(settledPage, username) {
         if (currentStatus !in loadedStatuses) {
@@ -649,9 +689,6 @@ fun UserMangaSection(
                         submittedSearchQuery = it
                         isSearchTransitionLoading = true
                     },
-                    onRefreshClick = {
-                        viewModel.refreshStatus(currentStatus, username = username)
-                    },
                     onOpenSettings = onOpenSettings,
                     isAnime = false,
                     isOwnList = username.isNullOrBlank() || username == "@me",
@@ -687,20 +724,29 @@ fun UserMangaSection(
             }
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isPullRefreshing,
+            onRefresh = { pullRefreshRequestToken += 1 },
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
             HorizontalPager(
                 state = pagerState,
-                beyondViewportPageCount = 0
+                beyondViewportPageCount = 1
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userMangaListState.status) userMangaListState.sort else null
                 val pageIsGridView by viewModel.getGridModeFlow(pageStatus)
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
-                val effectiveUsername = (if (username == "null") null else username) ?: "@me"
+                val pageListState = rememberSaveable(
+                    "manga_list_${username ?: "@me"}_$pageStatus",
+                    saver = LazyListState.Saver
+                ) { LazyListState() }
+                val pageGridState = rememberSaveable(
+                    "manga_grid_${username ?: "@me"}_$pageStatus",
+                    saver = LazyGridState.Saver
+                ) { LazyGridState() }
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
                 val pageItems = loadedLists[pageCacheKey]
                     ?: loadedLists.entries.firstOrNull {
@@ -736,6 +782,8 @@ fun UserMangaSection(
                         onMangaClick = onMangaClick,
                         onMangaPlusOne = { item -> viewModel.quickIncrement(item.node.id) },
                         onMangaEdit = { item -> pendingMangaEdit = item },
+                        listState = pageListState,
+                        gridState = pageGridState
                     )
 
                     if (
@@ -799,15 +847,11 @@ fun UserAnimeList(
     isOwnList: Boolean = true,
     onAnimeClick: (Int) -> Unit,
     onAnimePlusOne: (UserAnimeData) -> Unit,
-    onAnimeEdit: (UserAnimeData) -> Unit
+    onAnimeEdit: (UserAnimeData) -> Unit,
+    listState: LazyListState,
+    gridState: LazyGridState
 ) {
     val nowEpochSeconds by rememberCurrentEpochSeconds()
-    val listState = rememberSaveable(listKey, saver = LazyListState.Saver) {
-        LazyListState()
-    }
-    val gridState = rememberSaveable(listKey, saver = LazyGridState.Saver) {
-        LazyGridState()
-    }
     val isSearching = searchQuery.isNotBlank()
 
     if (isGridView) {
@@ -943,14 +987,10 @@ fun UserMangaList(
     isOwnList: Boolean = true,
     onMangaClick: (Int) -> Unit,
     onMangaPlusOne: (UserMangaData) -> Unit,
-    onMangaEdit: (UserMangaData) -> Unit
+    onMangaEdit: (UserMangaData) -> Unit,
+    listState: LazyListState,
+    gridState: LazyGridState
 ) {
-    val listState = rememberSaveable(listKey, saver = LazyListState.Saver) {
-        LazyListState()
-    }
-    val gridState = rememberSaveable(listKey, saver = LazyGridState.Saver) {
-        LazyGridState()
-    }
     val isSearching = searchQuery.isNotBlank()
 
     if (isGridView) {
@@ -1172,7 +1212,12 @@ private fun rememberShimmerBrush(): Brush {
     )
 }
 
-fun getUserStatusIcon(status: String?): ImageVector {
+fun getUserStatusIcon(
+    status: String?,
+    isRewatching: Boolean = false,
+    isRereading: Boolean = false
+): ImageVector {
+    if (isRewatching || isRereading) return Icons.Default.Autorenew
     return when (status?.lowercase()) {
         "watching", "reading" -> Icons.Default.Visibility
         "completed" -> Icons.Default.CheckCircle
@@ -1180,6 +1225,19 @@ fun getUserStatusIcon(status: String?): ImageVector {
         "dropped" -> Icons.Default.Cancel
         "plan_to_watch", "plan_to_read" -> Icons.Default.Schedule
         else -> Icons.Default.Star
+    }
+}
+
+private fun getUserStatusLabel(
+    status: String?,
+    isRewatching: Boolean = false,
+    isRereading: Boolean = false
+): String {
+    return when {
+        isRewatching -> "REWATCHING"
+        isRereading -> "REREADING"
+        status.isNullOrBlank() -> "UNKNOWN"
+        else -> status.replace("_", " ").uppercase()
     }
 }
 
@@ -1290,14 +1348,20 @@ fun UserAnimeItem(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = getUserStatusIcon(data.listStatus.status),
+                                    imageVector = getUserStatusIcon(
+                                        status = data.listStatus.status,
+                                        isRewatching = data.listStatus.isRewatching
+                                    ),
                                     contentDescription = null,
                                     modifier = Modifier.size(14.dp),
                                     tint = MaterialTheme.colorScheme.secondary
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = data.listStatus.status.replace("_", " ").uppercase(),
+                                    text = getUserStatusLabel(
+                                        status = data.listStatus.status,
+                                        isRewatching = data.listStatus.isRewatching
+                                    ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.secondary
                                 )
@@ -1431,14 +1495,20 @@ fun UserMangaItem(
                         
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = getUserStatusIcon(data.listStatus.status),
+                                imageVector = getUserStatusIcon(
+                                    status = data.listStatus.status,
+                                    isRereading = data.listStatus.isRereading
+                                ),
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.secondary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = data.listStatus.status.replace("_", " ").uppercase(),
+                                text = getUserStatusLabel(
+                                    status = data.listStatus.status,
+                                    isRereading = data.listStatus.isRereading
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.secondary
                             )
@@ -1532,7 +1602,10 @@ fun UserAnimeGridItem(
                         .padding(4.dp)
                 ) {
                     Icon(
-                        imageVector = getUserStatusIcon(data.listStatus.status),
+                        imageVector = getUserStatusIcon(
+                            status = data.listStatus.status,
+                            isRewatching = data.listStatus.isRewatching
+                        ),
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1730,7 +1803,10 @@ fun UserMangaGridItem(
                         .padding(4.dp)
                 ) {
                     Icon(
-                        imageVector = getUserStatusIcon(data.listStatus.status),
+                        imageVector = getUserStatusIcon(
+                            status = data.listStatus.status,
+                            isRereading = data.listStatus.isRereading
+                        ),
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer

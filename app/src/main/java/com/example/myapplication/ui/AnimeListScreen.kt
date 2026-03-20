@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -130,6 +131,7 @@ fun AnimeListScreen(
     var searchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
     var showSeasonPicker by remember { mutableStateOf(false) }
+    var isPullRefreshInProgress by remember { mutableStateOf(false) }
     var pendingAnimeEdit by remember { mutableStateOf<QuickAnimeEdit?>(null) }
     var pendingMangaEdit by remember { mutableStateOf<QuickMangaEdit?>(null) }
     var loadingViewContext by remember { mutableStateOf(LoadingViewContext.HOME) }
@@ -352,23 +354,67 @@ fun AnimeListScreen(
                         isAnimeSearch = searchMediaType == SearchMediaType.ANIME
                     )
                 },
-                onForceRefreshClick = {
-                    loadingViewContext = LoadingViewContext.HOME
-                    viewModel.loadHomeData(forceRefresh = true)
-                },
                 onSettingsClick = onSettingsClick
             )
         }
     ) { paddingValues ->
-        Box(
+        val isPullRefreshing =
+            isPullRefreshInProgress || (
+                uiState is AnimeUiState.Loading &&
+                    (loadingViewContext == LoadingViewContext.HOME || loadingViewContext == LoadingViewContext.DISCOVERY)
+                )
+
+        LaunchedEffect(uiState, isPullRefreshInProgress) {
+            if (!isPullRefreshInProgress) return@LaunchedEffect
+            when (uiState) {
+                is AnimeUiState.HomeSuccess,
+                is AnimeUiState.SeasonalDetails,
+                is AnimeUiState.TopDiscoveryDetails,
+                is AnimeUiState.Error -> {
+                    isPullRefreshInProgress = false
+                }
+                else -> Unit
+            }
+        }
+
+        PullToRefreshBox(
+            isRefreshing = isPullRefreshing,
+            onRefresh = {
+                isPullRefreshInProgress = true
+                when (val state = uiState) {
+                    is AnimeUiState.HomeSuccess -> {
+                        loadingViewContext = LoadingViewContext.HOME
+                        viewModel.loadHomeData(forceRefresh = true)
+                    }
+                    is AnimeUiState.SeasonalDetails -> {
+                        loadingViewContext = LoadingViewContext.DISCOVERY
+                        viewModel.showSeasonalDetails(state.currentSort, forceRefresh = true)
+                    }
+                    is AnimeUiState.TopDiscoveryDetails -> {
+                        loadingViewContext = LoadingViewContext.DISCOVERY
+                        viewModel.showTopDiscovery(
+                            isAnime = state.isAnime,
+                            sort = state.currentSort,
+                            forceRefresh = true
+                        )
+                    }
+                    else -> {
+                        isPullRefreshInProgress = false
+                    }
+                }
+            },
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .pointerInput(Unit) {
-                    detectTapGestures(onTap = { focusManager.clearFocus() })
-                }
         ) {
-            when (val state = uiState) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { focusManager.clearFocus() })
+                    }
+            ) {
+                when (val state = uiState) {
                 is AnimeUiState.Loading -> {
                     if (loadingViewContext == LoadingViewContext.HOME) {
                         HomeLoadingShimmer(modifier = Modifier.fillMaxSize())
@@ -773,6 +819,7 @@ fun AnimeListScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
+                }
             }
         }
     }
@@ -1081,7 +1128,6 @@ private fun HomeSearchToolbar(
     onSearchSubmit: () -> Unit,
     recentSearches: List<String>,
     onRecentSearchSelected: (String) -> Unit,
-    onForceRefreshClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     val filteredRecent = remember(searchQuery, recentSearches) {
@@ -1102,7 +1148,6 @@ private fun HomeSearchToolbar(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (isSearchExpanded) {
@@ -1159,10 +1204,6 @@ private fun HomeSearchToolbar(
 
                     IconButton(onClick = { onSearchExpandChange(true) }) {
                         Icon(Icons.Default.Search, contentDescription = "Search")
-                    }
-
-                    IconButton(onClick = onForceRefreshClick) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh Home")
                     }
 
                     IconButton(onClick = onSettingsClick) {

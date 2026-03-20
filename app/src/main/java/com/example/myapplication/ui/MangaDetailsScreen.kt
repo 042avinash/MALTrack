@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,10 +106,20 @@ fun MangaDetailsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    var isPullRefreshing by remember { mutableStateOf(false) }
 
     val topBarTitle = if (uiState is MangaDetailsUiState.Success) {
         (uiState as MangaDetailsUiState.Success).details.getPreferredTitle(titleLanguage)
     } else "Details"
+
+    LaunchedEffect(uiState, isPullRefreshing) {
+        if (!isPullRefreshing) return@LaunchedEffect
+        when (uiState) {
+            is MangaDetailsUiState.Success,
+            is MangaDetailsUiState.Error -> isPullRefreshing = false
+            else -> Unit
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -147,42 +158,51 @@ fun MangaDetailsScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        PullToRefreshBox(
+            isRefreshing = isPullRefreshing,
+            onRefresh = {
+                isPullRefreshing = true
+                viewModel.loadDetails(forceRefresh = true)
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when (val state = uiState) {
-                is MangaDetailsUiState.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                }
-                is MangaDetailsUiState.Error -> {
-                    Text(
-                        text = state.message,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                is MangaDetailsUiState.Success -> {
-                    MangaDetailsContent(
-                        details = state.details, 
-                        cardMeta = state.cardMeta,
-                        recommendations = state.recommendations,
-                        reviews = state.reviews,
-                        allReviewsCount = state.allReviewsCount,
-                        isRecommendationsLoaded = state.isRecommendationsLoaded,
-                        isRecommendationsLoading = state.isRecommendationsLoading,
-                        isReviewsLoaded = state.isReviewsLoaded,
-                        isReviewsLoading = state.isReviewsLoading,
-                        titleLanguage = titleLanguage,
-                        onLoadRecommendations = { viewModel.loadRecommendations() },
-                        onLoadReviews = { viewModel.loadReviews() },
-                        onMangaClick = onMangaClick,
-                        onUpdateStatus = { status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish ->
-                            viewModel.updateListStatus(status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish)
-                        },
-                        onDeleteStatus = { viewModel.deleteFromList() }
-                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (val state = uiState) {
+                    is MangaDetailsUiState.Loading -> {
+                        if (!isPullRefreshing) {
+                            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                        }
+                    }
+                    is MangaDetailsUiState.Error -> {
+                        Text(
+                            text = state.message,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                    is MangaDetailsUiState.Success -> {
+                        MangaDetailsContent(
+                            details = state.details,
+                            cardMeta = state.cardMeta,
+                            recommendations = state.recommendations,
+                            reviews = state.reviews,
+                            allReviewsCount = state.allReviewsCount,
+                            isRecommendationsLoaded = state.isRecommendationsLoaded,
+                            isRecommendationsLoading = state.isRecommendationsLoading,
+                            isReviewsLoaded = state.isReviewsLoaded,
+                            isReviewsLoading = state.isReviewsLoading,
+                            titleLanguage = titleLanguage,
+                            onLoadRecommendations = { viewModel.loadRecommendations() },
+                            onLoadReviews = { viewModel.loadReviews() },
+                            onMangaClick = onMangaClick,
+                            onUpdateStatus = { status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish ->
+                                viewModel.updateListStatus(status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish)
+                            },
+                            onDeleteStatus = { viewModel.deleteFromList() }
+                        )
+                    }
                 }
             }
         }
