@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Movie
@@ -96,6 +97,7 @@ fun SettingsScreen(
     var showAnimeDiscoveryStyleDialog by remember { mutableStateOf(false) }
     var showMangaDiscoveryStyleDialog by remember { mutableStateOf(false) }
     var showHomeSectionsDialog by remember { mutableStateOf(false) }
+    var showAppInfoDialog by remember { mutableStateOf(false) }
     var showDefaultsPage by remember { mutableStateOf(false) }
     var startupParentSelection by remember { mutableStateOf<StartupParentOption?>(null) }
     var pendingStartupSection by remember { mutableStateOf<DefaultSection?>(null) }
@@ -291,30 +293,14 @@ fun SettingsScreen(
                     onClick = onFeedbackClick
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                HorizontalDivider()
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.maltrack_logo),
-                        contentDescription = "MALTrack Logo",
-                        modifier = Modifier.height(48.dp).padding(bottom = 8.dp)
-                    )
-                    Text(
-                        text = "MALTrack v${BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Created by - Avinash Singh",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                SettingClickableItem(
+                    icon = Icons.Default.Info,
+                    title = "App Info",
+                    subtitle = "View logo, version and creator",
+                    onClick = { showAppInfoDialog = true }
+                )
             }
         }
     }
@@ -366,6 +352,10 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+
+    if (showAppInfoDialog) {
+        AppInfoDialog(onDismiss = { showAppInfoDialog = false })
     }
 
     startupParentSelection?.let { parent ->
@@ -580,6 +570,42 @@ fun SettingsScreen(
         )
     }
 
+}
+
+@Composable
+private fun AppInfoDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        title = { Text("App Info") },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.maltrack_logo),
+                    contentDescription = "MALTrack Logo",
+                    modifier = Modifier
+                        .height(56.dp)
+                        .padding(bottom = 10.dp)
+                )
+                Text(
+                    text = "MALTrack v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = "Created by - Avinash Singh",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    )
 }
 
 private fun openNotificationSettings(context: android.content.Context) {

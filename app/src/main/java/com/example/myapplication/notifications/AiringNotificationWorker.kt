@@ -202,7 +202,7 @@ class AiringNotificationWorker(
         )
 
         val notification = NotificationCompat.Builder(applicationContext, AIRING_NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setContentTitle(if (isTest) "Test notification" else "New episode aired")
             .setContentText(
                 if (isTest) {
