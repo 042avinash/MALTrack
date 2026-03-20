@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.2`
+- `v1.3.3`
 
 ## Core Features
 
@@ -258,6 +258,16 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Improved lockscreen/status-bar notification visibility with a thicker, simplified small notification glyph
 - Splash screen update:
   - Added dedicated launch splash theme with branded splash background image
+
+## Post-v1.3.2 Patch Updates
+
+- User List refresh behavior:
+  - Reintroduced pull-to-refresh on User Anime/Manga lists with a lightweight trigger flow
+  - Refresh now targets only the currently visible status tab to reduce unnecessary reload work
+- Related popup metadata polish:
+  - Added clearer relation-type highlighting under related anime cards for better scanability
+- Pull-to-refresh rollout:
+  - Added pull-to-refresh support across major surfaces (Profile/Home/Seasonal/Top lists/Details/User Lists) and aligned stale-data refresh behavior improvements
   - Wired `MainActivity` to switch from splash theme to app theme at startup
 - Settings/App info assets:
   - Updated in-app branding assets used in settings/app info surfaces
