@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -65,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -1930,12 +1932,8 @@ fun SeasonalDetailsView(
                         )
                     }
                 }
-                items(animeList) { anime ->
-                    AnimatedVisibility(
-                        visible = !(collapsedSections[type] ?: false),
-                        enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = tween(200)),
-                        exit = fadeOut(animationSpec = tween(160)) + shrinkVertically(animationSpec = tween(160))
-                    ) {
+                if (!(collapsedSections[type] ?: false)) {
+                    items(animeList) { anime ->
                         HorizontalCard(
                             anime = anime, 
                             anilistMedia = airingDetails[anime.node.id],
@@ -1976,12 +1974,8 @@ fun SeasonalDetailsView(
                         )
                     }
                 }
-                items(animeList) { anime ->
-                    AnimatedVisibility(
-                        visible = !(collapsedSections[type] ?: false),
-                        enter = fadeIn(animationSpec = tween(200)) + expandVertically(animationSpec = tween(200)),
-                        exit = fadeOut(animationSpec = tween(160)) + shrinkVertically(animationSpec = tween(160))
-                    ) {
+                if (!(collapsedSections[type] ?: false)) {
+                    items(animeList) { anime ->
                         AnimeItem(
                             anime = anime,
                             anilistMedia = airingDetails[anime.node.id],
@@ -2002,16 +1996,23 @@ private fun CollapseChevronPill(
     isCollapsed: Boolean,
     onToggle: () -> Unit
 ) {
+    val rotation by animateFloatAsState(
+        targetValue = if (isCollapsed) 0f else 180f,
+        animationSpec = spring(stiffness = 700f, dampingRatio = 0.9f),
+        label = "collapseChevronRotation"
+    )
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
         modifier = Modifier.clickable(onClick = onToggle)
     ) {
         Icon(
-            imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+            imageVector = Icons.Default.KeyboardArrowDown,
             contentDescription = if (isCollapsed) "Expand section" else "Collapse section",
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            modifier = Modifier
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .rotate(rotation)
         )
     }
 }

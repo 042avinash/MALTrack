@@ -119,6 +119,14 @@ class UserListViewModel @Inject constructor(
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                     fetchMissingAiringDetails(cachedList)
+                    if (!globalAnimeListCacheComplete.contains(cacheKey)) {
+                        launchFullListBackfill(
+                            cacheKey = cacheKey,
+                            statusKey = statusKey,
+                            username = effectiveUsername,
+                            sort = effectiveSort
+                        )
+                    }
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
@@ -144,6 +152,15 @@ class UserListViewModel @Inject constructor(
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
                                     if (resolvedFirstPage.paging.next == null) {
                                         globalAnimeListCacheComplete.add(cacheKey)
+                                    } else {
+                                        val fullList = repository.getAllUserAnimeList(
+                                            username = effectiveUsername,
+                                            status = if (statusKey == "all") null else statusKey,
+                                            sort = effectiveSort
+                                        )
+                                        globalFullAnimeListCache[cacheKey] = fullList
+                                        globalAnimeListCacheComplete.add(cacheKey)
+                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                                     }
                                 }
                             }
@@ -153,6 +170,13 @@ class UserListViewModel @Inject constructor(
                         _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
                         if (firstPage.paging.next == null) {
                             globalAnimeListCacheComplete.add(cacheKey)
+                        } else {
+                            launchFullListBackfill(
+                                cacheKey = cacheKey,
+                                statusKey = statusKey,
+                                username = effectiveUsername,
+                                sort = effectiveSort
+                            )
                         }
 
                         val malIds = firstPage.data

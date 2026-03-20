@@ -27,6 +27,7 @@ class ProfileViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val PROFILE_CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val MAX_FAVORITE_META_FETCH = 12
         private val globalCachedProfiles = mutableMapOf<String, ProfileUiState.Success>()
         private val globalCachedProfileTimestamps = mutableMapOf<String, Long>()
     }
@@ -174,8 +175,8 @@ class ProfileViewModel @Inject constructor(
     private suspend fun loadFavoriteMeta(
         fullProfile: JikanFullUserProfile
     ): Pair<Map<Int, FavoriteMediaMeta>, Map<Int, FavoriteMediaMeta>> = supervisorScope {
-        val animeIds = fullProfile.favorites?.anime.orEmpty().map { it.mal_id }.distinct().take(6)
-        val mangaIds = fullProfile.favorites?.manga.orEmpty().map { it.mal_id }.distinct().take(6)
+        val animeIds = fullProfile.favorites?.anime.orEmpty().map { it.mal_id }.distinct().take(MAX_FAVORITE_META_FETCH)
+        val mangaIds = fullProfile.favorites?.manga.orEmpty().map { it.mal_id }.distinct().take(MAX_FAVORITE_META_FETCH)
 
         val animeMeta = mutableMapOf<Int, FavoriteMediaMeta>()
         animeIds.chunked(2).forEach { batch ->

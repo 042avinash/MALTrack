@@ -43,6 +43,18 @@ class AnimeViewModel @Inject constructor(
         private const val HOME_CACHE_TTL_MS = 2 * 60 * 1000L
         private const val DISCOVERY_CACHE_TTL_MS = 10 * 60 * 1000L
         private const val SEARCH_CACHE_TTL_MS = 5 * 60 * 1000L
+        private val MEDIA_TYPE_ORDER = listOf(
+            "TV",
+            "MOVIE",
+            "OVA",
+            "ONA",
+            "SPECIAL",
+            "MUSIC",
+            "CM",
+            "PV",
+            "TV_SPECIAL",
+            "UNKNOWN"
+        )
         private val globalHomeCache = mutableMapOf<String, Pair<Long, AnimeUiState.HomeSuccess>>()
         private val seasonalRawCache = mutableMapOf<String, Pair<Long, List<AnimeData>>>()
         private var publishingMangaCache: Pair<Long, List<MangaData>>? = null
@@ -589,12 +601,13 @@ class AnimeViewModel @Inject constructor(
             else -> filtered
         }
 
-        val categorized = filtered.groupBy { 
+        val categorized = filtered.groupBy {
             it.node.mediaType?.uppercase() ?: "UNKNOWN" 
         }
+        val orderedCategorized = orderByFixedMediaType(categorized)
         
         _uiState.value = AnimeUiState.SeasonalDetails(
-            categorizedAnime = categorized,
+            categorizedAnime = orderedCategorized,
             year = currentYear,
             season = currentSeason,
             canGoNext = canGoToNextSeason(currentYear, currentSeason),
@@ -641,16 +654,34 @@ class AnimeViewModel @Inject constructor(
             else -> filtered
         }
 
-        val categorized = filtered.groupBy { 
+        val categorized = filtered.groupBy {
             it.node.mediaType?.uppercase() ?: "UNKNOWN" 
         }
+        val orderedCategorized = orderByFixedMediaType(categorized)
 
         _uiState.value = AnimeUiState.MangaDiscoveryDetails(
-            categorizedManga = categorized,
+            categorizedManga = orderedCategorized,
             title = "Releasing Now (Manga)",
             currentSort = currentDiscoverySort,
             type = currentDiscoveryType
         )
+    }
+
+    private fun <T> orderByFixedMediaType(categorized: Map<String, List<T>>): Map<String, List<T>> {
+        val ordered = linkedMapOf<String, List<T>>()
+
+        MEDIA_TYPE_ORDER.forEach { type ->
+            val items = categorized[type]
+            if (!items.isNullOrEmpty()) ordered[type] = items
+        }
+
+        categorized.entries
+            .asSequence()
+            .filter { it.key !in MEDIA_TYPE_ORDER && it.value.isNotEmpty() }
+            .sortedBy { it.key }
+            .forEach { (type, items) -> ordered[type] = items }
+
+        return ordered
     }
 
     fun showTopDiscovery(isAnime: Boolean, sort: String = "members", forceRefresh: Boolean = false) {

@@ -110,6 +110,14 @@ class UserMangaListViewModel @Inject constructor(
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
+                    if (!globalMangaListCacheComplete.contains(cacheKey)) {
+                        launchFullListBackfill(
+                            cacheKey = cacheKey,
+                            statusKey = statusKey,
+                            username = effectiveUsername,
+                            sort = effectiveSort
+                        )
+                    }
                 } else {
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
                     try {
@@ -135,6 +143,15 @@ class UserMangaListViewModel @Inject constructor(
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
                                     if (resolvedFirstPage.paging.next == null) {
                                         globalMangaListCacheComplete.add(cacheKey)
+                                    } else {
+                                        val fullList = repository.getAllUserMangaList(
+                                            username = effectiveUsername,
+                                            status = if (statusKey == "all") null else statusKey,
+                                            sort = effectiveSort
+                                        )
+                                        globalFullMangaListCache[cacheKey] = fullList
+                                        globalMangaListCacheComplete.add(cacheKey)
+                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                                     }
                                 }
                             }
@@ -144,6 +161,13 @@ class UserMangaListViewModel @Inject constructor(
                         _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
                         if (firstPage.paging.next == null) {
                             globalMangaListCacheComplete.add(cacheKey)
+                        } else {
+                            launchFullListBackfill(
+                                cacheKey = cacheKey,
+                                statusKey = statusKey,
+                                username = effectiveUsername,
+                                sort = effectiveSort
+                            )
                         }
                     } finally {
                         _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
