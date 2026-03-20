@@ -5,7 +5,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.2.10`
+- `v1.2.11`
 
 ## Core Features
 
@@ -212,6 +212,21 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - AniList airing data reliability update:
   - Added bounded-time AniList enrichment fetches with cache-aware reuse to reduce long blocking waits
   - Improved countdown stability across root navigation (Home/Profile/User List transitions)
+
+## v1.2.11 Highlights
+
+- Seasonal chart section-order stability:
+  - Fixed media-type section order to a consistent sequence
+  - Sorting now affects items within each section, not section position
+- Seasonal collapse/expand UX and performance:
+  - Collapsed sections now remove items from composition to prevent large empty gaps
+  - Kept header-only visibility and added lightweight chevron rotation animation
+- User-list long-tab completeness fix:
+  - Restored reliable full-list backfill after fast first-page loads (Anime + Manga)
+  - Prevented abrupt cutoff where long tabs showed only a few entries
+- Profile favorites metadata coverage:
+  - Increased favorite metadata fetch cap so later cards also populate `Members` and `MAL` score
+  - Added better spacing between Favorite Characters and Favorite People sections
 
 ## Tech Stack
 
