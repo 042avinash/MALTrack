@@ -178,7 +178,7 @@ fun ListActionToolbar(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
         shadowElevation = 8.dp
     ) {
         Column(

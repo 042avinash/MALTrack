@@ -1095,7 +1095,7 @@ private fun HomeSearchToolbar(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
         shadowElevation = 8.dp
     ) {
         Column(
@@ -1121,6 +1121,14 @@ private fun HomeSearchToolbar(
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp),
                         textStyle = MaterialTheme.typography.bodyMedium,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            errorContainerColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.8f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                        ),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
                         trailingIcon = {
@@ -1724,7 +1732,7 @@ private fun DiscoveryButtonCluster(
                 .clickable(onClick = onSeasonalClick),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.99f)
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -1801,7 +1809,7 @@ private fun DiscoveryMiniButton(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.99f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -1848,7 +1856,7 @@ private fun RandomAnimeHeroButton(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.99f)
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
