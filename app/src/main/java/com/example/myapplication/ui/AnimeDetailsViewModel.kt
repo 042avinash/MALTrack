@@ -43,6 +43,7 @@ class AnimeDetailsViewModel @Inject constructor(
     private var supplementaryJob: Job? = null
     private var reviewsJob: Job? = null
     private var recommendationsJob: Job? = null
+    private var peopleJob: Job? = null
 
     private val _uiState = MutableStateFlow<AnimeDetailsUiState>(AnimeDetailsUiState.Loading)
     val uiState: StateFlow<AnimeDetailsUiState> = _uiState.asStateFlow()
@@ -117,7 +118,9 @@ class AnimeDetailsViewModel @Inject constructor(
             airingMedia = null,
             isSupplementaryLoaded = false,
             isRecommendationsLoaded = false,
-            isRecommendationsLoading = false
+            isRecommendationsLoading = false,
+            isPeopleLoaded = false,
+            isPeopleLoading = false
         )
         detailsCache[animeId] = SystemClock.elapsedRealtime() to successState
         _uiState.value = successState
@@ -218,6 +221,32 @@ class AnimeDetailsViewModel @Inject constructor(
         }
     }
 
+    fun loadPeople(forceRefresh: Boolean = false) {
+        val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
+        if (current.isPeopleLoaded && !forceRefresh) return
+
+        peopleJob?.cancel()
+        peopleJob = viewModelScope.launch {
+            val before = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            _uiState.value = before.copy(isPeopleLoading = true)
+
+            val staff = runCatching {
+                repository.getAnimeStaff(animeId).data
+            }.getOrDefault(emptyList())
+
+            val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (latest.details.id != animeId) return@launch
+
+            val updated = latest.copy(
+                staff = staff,
+                isPeopleLoaded = true,
+                isPeopleLoading = false
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
     fun deleteFromList() {
         viewModelScope.launch {
             try {
@@ -295,9 +324,6 @@ class AnimeDetailsViewModel @Inject constructor(
                     val themesDeferred = async {
                         runCatching { repository.getAnimeThemes(animeId).data }.getOrNull()
                     }
-                    val staffDeferred = async {
-                        runCatching { repository.getAnimeStaff(animeId).data }.getOrDefault(emptyList())
-                    }
                     val streamingDeferred = async {
                         runCatching { repository.getAnimeStreaming(animeId).data }.getOrDefault(emptyList())
                     }
@@ -307,7 +333,6 @@ class AnimeDetailsViewModel @Inject constructor(
 
                     SupplementaryAnimeData(
                         characters = charactersDeferred.await(),
-                        staff = staffDeferred.await(),
                         themes = themesDeferred.await(),
                         streaming = streamingDeferred.await(),
                         airingMedia = airingDeferred.await()
@@ -320,7 +345,6 @@ class AnimeDetailsViewModel @Inject constructor(
 
             val updated = current.copy(
                 characters = enriched.characters,
-                staff = enriched.staff,
                 themes = enriched.themes,
                 streaming = enriched.streaming,
                 airingMedia = enriched.airingMedia,
@@ -349,7 +373,9 @@ sealed interface AnimeDetailsUiState {
         val isReviewsLoaded: Boolean = false,
         val isReviewsLoading: Boolean = false,
         val isRecommendationsLoaded: Boolean = false,
-        val isRecommendationsLoading: Boolean = false
+        val isRecommendationsLoading: Boolean = false,
+        val isPeopleLoaded: Boolean = false,
+        val isPeopleLoading: Boolean = false
     ) : AnimeDetailsUiState
     data class Error(val message: String) : AnimeDetailsUiState
 }
@@ -362,7 +388,6 @@ data class RecommendationCardMeta(
 
 private data class SupplementaryAnimeData(
     val characters: List<JikanCharacterData>,
-    val staff: List<JikanStaffData>,
     val themes: JikanThemesData?,
     val streaming: List<JikanStreamingData>,
     val airingMedia: AniListMedia?

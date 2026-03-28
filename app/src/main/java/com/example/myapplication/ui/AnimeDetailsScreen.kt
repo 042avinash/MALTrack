@@ -234,6 +234,8 @@ fun AnimeDetailsScreen(
                             allReviewsCount = state.allReviewsCount,
                             isRecommendationsLoaded = state.isRecommendationsLoaded,
                             isRecommendationsLoading = state.isRecommendationsLoading,
+                            isPeopleLoaded = state.isPeopleLoaded,
+                            isPeopleLoading = state.isPeopleLoading,
                             isReviewsLoaded = state.isReviewsLoaded,
                             isReviewsLoading = state.isReviewsLoading,
                             streaming = state.streaming,
@@ -243,6 +245,7 @@ fun AnimeDetailsScreen(
                             onReviewsClick = { onReviewsClick(state.details.id) },
                             onLoadReviews = { viewModel.loadReviews() },
                             onLoadRecommendations = { viewModel.loadRecommendations() },
+                            onLoadPeople = { viewModel.loadPeople() },
                             onAnimeClick = onAnimeClick,
                             onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
                                 viewModel.updateListStatus(status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish)
@@ -267,6 +270,8 @@ fun AnimeDetailsContent(
     allReviewsCount: Int,
     isRecommendationsLoaded: Boolean,
     isRecommendationsLoading: Boolean,
+    isPeopleLoaded: Boolean,
+    isPeopleLoading: Boolean,
     isReviewsLoaded: Boolean,
     isReviewsLoading: Boolean,
     streaming: List<JikanStreamingData>,
@@ -276,6 +281,7 @@ fun AnimeDetailsContent(
     onReviewsClick: () -> Unit,
     onLoadReviews: () -> Unit,
     onLoadRecommendations: () -> Unit,
+    onLoadPeople: () -> Unit,
     onAnimeClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
     onDeleteStatus: () -> Unit
@@ -803,23 +809,52 @@ fun AnimeDetailsContent(
             }
         }
 
-        // People / Staff
+        // Staff
         item {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
                 Text(
-                    text = "People",
+                    text = "Staff",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                if (displayStaff.isEmpty()) {
+                if (!isPeopleLoaded && !isPeopleLoading) {
+                    Button(
+                        onClick = onLoadPeople,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Text("Show Staff Credits")
+                    }
+                } else if (isPeopleLoading) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Loading people...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else if (displayStaff.isEmpty()) {
                     Text(
                         text = "No people data available",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
+                    TextButton(
+                        onClick = onLoadPeople,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Text("Retry Staff Load")
+                    }
                 } else {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),

@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.4`
+- `v1.3.5`
 
 ## Core Features
 
@@ -292,6 +292,16 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Edit List Status numeric-input fix:
   - Episode/score-style counter text fields now support full backspace clear
   - Empty numeric input is now treated as `0` instead of getting stuck
+
+## v1.3.5 Highlights
+
+- Anime Details `Staff` section update:
+  - Renamed section heading from `People` to `Staff` for accuracy
+  - Staff data now loads on-demand instead of automatic background fetch
+  - Added full-width `Show Staff Credits` action
+  - Added full-width retry action (`Retry Staff Load`) when initial staff fetch returns empty/fails
+- Details-page load overhead reduction:
+  - Removed staff from automatic supplementary fetch fanout to reduce initial network pressure
 
 ## Tech Stack
 
