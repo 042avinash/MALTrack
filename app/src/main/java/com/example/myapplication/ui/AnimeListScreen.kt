@@ -436,7 +436,7 @@ fun AnimeListScreen(
                                 item {
                                     HomeSection(
                                         title = "Continue Watching",
-                                        subtitle = "From your MAL list",
+                                        subtitle = "From your MAL",
                                         items = state.continueWatching,
                                         airingDetails = airingDetails,
                                         titleLanguage = titleLanguage,
@@ -453,7 +453,7 @@ fun AnimeListScreen(
                                 item {
                                     HomeSection(
                                         title = "Continue Reading",
-                                        subtitle = "From your MAL list",
+                                        subtitle = "From your MAL",
                                         items = state.continueReading.map { it.toAnimeData() },
                                         airingDetails = emptyMap(),
                                         titleLanguage = titleLanguage,
@@ -496,7 +496,7 @@ fun AnimeListScreen(
                             if (homeAnimePicksEnabled) {
                                 item {
                                     HomeSection(
-                                        title = "Personalized Anime Picks",
+                                        title = "Recommended Anime",
                                         subtitle = "Based on your list activity",
                                         items = state.animeRecommendations,
                                         airingDetails = airingDetails,
@@ -514,7 +514,7 @@ fun AnimeListScreen(
                             if (homeMangaPicksEnabled) {
                                 item {
                                     HomeSection(
-                                        title = "Personalized Manga Picks",
+                                        title = "Recommended Manga",
                                         subtitle = "Based on your list activity",
                                         items = state.mangaRecommendations.map { it.toAnimeData() },
                                         airingDetails = emptyMap(),

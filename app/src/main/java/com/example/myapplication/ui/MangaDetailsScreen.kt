@@ -7,9 +7,11 @@ import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -48,7 +51,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -504,8 +509,9 @@ fun MangaDetailsContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                InfoRow("English", details.alternativeTitles?.en ?: "N/A")
-                InfoRow("Japanese", details.alternativeTitles?.ja ?: "N/A")
+                InfoRow("English", details.alternativeTitles?.en ?: "N/A", copyOnLongPress = true)
+                InfoRow("Japanese", details.alternativeTitles?.ja ?: "N/A", copyOnLongPress = true)
+                InfoRow("Romaji", details.title.takeIf { it.isNotBlank() } ?: "N/A", copyOnLongPress = true)
                 InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "N/A")
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -1168,6 +1174,7 @@ fun EditMangaListStatusDialog(
                         OutlinedTextField(value = startDate, onValueChange = { startDate = it }, modifier = Modifier.weight(1f), readOnly = true, 
                             trailingIcon = { IconButton(onClick = { showStartDatePicker = true }) { Icon(Icons.Default.DateRange, null) } })
                         TextButton(onClick = { startDate = dateFormat.format(Date()) }) { Text("Today") }
+                        IconButton(onClick = { startDate = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear start date") }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -1177,6 +1184,7 @@ fun EditMangaListStatusDialog(
                         OutlinedTextField(value = endDate, onValueChange = { endDate = it }, modifier = Modifier.weight(1f), readOnly = true, 
                             trailingIcon = { IconButton(onClick = { showEndDatePicker = true }) { Icon(Icons.Default.DateRange, null) } })
                         TextButton(onClick = { endDate = dateFormat.format(Date()) }) { Text("Today") }
+                        IconButton(onClick = { endDate = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear finish date") }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1237,7 +1245,11 @@ private fun CounterField(label: String, value: Int, onValueChange: (Int) -> Unit
             OutlinedTextField(
                 value = value.toString(),
                 onValueChange = { newValue ->
-                    newValue.toIntOrNull()?.let { onValueChange(it) }
+                    if (newValue.isBlank()) {
+                        onValueChange(0)
+                    } else {
+                        newValue.toIntOrNull()?.let { onValueChange(it) }
+                    }
                 },
                 modifier = Modifier.width(80.dp),
                 textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
@@ -1288,10 +1300,33 @@ private fun ThemeLink(theme: String, onClick: () -> Unit) {
 
 @Composable
 private fun InfoRow(label: String, value: String) {
+    InfoRow(label = label, value = value, copyOnLongPress = false)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun InfoRow(label: String, value: String, copyOnLongPress: Boolean) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val canCopy = copyOnLongPress && value.isNotBlank() && value != "N/A"
+    val copyText: () -> Unit = {
+        clipboardManager.setText(AnnotatedString(value))
+        Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .then(
+                if (canCopy) {
+                    Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = copyText
+                    )
+                } else Modifier
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "$label: ",
@@ -1301,8 +1336,22 @@ private fun InfoRow(label: String, value: String) {
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
         )
+        if (canCopy) {
+            IconButton(
+                onClick = copyText,
+                modifier = Modifier.size(20.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Copy $label",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }
 

@@ -11,9 +11,11 @@ import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -33,6 +35,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -53,7 +56,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -75,6 +80,7 @@ import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.JikanStaffData
 import com.example.myapplication.data.remote.JikanStreamingData
 import com.example.myapplication.data.remote.JikanThemesData
 import com.example.myapplication.data.remote.JikanVoiceActor
@@ -221,6 +227,7 @@ fun AnimeDetailsScreen(
                         AnimeDetailsContent(
                             details = state.details,
                             characters = state.characters,
+                            staff = state.staff,
                             recommendations = state.recommendations,
                             themes = state.themes,
                             reviews = state.reviews,
@@ -253,6 +260,7 @@ fun AnimeDetailsScreen(
 fun AnimeDetailsContent(
     details: AnimeDetailsResponse, 
     characters: List<JikanCharacterData>,
+    staff: List<JikanStaffData>,
     recommendations: List<Recommendation>,
     themes: JikanThemesData?,
     reviews: List<JikanReviewData>,
@@ -278,6 +286,7 @@ fun AnimeDetailsContent(
     var selectedPicture by remember { mutableStateOf<String?>(null) }
     var showStorageSettingsPrompt by remember { mutableStateOf(false) }
     var showAllCast by remember { mutableStateOf(false) }
+    var showAllPeople by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showRelatedPopup by remember { mutableStateOf(false) }
@@ -287,6 +296,9 @@ fun AnimeDetailsContent(
         val allVAs = characters.flatMap { it.voice_actors }
         val japaneseVAs = allVAs.filter { it.language == "Japanese" }.distinctBy { it.person.mal_id }
         if (japaneseVAs.isNotEmpty()) japaneseVAs else allVAs.distinctBy { it.person.mal_id }
+    }
+    val displayStaff = remember(staff) {
+        staff.distinctBy { it.person.mal_id }
     }
 
     if (showDeleteConfirm) {
@@ -439,12 +451,16 @@ fun AnimeDetailsContent(
                         }
                         
                         // Next Episode Timer
-                        if (details.status == "currently_airing" && airingMedia?.nextAiringEpisode != null) {
-                            val timeUntil = airingMedia.nextAiringEpisode.timeUntilAiring
-                            val days = timeUntil / 86400
-                            val hours = (timeUntil % 86400) / 3600
-                            val mins = (timeUntil % 3600) / 60
-                            val countdown = if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
+                        if (details.status == "currently_airing") {
+                            val nextAiring = airingMedia?.nextAiringEpisode
+                            val nextEpisode = nextAiring?.episode
+                            val airedEpisodes = nextEpisode?.minus(1)?.coerceAtLeast(0)
+                            val countdown = nextAiring?.timeUntilAiring?.let { timeUntil ->
+                                val days = timeUntil / 86400
+                                val hours = (timeUntil % 86400) / 3600
+                                val mins = (timeUntil % 3600) / 60
+                                if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
+                            } ?: "Unknown"
                             
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
@@ -456,7 +472,7 @@ fun AnimeDetailsContent(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "Ep ${airingMedia.nextAiringEpisode.episode}: $countdown",
+                                    text = "Aired: ${airedEpisodes ?: "?"} | Next Ep ${nextEpisode ?: "?"}: ${if (countdown == "Unknown") "?" else countdown}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold
@@ -787,6 +803,96 @@ fun AnimeDetailsContent(
             }
         }
 
+        // People / Staff
+        item {
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                Text(
+                    text = "People",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                if (displayStaff.isEmpty()) {
+                    Text(
+                        text = "No people data available",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                } else {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(displayStaff.take(5)) { staffData ->
+                            Column(
+                                modifier = Modifier
+                                    .width(96.dp)
+                                    .clickable {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(staffData.person.url)))
+                                    },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                AsyncImage(
+                                    model = staffData.person.images.jpg?.image_url,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = staffData.person.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = staffData.positions.firstOrNull() ?: "Staff",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                        if (displayStaff.size > 5) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .width(80.dp)
+                                        .height(120.dp)
+                                        .clickable { showAllPeople = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(60.dp)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "View\nAll",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Information Details
         item {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -797,8 +903,9 @@ fun AnimeDetailsContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                InfoRow("English", details.alternativeTitles?.en ?: "N/A")
-                InfoRow("Japanese", details.alternativeTitles?.ja ?: "N/A")
+                InfoRow("English", details.alternativeTitles?.en ?: "N/A", copyOnLongPress = true)
+                InfoRow("Japanese", details.alternativeTitles?.ja ?: "N/A", copyOnLongPress = true)
+                InfoRow("Romaji", details.title.takeIf { it.isNotBlank() } ?: "N/A", copyOnLongPress = true)
                 InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "N/A")
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -1253,6 +1360,78 @@ fun AnimeDetailsContent(
         }
     }
 
+    if (showAllPeople) {
+        Dialog(
+            onDismissRequest = { showAllPeople = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { showAllPeople = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close")
+                        }
+                        Text("People", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(displayStaff) { staffData ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(staffData.person.url)))
+                                    }
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = staffData.person.images.jpg?.image_url,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = staffData.person.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = staffData.positions.joinToString().ifBlank { "Staff" },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = Color.LightGray.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if (showEditDialog) {
         EditListStatusDialog(
             currentStatus = details.myListStatus ?: MyListStatus(),
@@ -1627,7 +1806,8 @@ fun EditListStatusDialog(
                             status = "on_hold"
                         }
                         StatusIcon(Icons.Default.Schedule, "Planned", status == "plan_to_watch") { 
-                            status = "plan_to_watch" 
+                            status = "plan_to_watch"
+                            episodes = 0
                         }
                         StatusIcon(Icons.Default.Cancel, "Dropped", status == "dropped") { 
                             status = "dropped" 
@@ -1640,7 +1820,17 @@ fun EditListStatusDialog(
                     CounterField(
                         label = "Episodes Watched",
                         value = episodes,
-                        onValueChange = { episodes = it.coerceIn(0, if (maxEpisodes > 0) maxEpisodes else 9999) },
+                        onValueChange = {
+                            val bounded = it.coerceIn(0, if (maxEpisodes > 0) maxEpisodes else 9999)
+                            val wasZeroToPositiveFromPlanned = status == "plan_to_watch" && episodes == 0 && bounded > 0
+                            if (bounded != episodes && status in setOf("on_hold", "dropped", "plan_to_watch", "completed")) {
+                                status = "watching"
+                            }
+                            if (wasZeroToPositiveFromPlanned && startDate.isBlank()) {
+                                startDate = dateFormat.format(Calendar.getInstance().time)
+                            }
+                            episodes = bounded
+                        },
                         max = if (maxEpisodes > 0) maxEpisodes else null
                     )
 
@@ -1669,6 +1859,9 @@ fun EditListStatusDialog(
                         TextButton(onClick = { startDate = dateFormat.format(Calendar.getInstance().time) }) {
                             Text("Today")
                         }
+                        IconButton(onClick = { startDate = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear start date")
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1689,6 +1882,9 @@ fun EditListStatusDialog(
                         )
                         TextButton(onClick = { endDate = dateFormat.format(Calendar.getInstance().time) }) {
                             Text("Today")
+                        }
+                        IconButton(onClick = { endDate = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear finish date")
                         }
                     }
 
@@ -1734,7 +1930,8 @@ fun EditListStatusDialog(
 
                 Button(
                     onClick = {
-                        onSave(status, isRewatching, score, episodes, priority, timesRewatched, rewatchValue, tags, notes, startDate, endDate)
+                        val normalizedEpisodes = if (status == "plan_to_watch") 0 else episodes
+                        onSave(status, isRewatching, score, normalizedEpisodes, priority, timesRewatched, rewatchValue, tags, notes, startDate, endDate)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1774,7 +1971,11 @@ private fun CounterField(label: String, value: Int, onValueChange: (Int) -> Unit
             OutlinedTextField(
                 value = value.toString(),
                 onValueChange = { newValue ->
-                    newValue.toIntOrNull()?.let { onValueChange(it) }
+                    if (newValue.isBlank()) {
+                        onValueChange(0)
+                    } else {
+                        newValue.toIntOrNull()?.let { onValueChange(it) }
+                    }
                 },
                 modifier = Modifier.width(80.dp),
                 textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
@@ -1825,10 +2026,33 @@ private fun ThemeLink(theme: String, onClick: () -> Unit) {
 
 @Composable
 private fun InfoRow(label: String, value: String) {
+    InfoRow(label = label, value = value, copyOnLongPress = false)
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun InfoRow(label: String, value: String, copyOnLongPress: Boolean) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val canCopy = copyOnLongPress && value.isNotBlank() && value != "N/A"
+    val copyText: () -> Unit = {
+        clipboardManager.setText(AnnotatedString(value))
+        Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .then(
+                if (canCopy) {
+                    Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = copyText
+                    )
+                } else Modifier
+            )
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "$label: ",
@@ -1838,8 +2062,22 @@ private fun InfoRow(label: String, value: String) {
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
         )
+        if (canCopy) {
+            IconButton(
+                onClick = copyText,
+                modifier = Modifier.size(20.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Copy $label",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }
 

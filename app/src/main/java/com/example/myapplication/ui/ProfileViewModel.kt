@@ -188,7 +188,14 @@ class ProfileViewModel @Inject constructor(
                 async {
                     id to runCatching { repository.getAnimeDetails(id) }
                         .getOrNull()
-                        ?.let { FavoriteMediaMeta(it.mean, it.numListUsers) }
+                        ?.let {
+                            FavoriteMediaMeta(
+                                mean = it.mean,
+                                numListUsers = it.numListUsers,
+                                userStatus = it.myListStatus?.status,
+                                userScore = it.myListStatus?.score
+                            )
+                        }
                 }
             }.forEach { deferred ->
                 val (id, meta) = deferred.await()
@@ -202,7 +209,14 @@ class ProfileViewModel @Inject constructor(
                 async {
                     id to runCatching { repository.getMangaDetails(id) }
                         .getOrNull()
-                        ?.let { FavoriteMediaMeta(it.mean, it.numListUsers) }
+                        ?.let {
+                            FavoriteMediaMeta(
+                                mean = it.mean,
+                                numListUsers = it.numListUsers,
+                                userStatus = it.myListStatus?.status,
+                                userScore = it.myListStatus?.score
+                            )
+                        }
                 }
             }.forEach { deferred ->
                 val (id, meta) = deferred.await()
@@ -216,7 +230,9 @@ class ProfileViewModel @Inject constructor(
 
 data class FavoriteMediaMeta(
     val mean: Float? = null,
-    val numListUsers: Int? = null
+    val numListUsers: Int? = null,
+    val userStatus: String? = null,
+    val userScore: Int? = null
 )
 
 sealed interface ProfileUiState {

@@ -10,6 +10,7 @@ import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.JikanStaffData
 import com.example.myapplication.data.remote.JikanStreamingData
 import com.example.myapplication.data.remote.JikanThemesData
 import com.example.myapplication.data.repository.AnimeRepository
@@ -107,6 +108,7 @@ class AnimeDetailsViewModel @Inject constructor(
         val successState = AnimeDetailsUiState.Success(
             details = baseDetails,
             characters = emptyList(),
+            staff = emptyList(),
             recommendations = emptyList(),
             themes = null,
             reviews = emptyList(),
@@ -293,6 +295,9 @@ class AnimeDetailsViewModel @Inject constructor(
                     val themesDeferred = async {
                         runCatching { repository.getAnimeThemes(animeId).data }.getOrNull()
                     }
+                    val staffDeferred = async {
+                        runCatching { repository.getAnimeStaff(animeId).data }.getOrDefault(emptyList())
+                    }
                     val streamingDeferred = async {
                         runCatching { repository.getAnimeStreaming(animeId).data }.getOrDefault(emptyList())
                     }
@@ -302,6 +307,7 @@ class AnimeDetailsViewModel @Inject constructor(
 
                     SupplementaryAnimeData(
                         characters = charactersDeferred.await(),
+                        staff = staffDeferred.await(),
                         themes = themesDeferred.await(),
                         streaming = streamingDeferred.await(),
                         airingMedia = airingDeferred.await()
@@ -314,6 +320,7 @@ class AnimeDetailsViewModel @Inject constructor(
 
             val updated = current.copy(
                 characters = enriched.characters,
+                staff = enriched.staff,
                 themes = enriched.themes,
                 streaming = enriched.streaming,
                 airingMedia = enriched.airingMedia,
@@ -330,6 +337,7 @@ sealed interface AnimeDetailsUiState {
     data class Success(
         val details: AnimeDetailsResponse,
         val characters: List<JikanCharacterData>,
+        val staff: List<JikanStaffData>,
         val recommendations: List<Recommendation>,
         val themes: JikanThemesData?,
         val reviews: List<JikanReviewData>,
@@ -354,6 +362,7 @@ data class RecommendationCardMeta(
 
 private data class SupplementaryAnimeData(
     val characters: List<JikanCharacterData>,
+    val staff: List<JikanStaffData>,
     val themes: JikanThemesData?,
     val streaming: List<JikanStreamingData>,
     val airingMedia: AniListMedia?

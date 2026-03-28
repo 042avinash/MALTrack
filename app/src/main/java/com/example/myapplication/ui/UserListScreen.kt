@@ -1337,8 +1337,8 @@ fun UserAnimeItem(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        val countdown = if (data.node.status == "currently_airing") {
-                            formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds)
+                        val nextLabel = if (data.node.status == "currently_airing") {
+                            formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds) ?: "?"
                         } else null
 
                         Row(
@@ -1368,7 +1368,7 @@ fun UserAnimeItem(
                             }
                         }
 
-                        if (countdown != null) {
+                        if (nextLabel != null) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
                                 modifier = Modifier
@@ -1379,7 +1379,7 @@ fun UserAnimeItem(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "Next Ep: $countdown",
+                                    text = "Next: $nextLabel",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold
@@ -1672,10 +1672,10 @@ fun UserAnimeGridItem(
                         style = MaterialTheme.typography.labelSmall
                     )
                     
-                    val countdown = if (data.node.status == "currently_airing") {
-                        formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds)
+                    val nextLabel = if (data.node.status == "currently_airing") {
+                        formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds) ?: "?"
                     } else null
-                    if (countdown != null) {
+                    if (nextLabel != null) {
                         Box(
                             modifier = Modifier
                                 .padding(top = 2.dp)
@@ -1686,7 +1686,7 @@ fun UserAnimeGridItem(
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = "Next: $countdown",
+                                text = "Next: $nextLabel",
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,

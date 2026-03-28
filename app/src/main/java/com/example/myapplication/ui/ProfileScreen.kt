@@ -19,9 +19,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -38,6 +44,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.myapplication.data.model.JikanFavoriteItem
@@ -199,6 +207,39 @@ fun ProfileScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UserAvatar(
+    imageUrl: String?,
+    contentDescription: String?,
+    size: Dp
+) {
+    if (imageUrl.isNullOrBlank()) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(size * 0.5f)
+            )
+        }
+    } else {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
     }
 }
 
@@ -380,13 +421,10 @@ fun ProfileContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    AsyncImage(
-                        model = malUser?.picture ?: jikanUser.images?.jpg?.image_url,
+                    UserAvatar(
+                        imageUrl = malUser?.picture ?: jikanUser.images?.jpg?.image_url,
                         contentDescription = "Profile Picture",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
+                        size = 100.dp
                     )
                     IconButton(
                         onClick = { showAboutDialog = true },
@@ -419,10 +457,27 @@ fun ProfileContent(
                     )
                 }
 
-                if (!jikanUser.external.isNullOrEmpty()) {
+                val validExternalLinks = jikanUser.external
+                    .orEmpty()
+                    .filter { link ->
+                        val url = link.url?.trim().orEmpty()
+                        val name = link.name?.trim().orEmpty()
+                        val lowerName = name.lowercase()
+                        val lowerUrl = url.lowercase()
+                        val isRssLike = lowerName.contains("rss") ||
+                            lowerName.contains("feed") ||
+                            lowerUrl.contains("rss") ||
+                            lowerUrl.contains("feed")
+
+                        url.startsWith("http", ignoreCase = true) &&
+                            name.isNotBlank() &&
+                            !isRssLike
+                    }
+
+                if (validExternalLinks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(jikanUser.external) { link ->
+                        items(validExternalLinks) { link ->
                             AssistChip(
                                 onClick = { 
                                     link.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
@@ -480,13 +535,10 @@ fun ProfileContent(
                                     .clickable { onUserClick(friend.user.username) },
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                AsyncImage(
-                                    model = friend.user.images.jpg?.image_url,
+                                UserAvatar(
+                                    imageUrl = friend.user.images.jpg?.image_url,
                                     contentDescription = friend.user.username,
-                                    modifier = Modifier
-                                        .size(60.dp)
-                                        .clip(CircleShape),
-                                    contentScale = ContentScale.Crop
+                                    size = 60.dp
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
@@ -619,13 +671,10 @@ private fun FriendsDialog(
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AsyncImage(
-                                model = friend.user.images.jpg?.image_url,
+                            UserAvatar(
+                                imageUrl = friend.user.images.jpg?.image_url,
                                 contentDescription = friend.user.username,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape),
-                                contentScale = ContentScale.Crop
+                                size = 56.dp
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -1019,6 +1068,36 @@ fun FavoriteMediaSection(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
+                        if ((meta?.userScore ?: 0) > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(6.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF2B2B2B).copy(alpha = 0.9f))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = "User Score",
+                                        tint = Color(0xFFFFD54F),
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Text(
+                                        text = "${meta?.userScore}",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -1061,10 +1140,39 @@ fun FavoriteMediaSection(
                                 fontSize = 10.sp
                             )
                         }
+                        meta?.userStatus?.let { status ->
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(6.dp)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = getFavoriteStatusIcon(status),
+                                    contentDescription = "User Status",
+                                    modifier = Modifier.size(13.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+private fun getFavoriteStatusIcon(status: String?): ImageVector {
+    return when (status?.lowercase()) {
+        "watching", "reading" -> Icons.Default.Visibility
+        "completed" -> Icons.Default.CheckCircle
+        "on_hold" -> Icons.Default.PauseCircle
+        "plan_to_watch", "plan_to_read" -> Icons.Default.Schedule
+        "dropped" -> Icons.Default.Cancel
+        else -> Icons.Default.Info
     }
 }
 

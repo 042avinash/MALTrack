@@ -13,6 +13,9 @@ interface JikanApiService {
     @GET("anime/{id}/characters")
     suspend fun getAnimeCharacters(@Path("id") id: Int): JikanCharactersResponse
 
+    @GET("anime/{id}/staff")
+    suspend fun getAnimeStaff(@Path("id") id: Int): JikanStaffResponse
+
     @GET("anime/{id}/themes")
     suspend fun getAnimeThemes(@Path("id") id: Int): JikanThemesResponse
 
@@ -85,6 +88,17 @@ data class JikanCharacterData(
     val character: JikanCharacter,
     val role: String,
     val voice_actors: List<JikanVoiceActor> = emptyList()
+)
+
+@Serializable
+data class JikanStaffResponse(
+    val data: List<JikanStaffData> = emptyList()
+)
+
+@Serializable
+data class JikanStaffData(
+    val person: JikanPerson,
+    val positions: List<String> = emptyList()
 )
 
 @Serializable

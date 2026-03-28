@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.3`
+- `v1.3.4`
 
 ## Core Features
 
@@ -273,6 +273,25 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Updated in-app branding assets used in settings/app info surfaces
 - README refresh:
   - Added new repository cover image and updated current version tracking
+
+## v1.3.4 Highlights
+
+- Home label clarity updates:
+  - `From your MAL list` changed to `From your MAL` for Continue Watching/Reading
+  - `Personalized Anime Picks` changed to `Recommended Anime`
+  - `Personalized Manga Picks` changed to `Recommended Manga`
+- Anime Details updates:
+  - Added `People` section sourced from anime staff data
+  - Added copy affordance for titles in Information section (English/Japanese/Romaji) via long-press and copy icon
+  - Added currently-airing info chip behavior for unknown schedule data (`Aired: ? | Next Ep ?: ?`)
+  - Added plan-to-watch progress behavior: changing episodes from `0 -> >0` auto-sets status to `watching` and fills start date only when empty
+- Profile page updates:
+  - Favorite anime cards now show user status icon and user score overlay
+  - Added fallback placeholder avatar when profile/friend image is missing
+  - Filtered profile external links to avoid showing RSS/feed-style entries as normal links
+- Edit List Status numeric-input fix:
+  - Episode/score-style counter text fields now support full backspace clear
+  - Empty numeric input is now treated as `0` instead of getting stuck
 
 ## Tech Stack
 
