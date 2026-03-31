@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.5`
+- `v1.3.6`
 
 ## Core Features
 
@@ -302,6 +302,17 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Added full-width retry action (`Retry Staff Load`) when initial staff fetch returns empty/fails
 - Details-page load overhead reduction:
   - Removed staff from automatic supplementary fetch fanout to reduce initial network pressure
+
+## v1.3.6 Highlights
+
+- Anime Details My List status accuracy improvement:
+  - Added lightweight `my_list_status` refresh on details load
+  - My List status/progress/date box now updates independently without forcing a full details-page refetch
+- Release hardening and compatibility updates:
+  - Application ID migrated to `com.maltrack.app`
+  - Removed legacy `WRITE_EXTERNAL_STORAGE` manifest permission
+  - Enabled release code/resource shrinking (`minify` + `shrinkResources`)
+  - Added build-type backup policy via manifest placeholders (`allowBackup=true` debug, `allowBackup=false` release)
 
 ## Tech Stack
 

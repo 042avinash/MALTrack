@@ -1,6 +1,7 @@
 package com.example.myapplication.data.remote
 
 import com.example.myapplication.data.model.AnimeDetailsResponse
+import com.example.myapplication.data.model.AnimeMyListStatusResponse
 import com.example.myapplication.data.model.AnimeResponse
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaResponse
@@ -108,6 +109,13 @@ interface MalApiService {
         @Path("anime_id") animeId: Int,
         @Query("fields") fields: String = "id,title,recommendations"
     ): AnimeDetailsResponse
+
+    @GET("anime/{anime_id}")
+    suspend fun getAnimeMyListStatus(
+        @Header("X-MAL-CLIENT-ID") clientId: String,
+        @Path("anime_id") animeId: Int,
+        @Query("fields") fields: String = "my_list_status"
+    ): AnimeMyListStatusResponse
 
     @GET("manga/{manga_id}")
     suspend fun getMangaDetails(

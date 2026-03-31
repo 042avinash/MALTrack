@@ -44,6 +44,7 @@ class AnimeDetailsViewModel @Inject constructor(
     private var reviewsJob: Job? = null
     private var recommendationsJob: Job? = null
     private var peopleJob: Job? = null
+    private var myListStatusJob: Job? = null
 
     private val _uiState = MutableStateFlow<AnimeDetailsUiState>(AnimeDetailsUiState.Loading)
     val uiState: StateFlow<AnimeDetailsUiState> = _uiState.asStateFlow()
@@ -60,6 +61,7 @@ class AnimeDetailsViewModel @Inject constructor(
                     val cached = detailsCache[animeId]
                     if (cached != null && now - cached.first < CACHE_TTL_MS) {
                         _uiState.value = cached.second
+                        refreshMyListStatus()
                         if (cached.second.recommendationMeta.isEmpty()) {
                             launchCardMetaRefresh(cached.second.details)
                         }
@@ -86,6 +88,7 @@ class AnimeDetailsViewModel @Inject constructor(
                 // Soft-timeout fallback: keep UI useful and continue loading in background.
                 if (staleCached != null) {
                     _uiState.value = staleCached
+                    refreshMyListStatus()
                     if (staleCached.recommendationMeta.isEmpty()) {
                         launchCardMetaRefresh(staleCached.details)
                     }
@@ -124,8 +127,29 @@ class AnimeDetailsViewModel @Inject constructor(
         )
         detailsCache[animeId] = SystemClock.elapsedRealtime() to successState
         _uiState.value = successState
+        refreshMyListStatus()
         launchCardMetaRefresh(baseDetails)
         launchSupplementaryRefresh(baseDetails)
+    }
+
+    private fun refreshMyListStatus() {
+        val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
+        myListStatusJob?.cancel()
+        myListStatusJob = viewModelScope.launch {
+            val freshStatus = runCatching {
+                repository.getAnimeMyListStatus(animeId).myListStatus
+            }.getOrNull() ?: return@launch
+
+            val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (latest.details.id != animeId) return@launch
+            if (latest.details.myListStatus == freshStatus) return@launch
+
+            val updated = latest.copy(
+                details = latest.details.copy(myListStatus = freshStatus)
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
     }
 
     fun updateListStatus(

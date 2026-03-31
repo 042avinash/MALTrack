@@ -5,6 +5,7 @@ import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AniListRequest
 import com.example.myapplication.data.model.AniListVariables
 import com.example.myapplication.data.model.AnimeDetailsResponse
+import com.example.myapplication.data.model.AnimeMyListStatusResponse
 import com.example.myapplication.data.model.AnimeResponse
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.MangaDetailsResponse
@@ -256,6 +257,10 @@ class AnimeRepository @Inject constructor(
 
     suspend fun getAnimeRecommendationsOnly(id: Int): AnimeDetailsResponse {
         return apiService.getAnimeRecommendationsOnly(clientId = clientId, animeId = id)
+    }
+
+    suspend fun getAnimeMyListStatus(id: Int): AnimeMyListStatusResponse {
+        return apiService.getAnimeMyListStatus(clientId = clientId, animeId = id)
     }
 
     suspend fun getMangaDetails(id: Int): MangaDetailsResponse {

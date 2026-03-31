@@ -49,6 +49,12 @@ data class AnimeDetailsResponse(
 )
 
 @Serializable
+data class AnimeMyListStatusResponse(
+    val id: Int,
+    @SerialName("my_list_status") val myListStatus: MyListStatus? = null
+)
+
+@Serializable
 data class Statistics(
     val status: StatusStatistics? = null,
     @SerialName("num_list_users") val numListUsers: Int? = null

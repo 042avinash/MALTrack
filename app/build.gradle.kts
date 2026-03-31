@@ -12,20 +12,26 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.myapplication"
+        applicationId = "com.maltrack.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 20
-        versionName = "1.3.5"
+        versionCode = 21
+        versionName = "1.3.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
         manifestPlaceholders["authCallbackScheme"] = "myanimelist"
+        manifestPlaceholders["allowBackup"] = "true"
     }
 
     buildTypes {
+        debug {
+            manifestPlaceholders["allowBackup"] = "true"
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            manifestPlaceholders["allowBackup"] = "false"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
