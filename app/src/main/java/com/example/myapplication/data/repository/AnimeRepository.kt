@@ -24,6 +24,7 @@ import com.example.myapplication.data.remote.JikanCharactersResponse
 import com.example.myapplication.data.remote.JikanFriend
 import com.example.myapplication.data.remote.JikanMangaData
 import com.example.myapplication.data.remote.JikanReviewsResponse
+import com.example.myapplication.data.remote.JikanAnimeStatisticsResponse
 import com.example.myapplication.data.remote.JikanStaffResponse
 import com.example.myapplication.data.remote.JikanStreamingResponse
 import com.example.myapplication.data.remote.JikanThemesResponse
@@ -427,6 +428,10 @@ class AnimeRepository @Inject constructor(
 
     suspend fun getAnimeStreaming(id: Int): JikanStreamingResponse {
         return jikanApiService.getAnimeStreaming(id)
+    }
+
+    suspend fun getAnimeStatistics(id: Int): JikanAnimeStatisticsResponse {
+        return jikanApiService.getAnimeStatistics(id)
     }
 
     suspend fun getMyUserProfile(): UserProfile {

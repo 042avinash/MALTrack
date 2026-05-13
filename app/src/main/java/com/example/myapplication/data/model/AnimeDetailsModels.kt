@@ -38,7 +38,7 @@ data class AnimeDetailsResponse(
     val broadcast: Broadcast? = null,
     val source: String? = null,
     @SerialName("average_episode_duration") val averageEpisodeDuration: Int? = null,
-    val nsfw_rating: String? = null,
+    @SerialName("rating") val rating: String? = null,
     val pictures: List<MainPicture>? = null,
     val background: String? = null,
     @SerialName("related_anime") val relatedAnime: List<RelatedAnime>? = null,

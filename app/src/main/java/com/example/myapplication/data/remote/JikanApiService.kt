@@ -34,6 +34,9 @@ interface JikanApiService {
     @GET("anime/{id}/streaming")
     suspend fun getAnimeStreaming(@Path("id") id: Int): JikanStreamingResponse
 
+    @GET("anime/{id}/statistics")
+    suspend fun getAnimeStatistics(@Path("id") id: Int): JikanAnimeStatisticsResponse
+
     @GET("users/{username}/full")
     suspend fun getUserFullProfile(@Path("username") username: String): JikanFullUserProfileResponse
 
@@ -169,6 +172,23 @@ data class JikanStreamingResponse(
 data class JikanStreamingData(
     val name: String,
     val url: String
+)
+
+@Serializable
+data class JikanAnimeStatisticsResponse(
+    val data: JikanAnimeStatisticsData
+)
+
+@Serializable
+data class JikanAnimeStatisticsData(
+    val scores: List<JikanAnimeScoreBucket> = emptyList()
+)
+
+@Serializable
+data class JikanAnimeScoreBucket(
+    val score: Int,
+    val votes: Int,
+    val percentage: Double
 )
 
 @Serializable

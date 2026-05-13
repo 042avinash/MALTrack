@@ -11,6 +11,7 @@ import com.example.myapplication.data.model.Recommendation
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
 import com.example.myapplication.data.remote.JikanStaffData
+import com.example.myapplication.data.remote.JikanAnimeScoreBucket
 import com.example.myapplication.data.remote.JikanStreamingData
 import com.example.myapplication.data.remote.JikanThemesData
 import com.example.myapplication.data.repository.AnimeRepository
@@ -45,6 +46,7 @@ class AnimeDetailsViewModel @Inject constructor(
     private var recommendationsJob: Job? = null
     private var peopleJob: Job? = null
     private var myListStatusJob: Job? = null
+    private var communityStatsJob: Job? = null
 
     private val _uiState = MutableStateFlow<AnimeDetailsUiState>(AnimeDetailsUiState.Loading)
     val uiState: StateFlow<AnimeDetailsUiState> = _uiState.asStateFlow()
@@ -65,7 +67,7 @@ class AnimeDetailsViewModel @Inject constructor(
                         if (cached.second.recommendationMeta.isEmpty()) {
                             launchCardMetaRefresh(cached.second.details)
                         }
-                        if (!cached.second.isSupplementaryLoaded) {
+                        if (!cached.second.isSupplementaryLoaded || cached.second.scoreDistribution.isEmpty()) {
                             launchSupplementaryRefresh(cached.second.details)
                         }
                         return@launch
@@ -92,7 +94,7 @@ class AnimeDetailsViewModel @Inject constructor(
                     if (staleCached.recommendationMeta.isEmpty()) {
                         launchCardMetaRefresh(staleCached.details)
                     }
-                    if (!staleCached.isSupplementaryLoaded) {
+                    if (!staleCached.isSupplementaryLoaded || staleCached.scoreDistribution.isEmpty()) {
                         launchSupplementaryRefresh(staleCached.details)
                     }
                 }
@@ -146,6 +148,40 @@ class AnimeDetailsViewModel @Inject constructor(
 
             val updated = latest.copy(
                 details = latest.details.copy(myListStatus = freshStatus)
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
+    fun refreshCommunityStats() {
+        val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
+        if (current.isCommunityStatsRefreshing) return
+
+        communityStatsJob?.cancel()
+        communityStatsJob = viewModelScope.launch {
+            _uiState.value = current.copy(isCommunityStatsRefreshing = true)
+
+            val freshDetails = runCatching { repository.getAnimeDetailsLite(animeId) }.getOrNull()
+            val freshScoreDistribution = runCatching {
+                repository.getAnimeStatistics(animeId).data.scores
+            }.getOrDefault(current.scoreDistribution)
+
+            val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (latest.details.id != animeId) return@launch
+
+            val updatedDetails = freshDetails?.let {
+                latest.details.copy(
+                    numListUsers = it.numListUsers,
+                    numScoringUsers = it.numScoringUsers,
+                    statistics = it.statistics
+                )
+            } ?: latest.details
+
+            val updated = latest.copy(
+                details = updatedDetails,
+                scoreDistribution = freshScoreDistribution,
+                isCommunityStatsRefreshing = false
             )
             detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
             _uiState.value = updated
@@ -351,6 +387,9 @@ class AnimeDetailsViewModel @Inject constructor(
                     val streamingDeferred = async {
                         runCatching { repository.getAnimeStreaming(animeId).data }.getOrDefault(emptyList())
                     }
+                    val scoreDistributionDeferred = async {
+                        runCatching { repository.getAnimeStatistics(animeId).data.scores }.getOrDefault(emptyList())
+                    }
                     val airingDeferred = async {
                         runCatching { repository.getAiringAnimeDetails(listOf(animeId)).firstOrNull() }.getOrNull()
                     }
@@ -359,6 +398,7 @@ class AnimeDetailsViewModel @Inject constructor(
                         characters = charactersDeferred.await(),
                         themes = themesDeferred.await(),
                         streaming = streamingDeferred.await(),
+                        scoreDistribution = scoreDistributionDeferred.await(),
                         airingMedia = airingDeferred.await()
                     )
                 }
@@ -371,6 +411,7 @@ class AnimeDetailsViewModel @Inject constructor(
                 characters = enriched.characters,
                 themes = enriched.themes,
                 streaming = enriched.streaming,
+                scoreDistribution = enriched.scoreDistribution,
                 airingMedia = enriched.airingMedia,
                 isSupplementaryLoaded = true
             )
@@ -391,6 +432,7 @@ sealed interface AnimeDetailsUiState {
         val reviews: List<JikanReviewData>,
         val allReviewsCount: Int,
         val streaming: List<JikanStreamingData>,
+        val scoreDistribution: List<JikanAnimeScoreBucket> = emptyList(),
         val airingMedia: AniListMedia?,
         val recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
         val isSupplementaryLoaded: Boolean = false,
@@ -399,7 +441,8 @@ sealed interface AnimeDetailsUiState {
         val isRecommendationsLoaded: Boolean = false,
         val isRecommendationsLoading: Boolean = false,
         val isPeopleLoaded: Boolean = false,
-        val isPeopleLoading: Boolean = false
+        val isPeopleLoading: Boolean = false,
+        val isCommunityStatsRefreshing: Boolean = false
     ) : AnimeDetailsUiState
     data class Error(val message: String) : AnimeDetailsUiState
 }
@@ -414,5 +457,6 @@ private data class SupplementaryAnimeData(
     val characters: List<JikanCharacterData>,
     val themes: JikanThemesData?,
     val streaming: List<JikanStreamingData>,
+    val scoreDistribution: List<JikanAnimeScoreBucket>,
     val airingMedia: AniListMedia?
 )

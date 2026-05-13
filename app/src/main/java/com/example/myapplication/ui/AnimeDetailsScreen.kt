@@ -31,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -39,10 +41,15 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -80,6 +87,7 @@ import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.JikanAnimeScoreBucket
 import com.example.myapplication.data.remote.JikanStaffData
 import com.example.myapplication.data.remote.JikanStreamingData
 import com.example.myapplication.data.remote.JikanThemesData
@@ -239,6 +247,8 @@ fun AnimeDetailsScreen(
                             isReviewsLoaded = state.isReviewsLoaded,
                             isReviewsLoading = state.isReviewsLoading,
                             streaming = state.streaming,
+                            scoreDistribution = state.scoreDistribution,
+                            isCommunityStatsRefreshing = state.isCommunityStatsRefreshing,
                             airingMedia = state.airingMedia,
                             recommendationMeta = state.recommendationMeta,
                             titleLanguage = titleLanguage,
@@ -246,6 +256,7 @@ fun AnimeDetailsScreen(
                             onLoadReviews = { viewModel.loadReviews() },
                             onLoadRecommendations = { viewModel.loadRecommendations() },
                             onLoadPeople = { viewModel.loadPeople() },
+                            onRefreshCommunityStats = { viewModel.refreshCommunityStats() },
                             onAnimeClick = onAnimeClick,
                             onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
                                 viewModel.updateListStatus(status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish)
@@ -275,6 +286,8 @@ fun AnimeDetailsContent(
     isReviewsLoaded: Boolean,
     isReviewsLoading: Boolean,
     streaming: List<JikanStreamingData>,
+    scoreDistribution: List<JikanAnimeScoreBucket>,
+    isCommunityStatsRefreshing: Boolean,
     airingMedia: AniListMedia?,
     recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
     titleLanguage: TitleLanguage,
@@ -282,6 +295,7 @@ fun AnimeDetailsContent(
     onLoadReviews: () -> Unit,
     onLoadRecommendations: () -> Unit,
     onLoadPeople: () -> Unit,
+    onRefreshCommunityStats: () -> Unit,
     onAnimeClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
     onDeleteStatus: () -> Unit
@@ -297,6 +311,7 @@ fun AnimeDetailsContent(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showRelatedPopup by remember { mutableStateOf(false) }
     var showRecommendationsPopup by remember { mutableStateOf(false) }
+    var communityStatsInfo by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val displayVAs = remember(characters) {
         val allVAs = characters.flatMap { it.voice_actors }
@@ -384,6 +399,17 @@ fun AnimeDetailsContent(
             isLoading = isRecommendationsLoading,
             onAnimeClick = onAnimeClick,
             onDismiss = { showRecommendationsPopup = false }
+        )
+    }
+
+    communityStatsInfo?.let { (title, message) ->
+        AlertDialog(
+            onDismissRequest = { communityStatsInfo = null },
+            title = { Text(title) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { communityStatsInfo = null }) { Text("OK") }
+            }
         )
     }
 
@@ -947,9 +973,19 @@ fun AnimeDetailsContent(
                 InfoRow("Rank", "#${details.rank ?: "N/A"}")
                 InfoRow("Popularity", "#${details.popularity ?: "N/A"}")
                 InfoRow("Source", details.source?.replace("_", " ")?.capitalize() ?: "N/A")
+                InfoRow(
+                    "Episode Duration",
+                    details.averageEpisodeDuration
+                        ?.takeIf { it > 0 }
+                        ?.let { seconds ->
+                            val minutes = seconds / 60
+                            val remainingSeconds = seconds % 60
+                            if (remainingSeconds == 0) "${minutes} min" else "${minutes} min ${remainingSeconds} sec"
+                        } ?: "N/A"
+                )
                 InfoRow("Aired", "${details.startDate ?: "?"} to ${details.endDate ?: "?"}")
                 InfoRow("Studios", details.studios?.joinToString { it.name } ?: "N/A")
-                InfoRow("Rating", details.nsfw_rating?.replace("_", " ")?.uppercase() ?: "N/A")
+                InfoRow("Rating", formatMalRating(details.rating))
             }
         }
 
@@ -1182,24 +1218,128 @@ fun AnimeDetailsContent(
         }
 
         // Stats Donut Chart
-        if (details.statistics?.status != null) {
+        if (details.statistics?.status != null || scoreDistribution.isNotEmpty()) {
             item {
-                val stats = details.statistics.status
-                val watching = stats.watching ?: 0
-                val completed = stats.completed ?: 0
-                val onHold = stats.onHold ?: 0
-                val dropped = stats.dropped ?: 0
-                val planToWatch = stats.planToWatch ?: 0
+                val stats = details.statistics?.status
+                val watching = stats?.watching ?: 0
+                val completed = stats?.completed ?: 0
+                val onHold = stats?.onHold ?: 0
+                val dropped = stats?.dropped ?: 0
+                val planToWatch = stats?.planToWatch ?: 0
                 
                 val total = watching + completed + onHold + dropped + planToWatch
-                if (total > 0) {
+                if (total > 0 || scoreDistribution.isNotEmpty()) {
+                    val members = details.statistics?.numListUsers ?: details.numListUsers ?: total
+                    val scoringUsers = details.numScoringUsers ?: 0
+                    fun pct(value: Int): Float = if (total > 0) (value * 100f / total) else 0f
+                    val completionRate = pct(completed)
+                    val dropRate = pct(dropped)
+                    val watchingRate = pct(watching)
+                    val planRate = pct(planToWatch)
+                    val onHoldRate = pct(onHold)
+                    val showTrendingCard = watchingRate > 45f
+                    val showCompletionCard = completionRate > 55f
+                    val showDropCard = dropRate >= 12f && dropRate >= completionRate * 0.30f
+                    val showOnHoldCard = onHoldRate >= 8f
+                    val showPlannedCard = planRate > 50f
+                    val statPills = listOfNotNull(
+                        if (showTrendingCard) {
+                            StatsPillData(
+                                label = "Trending Now",
+                                icon = Icons.Default.TrendingUp,
+                                containerColor = Color(0xFF1565C0),
+                                contentColor = Color.White,
+                                dialogTitle = "Trending Now",
+                                infoText = "This anime has a lot of active watchers right now, so it is likely being followed while it airs or recently gained momentum."
+                            )
+                        } else null,
+                        if (showCompletionCard) {
+                            StatsPillData(
+                                label = "Highly Completed",
+                                icon = Icons.Default.CheckCircle,
+                                containerColor = Color(0xFF2E7D32),
+                                contentColor = Color.White,
+                                dialogTitle = "Highly Completed",
+                                infoText = "A large share of users who added this anime have finished it, which usually means people tend to stick with it."
+                            )
+                        } else null,
+                        if (showDropCard) {
+                            StatsPillData(
+                                label = "Highly Dropped",
+                                icon = Icons.Default.TrendingDown,
+                                containerColor = Color(0xFFC62828),
+                                contentColor = Color.White,
+                                dialogTitle = "Highly Dropped",
+                                infoText = "A noticeable share of users stopped watching compared with how many finished it, so it may lose some viewers along the way."
+                            )
+                        } else null,
+                        if (showOnHoldCard) {
+                            StatsPillData(
+                                label = "On Hold Risk",
+                                icon = Icons.Default.Warning,
+                                containerColor = Color(0xFFFBC02D),
+                                contentColor = Color(0xFF212121),
+                                dialogTitle = "On Hold Risk",
+                                infoText = "More users than usual have paused this anime, which can mean pacing, timing, or interest drops off for some viewers."
+                            )
+                        } else null,
+                        if (showPlannedCard) {
+                            StatsPillData(
+                                label = "Planned by Many",
+                                icon = Icons.Default.Schedule,
+                                containerColor = Color(0xFF546E7A),
+                                contentColor = Color.White,
+                                dialogTitle = "Planned by Many",
+                                infoText = "A large share of users have saved this anime to watch later, so there is strong interest even if many have not started it yet."
+                            )
+                        } else null
+                    ).take(3)
+
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Community Stats",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.Start)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Community Stats",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = onRefreshCommunityStats,
+                                enabled = !isCommunityStatsRefreshing
+                            ) {
+                                if (isCommunityStatsRefreshing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh community stats"
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            statPills.forEach { pill ->
+                                StatsTrendPill(
+                                    label = pill.label,
+                                    icon = pill.icon,
+                                    containerColor = pill.containerColor,
+                                    contentColor = pill.contentColor,
+                                    infoText = pill.infoText,
+                                    onInfoClick = { communityStatsInfo = pill.dialogTitle to it },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1238,12 +1378,79 @@ fun AnimeDetailsContent(
                             
                             Spacer(modifier = Modifier.width(32.dp))
                             
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                LegendItem(Color(0xFF4CAF50), "Completed", completed)
-                                LegendItem(Color(0xFF2196F3), "Watching", watching)
-                                LegendItem(Color(0xFF9E9E9E), "Plan to Watch", planToWatch)
-                                LegendItem(Color(0xFFFFC107), "On Hold", onHold)
-                                LegendItem(Color(0xFFF44336), "Dropped", dropped)
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                LegendItem(Color(0xFF4CAF50), "Completed", completed, pct(completed))
+                                LegendItem(Color(0xFF2196F3), "Watching", watching, pct(watching))
+                                LegendItem(Color(0xFF9E9E9E), "Plan to Watch", planToWatch, pct(planToWatch))
+                                LegendItem(Color(0xFFFFC107), "On Hold", onHold, pct(onHold))
+                                LegendItem(Color(0xFFF44336), "Dropped", dropped, pct(dropped))
+                            }
+                        }
+
+                        if (scoreDistribution.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Score Distribution",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "Scored by %,d".format(scoringUsers),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val scoreMap = scoreDistribution.associateBy { it.score }
+                            val maxVotes = (scoreDistribution.maxOfOrNull { it.votes } ?: 0).coerceAtLeast(1)
+                            (10 downTo 1).forEach { score ->
+                                val bucket = scoreMap[score]
+                                val votes = bucket?.votes ?: 0
+                                val percent = bucket?.percentage?.toFloat() ?: 0f
+                                val fillRatio = votes.toFloat() / maxVotes.toFloat()
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = score.toString(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.width(22.dp)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(fillRatio.coerceIn(0f, 1f))
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(MaterialTheme.colorScheme.primary)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "${String.format(Locale.US, "%.1f", percent)}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.width(44.dp),
+                                        textAlign = TextAlign.End
+                                    )
+                                }
                             }
                         }
                     }
@@ -2036,12 +2243,78 @@ private fun PriorityChip(label: String, isSelected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun LegendItem(color: Color, label: String, count: Int) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun LegendItem(
+    color: Color,
+    label: String,
+    count: Int,
+    percent: Float
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Box(modifier = Modifier.size(12.dp).background(color, CircleShape))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(text = label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(text = "%,d".format(count), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "%,d (%s%%)".format(
+                count,
+                String.format(Locale.US, "%.1f", percent)
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+private data class StatsPillData(
+    val label: String,
+    val icon: ImageVector,
+    val containerColor: Color,
+    val contentColor: Color,
+    val dialogTitle: String,
+    val infoText: String
+)
+
+@Composable
+private fun StatsTrendPill(
+    label: String,
+    icon: ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    infoText: String,
+    onInfoClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable { onInfoClick(infoText) },
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -2118,5 +2391,18 @@ private fun InfoRow(label: String, value: String, copyOnLongPress: Boolean) {
 
 private fun String.capitalize(): String {
     return this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun formatMalRating(rating: String?): String {
+    return when (rating?.lowercase()) {
+        "g" -> "G (All Ages)"
+        "pg" -> "PG (Children)"
+        "pg_13" -> "PG-13 (Teens 13 or older)"
+        "r" -> "R (17+; violence & profanity)"
+        "r+" -> "R+ (Mild Nudity)"
+        "rx" -> "Rx (Hentai)"
+        null -> "N/A"
+        else -> rating.replace("_", " ").uppercase()
+    }
 }
 
