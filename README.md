@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.6`
+- `v1.3.7`
 
 ## Core Features
 
@@ -313,6 +313,18 @@ It blends official MAL account data with Jikan and AniList signals for discovery
   - Removed legacy `WRITE_EXTERNAL_STORAGE` manifest permission
   - Enabled release code/resource shrinking (`minify` + `shrinkResources`)
   - Added build-type backup policy via manifest placeholders (`allowBackup=true` debug, `allowBackup=false` release)
+
+## v1.3.7 Highlights
+
+- Anime Details Community Stats refresh:
+  - Added a dedicated refresh action on the Community Stats heading
+  - Refresh updates only stats-related data instead of reloading the whole details page
+- Community Stats signal cards:
+  - Added priority-based stat pills such as `Trending Now`, `Highly Completed`, `Highly Dropped`, `On Hold Risk`, and `Planned by Many`
+  - Updated pill logic with more selective thresholds and natural explanatory popups
+- Anime Details score distribution:
+  - Added Jikan score distribution fetch
+  - Added score distribution chart with `Scored by` count integrated into the chart header
 
 ## Tech Stack
 
