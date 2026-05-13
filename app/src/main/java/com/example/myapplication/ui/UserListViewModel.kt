@@ -18,6 +18,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -361,7 +362,7 @@ class UserListViewModel @Inject constructor(
                     }
                 }
 
-                val lowerQuery = normalizedQuery.lowercase()
+                val lowerQuery = normalizedQuery.lowercase(Locale.ROOT)
                 val results = fullList.filter { item ->
                     item.node.matchesQuery(lowerQuery)
                 }
@@ -457,13 +458,30 @@ class UserListViewModel @Inject constructor(
     }
 
     private fun com.example.myapplication.data.model.AnimeNode.matchesQuery(query: String): Boolean {
+        val normalizedQuery = query.searchNormalized()
+        val queryParts = query
+            .split(Regex("\\s+"))
+            .filter { it.isNotBlank() }
+            .map { it.searchNormalized() }
+            .filter { it.isNotBlank() }
         val titles = buildList {
             add(title)
             alternativeTitles?.en?.let(::add)
             alternativeTitles?.ja?.let(::add)
             alternativeTitles?.synonyms?.let { addAll(it) }
         }
-        return titles.any { it.lowercase().contains(query) }
+        return titles.any { candidate ->
+            val lowerCandidate = candidate.lowercase(Locale.ROOT)
+            val normalizedCandidate = lowerCandidate.searchNormalized()
+            lowerCandidate.contains(query) ||
+                (normalizedQuery.isNotBlank() && normalizedCandidate.contains(normalizedQuery)) ||
+                (queryParts.isNotEmpty() && queryParts.all { part -> normalizedCandidate.contains(part) })
+        }
+    }
+
+    private fun String.searchNormalized(): String {
+        return lowercase(Locale.ROOT)
+            .replace(Regex("[\\p{Punct}\\s]+"), "")
     }
 
     fun setGridMode(status: String, isGrid: Boolean, global: Boolean = false) {

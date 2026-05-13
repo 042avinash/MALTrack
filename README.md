@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.7`
+- `v1.3.8`
 
 ## Core Features
 
@@ -325,6 +325,16 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Anime Details score distribution:
   - Added Jikan score distribution fetch
   - Added score distribution chart with `Scored by` count integrated into the chart header
+
+## v1.3.8 Highlights
+
+- Improved User Anime List search robustness:
+  - Added normalized matching that ignores punctuation and whitespace for more reliable hits
+  - Added support for multi-word query fragments matching across different parts of the title
+- App branding update:
+  - Updated logo assets and refreshed login screen presentation
+- Version alignment:
+  - App version bumped to `1.3.8` (`versionCode 23`)
 
 ## Tech Stack
 
