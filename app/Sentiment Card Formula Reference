@@ -1,0 +1,26 @@
+### Sentiment Card Formula Reference
+
+| Card               | Formula                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| **Trending**       | `watchingRate >= 40 OR (watchingRate >= 35 AND planRate >= 20)`                               |
+| **Beloved**        | `score_9_10 >= 40 AND score_1_4 <= 8`                                                         |
+| **HiddenGem**      | `score_9_10 >= 38 AND score_1_4 <= 8 AND members < 120000`                                    |
+| **Polarizing**     | `score_9_10 >= 25 AND score_5_8 >= 45 AND score_1_4 >= 3`                                     |
+| **High Dropoff**   | `dropRate >= 12 AND dropRate >= completionRate * 0.30`                                        |
+| **Disliked**       | `score_1_4 >= 18`                                                                             |
+| **High Retention** | `completionRate >= 55 AND dropRate <= 8`                                                      |
+| **Mixed**          | `largestBucketShare < 35 AND score_5_6 >= 15 AND score_1_4 >= 7`                              |
+| **Stalled**        | `onHoldRate >= 8`                                                                             |
+| **Mid**            | `score_5_7 >= 50 AND score_9_10 < 30 AND score_1_4 < 15`                                      |
+| **Broad Appeal**   | `score_1_4 <= 5 AND score_5_10 >= 90`                                                         |
+| **High Interest**  | `planRate >= 50`                                                                              |
+| **Niche**          | `score_9_10 >= 25 AND members < 250000 AND score_1_4 >= 4`                                    |
+| **Obscure**        | `members < 25000`                                                                             |
+| **Slowburn**       | `totalRuntimeMinutes >= 90 AND score_9_10 >= 18 && < 35 AND score_1_4 <= 5 AND dropRate <= 8` |
+
+#### Notes
+
+* All values are derived from live MyAnimeList API statistics
+* Score share values represent percentage distribution across score ranges
+* Only the top 5 qualifying cards are rendered per anime
+* Cards are prioritized before rendering to avoid contradictory or low-signal combinations
