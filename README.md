@@ -385,6 +385,73 @@ Only the top 5 qualifying cards render for each anime.
 * Added unique iconography for easier scanning
 * Limited rendered cards to the top 5 matches to avoid visual clutter
 
+## Version 1.4.0
+
+### Community Sentiment System
+
+Added a full community sentiment and engagement analysis system for both anime and manga using live MyAnimeList statistics.
+
+The system now analyzes:
+
+* score distribution
+* audience sentiment
+* completion behavior
+* dropoff trends
+* community interest
+* niche popularity
+* long-term reception patterns
+
+### Added Sentiment Cards
+
+* Trending
+* Beloved
+* HiddenGem
+* Polarizing
+* High Dropoff
+* Disliked
+* High Retention
+* Mixed
+* Stalled
+* Mid
+* Broad Appeal
+* High Interest
+* Niche
+* Obscure
+* Slowburn
+
+### Sentiment Logic Improvements
+
+* Added suppression rules to avoid contradictory card combinations
+* Added priority-based rendering system
+* Limited rendering to the top 5 strongest matching cards
+* Added separate tuning logic for anime and manga statistics
+* Added runtime-aware Slowburn detection
+* Improved divisive and niche detection behavior
+
+### UI / UX Improvements
+
+* Added unique icons and colors for all sentiment cards
+* Added detailed tooltip descriptions for every card
+* Improved readability and visual distinction between positive, mixed, negative, and behavioral cards
+* Added persistent refresh support even when community stats fail to load
+
+### Search Improvements
+
+Improved empty-state behavior inside user lists.
+
+When no results are found, users can now:
+
+* switch search scope to All
+* search directly on MAL from inside the app
+* jump between anime and manga search contexts while keeping the same query
+
+### Technical Notes
+
+* Anime and manga now use separately calibrated sentiment thresholds
+* Suppression is applied before priority sorting and rendering
+* Only the top 5 qualifying cards render at once to reduce visual clutter
+
+
 
 ## Tech Stack
 

@@ -122,7 +122,8 @@ fun UserListScreen(
     username: String? = null,
     onAnimeClick: (Int) -> Unit,
     onMangaClick: (Int) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenHomeSearch: (String) -> Unit
 ) {
     var isAnimeView by remember { mutableStateOf(initialMainTab == 0) }
 
@@ -135,7 +136,8 @@ fun UserListScreen(
                 username = username,
                 onAnimeClick = onAnimeClick,
                 onTypeSwitch = { isAnimeView = false },
-                onOpenSettings = onOpenSettings
+                onOpenSettings = onOpenSettings,
+                onOpenHomeSearch = onOpenHomeSearch
             )
         } else {
             UserMangaSection(
@@ -275,7 +277,8 @@ fun UserAnimeSection(
     username: String? = null,
     onAnimeClick: (Int) -> Unit,
     onTypeSwitch: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenHomeSearch: (String) -> Unit
 ) {
     val userListState by viewModel.userListState.collectAsState()
     val airingDetails by viewModel.airingDetails.collectAsState()
@@ -492,11 +495,17 @@ fun UserAnimeSection(
                         animeList = pageItems,
                         airingDetails = airingDetails,
                         titleLanguage = titleLanguage,
+                        currentStatus = pageStatus,
                         searchQuery = if (page == activePage) submittedSearchQuery else "",
                         searchResults = if (page == activePage) searchState.results else emptyList(),
                         isSearchLoading = page == activePage && submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
                         isOwnList = username == null,
+                        onSwitchToAll = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                        },
+                        onSearchOnMal = onOpenHomeSearch,
+                        onSwitchToManga = onTypeSwitch,
                         onAnimeClick = onAnimeClick,
                         onAnimePlusOne = { item -> viewModel.quickIncrement(item.node.id) },
                         onAnimeEdit = { item -> pendingAnimeEdit = item },
@@ -840,11 +849,15 @@ fun UserAnimeList(
     animeList: List<UserAnimeData>,
     airingDetails: Map<Int, AniListMedia>,
     titleLanguage: TitleLanguage,
+    currentStatus: String,
     searchQuery: String,
     searchResults: List<UserAnimeData>,
     isSearchLoading: Boolean,
     isGridView: Boolean,
     isOwnList: Boolean = true,
+    onSwitchToAll: () -> Unit,
+    onSearchOnMal: (String) -> Unit,
+    onSwitchToManga: () -> Unit,
     onAnimeClick: (Int) -> Unit,
     onAnimePlusOne: (UserAnimeData) -> Unit,
     onAnimeEdit: (UserAnimeData) -> Unit,
@@ -866,13 +879,23 @@ fun UserAnimeList(
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
                     item {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 48.dp),
-                            contentAlignment = Alignment.Center
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text("No matches found")
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (currentStatus != "all") {
+                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                }
+                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                TextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
+                            }
                         }
                     }
                 } else {
@@ -924,13 +947,23 @@ fun UserAnimeList(
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
                     item {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 48.dp),
-                            contentAlignment = Alignment.Center
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text("No matches found")
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (currentStatus != "all") {
+                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                }
+                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                TextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
+                            }
                         }
                     }
                 } else {

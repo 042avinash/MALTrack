@@ -13,6 +13,9 @@ interface JikanApiService {
     @GET("anime/{id}/characters")
     suspend fun getAnimeCharacters(@Path("id") id: Int): JikanCharactersResponse
 
+    @GET("manga/{id}/characters")
+    suspend fun getMangaCharacters(@Path("id") id: Int): JikanCharactersResponse
+
     @GET("anime/{id}/staff")
     suspend fun getAnimeStaff(@Path("id") id: Int): JikanStaffResponse
 
@@ -36,6 +39,9 @@ interface JikanApiService {
 
     @GET("anime/{id}/statistics")
     suspend fun getAnimeStatistics(@Path("id") id: Int): JikanAnimeStatisticsResponse
+
+    @GET("manga/{id}/statistics")
+    suspend fun getMangaStatistics(@Path("id") id: Int): JikanMangaStatisticsResponse
 
     @GET("users/{username}/full")
     suspend fun getUserFullProfile(@Path("username") username: String): JikanFullUserProfileResponse
@@ -181,6 +187,22 @@ data class JikanAnimeStatisticsResponse(
 
 @Serializable
 data class JikanAnimeStatisticsData(
+    val scores: List<JikanAnimeScoreBucket> = emptyList()
+)
+
+@Serializable
+data class JikanMangaStatisticsResponse(
+    val data: JikanMangaStatisticsData
+)
+
+@Serializable
+data class JikanMangaStatisticsData(
+    val reading: Int? = null,
+    val completed: Int? = null,
+    val on_hold: Int? = null,
+    val dropped: Int? = null,
+    val plan_to_read: Int? = null,
+    val total: Int? = null,
     val scores: List<JikanAnimeScoreBucket> = emptyList()
 )
 

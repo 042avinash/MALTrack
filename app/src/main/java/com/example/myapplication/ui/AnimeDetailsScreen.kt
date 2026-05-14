@@ -1480,7 +1480,7 @@ fun AnimeDetailsContent(
                         highScoreShare < 35f &&
                         dropRate <= 8f &&
                         lowScoreShare <= 5f
-                    val statPills = listOfNotNull(
+                    val allMatchingCards = listOfNotNull(
                         if (showTrendingCard) {
                             StatsPillData(
                                 label = "Trending",
@@ -1631,7 +1631,39 @@ fun AnimeDetailsContent(
                                 infoText = "This anime tends to build appreciation gradually over time rather than relying on immediate excitement or explosive popularity."
                             )
                         } else null
-                    ).take(5)
+                    )
+
+                    val suppressionMap = mapOf(
+                        "Beloved" to setOf("Broad Appeal"),
+                        "Polarizing" to setOf("Broad Appeal", "Mixed"),
+                        "HiddenGem" to setOf("Obscure"),
+                        "Disliked" to setOf("Mid")
+                    )
+                    val priorityMap = mapOf(
+                        "Trending" to 1,
+                        "Beloved" to 2,
+                        "HiddenGem" to 3,
+                        "Polarizing" to 4,
+                        "High Dropoff" to 5,
+                        "Disliked" to 6,
+                        "High Retention" to 7,
+                        "Mixed" to 8,
+                        "Stalled" to 9,
+                        "Mid" to 10,
+                        "Broad Appeal" to 11,
+                        "High Interest" to 12,
+                        "Niche" to 13,
+                        "Obscure" to 14,
+                        "Slowburn" to 15
+                    )
+                    val activeTitles = allMatchingCards.map { it.label }.toSet()
+                    val suppressedTitles = activeTitles.flatMap { title ->
+                        suppressionMap[title] ?: emptySet()
+                    }.toSet()
+                    val statPills = allMatchingCards
+                        .filterNot { card -> card.label in suppressedTitles }
+                        .sortedBy { card -> priorityMap[card.label] ?: Int.MAX_VALUE }
+                        .take(5)
 
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(

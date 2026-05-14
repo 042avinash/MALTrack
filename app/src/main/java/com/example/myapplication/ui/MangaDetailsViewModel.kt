@@ -7,6 +7,10 @@ import android.os.SystemClock
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaRecommendation
 import com.example.myapplication.data.model.MyMangaListStatus
+import com.example.myapplication.data.model.Statistics
+import com.example.myapplication.data.model.StatusStatistics
+import com.example.myapplication.data.remote.JikanAnimeScoreBucket
+import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
 import com.example.myapplication.data.repository.AnimeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @HiltViewModel
@@ -38,6 +43,8 @@ class MangaDetailsViewModel @Inject constructor(
     private var delayedDetailsJob: Job? = null
     private var reviewsJob: Job? = null
     private var recommendationsJob: Job? = null
+    private var charactersJob: Job? = null
+    private var scoreDistributionJob: Job? = null
 
     private val _uiState = MutableStateFlow<MangaDetailsUiState>(MangaDetailsUiState.Loading)
     val uiState: StateFlow<MangaDetailsUiState> = _uiState.asStateFlow()
@@ -98,20 +105,30 @@ class MangaDetailsViewModel @Inject constructor(
     }
 
     private fun publishBaseDetails(details: MangaDetailsResponse) {
-        val baseDetails = details.copy(recommendations = emptyList())
+        val previous = _uiState.value as? MangaDetailsUiState.Success
+        val baseDetails = details.copy(recommendations = previous?.details?.recommendations ?: emptyList())
         val successState = MangaDetailsUiState.Success(
             details = baseDetails,
-            recommendations = emptyList(),
-            reviews = emptyList(),
-            allReviewsCount = 0,
-            isRecommendationsLoaded = false,
+            recommendations = previous?.recommendations ?: emptyList(),
+            reviews = previous?.reviews ?: emptyList(),
+            allReviewsCount = previous?.allReviewsCount ?: 0,
+            isRecommendationsLoaded = previous?.isRecommendationsLoaded ?: false,
             isRecommendationsLoading = false,
-            isReviewsLoaded = false,
-            isReviewsLoading = false
+            isReviewsLoaded = previous?.isReviewsLoaded ?: false,
+            isReviewsLoading = false,
+            recommendationsError = null,
+            reviewsError = null,
+            characters = previous?.characters ?: emptyList(),
+            isCharactersLoaded = previous?.isCharactersLoaded ?: false,
+            isCharactersLoading = false,
+            charactersError = null,
+            isCommunityStatsRefreshing = false,
+            communityStatsError = null
         )
         detailsCache[mangaId] = SystemClock.elapsedRealtime() to successState
         _uiState.value = successState
         launchCardMetaRefresh(baseDetails)
+        refreshScoreDistribution(userTriggered = false)
     }
 
     fun loadReviews(forceRefresh: Boolean = false) {
@@ -121,9 +138,9 @@ class MangaDetailsViewModel @Inject constructor(
         reviewsJob?.cancel()
         reviewsJob = viewModelScope.launch {
             val before = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
-            _uiState.value = before.copy(isReviewsLoading = true)
+            _uiState.value = before.copy(isReviewsLoading = true, reviewsError = null)
 
-            val reviews = runCatching { repository.getMangaReviews(mangaId).data }.getOrDefault(emptyList())
+            val reviews = fetchWithRetry { repository.getMangaReviews(mangaId).data }
             val recommended = reviews.find { it.tags.any { tag -> tag.contains("Recommended", ignoreCase = true) && !tag.contains("Not", ignoreCase = true) } }
             val mixed = reviews.find { it.tags.any { tag -> tag.contains("Mixed", ignoreCase = true) } }
             val notRecommended = reviews.find { it.tags.any { tag -> tag.contains("Not Recommended", ignoreCase = true) } }
@@ -137,10 +154,20 @@ class MangaDetailsViewModel @Inject constructor(
                 reviews = finalReviews,
                 allReviewsCount = reviews.size,
                 isReviewsLoaded = true,
-                isReviewsLoading = false
+                isReviewsLoading = false,
+                reviewsError = null
             )
             detailsCache[mangaId] = SystemClock.elapsedRealtime() to updated
             _uiState.value = updated
+        }.also { job ->
+            job.invokeOnCompletion { error ->
+                if (error == null) return@invokeOnCompletion
+                val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@invokeOnCompletion
+                _uiState.value = latest.copy(
+                    isReviewsLoading = false,
+                    reviewsError = "Could not load reviews right now. Pull to refresh or tap retry."
+                )
+            }
         }
     }
 
@@ -151,11 +178,11 @@ class MangaDetailsViewModel @Inject constructor(
         recommendationsJob?.cancel()
         recommendationsJob = viewModelScope.launch {
             val before = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
-            _uiState.value = before.copy(isRecommendationsLoading = true)
+            _uiState.value = before.copy(isRecommendationsLoading = true, recommendationsError = null)
 
-            val recommendations = runCatching {
+            val recommendations = fetchWithRetry {
                 repository.getMangaRecommendationsOnly(mangaId).recommendations.orEmpty()
-            }.getOrDefault(emptyList())
+            }
 
             val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
             if (latest.details.id != mangaId) return@launch
@@ -163,12 +190,148 @@ class MangaDetailsViewModel @Inject constructor(
             val updated = latest.copy(
                 recommendations = recommendations,
                 isRecommendationsLoaded = true,
-                isRecommendationsLoading = false
+                isRecommendationsLoading = false,
+                recommendationsError = null
             )
             detailsCache[mangaId] = SystemClock.elapsedRealtime() to updated
             _uiState.value = updated
             launchCardMetaRefresh(latest.details.copy(recommendations = recommendations))
+        }.also { job ->
+            job.invokeOnCompletion { error ->
+                if (error == null) return@invokeOnCompletion
+                val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@invokeOnCompletion
+                _uiState.value = latest.copy(
+                    isRecommendationsLoading = false,
+                    recommendationsError = "Could not load recommendations right now. Pull to refresh or tap retry."
+                )
+            }
         }
+    }
+
+    fun loadCharacters(forceRefresh: Boolean = false) {
+        val current = _uiState.value as? MangaDetailsUiState.Success ?: return
+        if (current.isCharactersLoaded && !forceRefresh) return
+
+        charactersJob?.cancel()
+        charactersJob = viewModelScope.launch {
+            val before = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
+            _uiState.value = before.copy(isCharactersLoading = true, charactersError = null)
+
+            val characters = fetchWithRetry {
+                repository.getMangaCharacters(mangaId).data
+            }
+
+            val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
+            if (latest.details.id != mangaId) return@launch
+            val updated = latest.copy(
+                characters = characters,
+                isCharactersLoaded = true,
+                isCharactersLoading = false,
+                charactersError = null
+            )
+            detailsCache[mangaId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }.also { job ->
+            job.invokeOnCompletion { error ->
+                if (error == null) return@invokeOnCompletion
+                val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@invokeOnCompletion
+                _uiState.value = latest.copy(
+                    isCharactersLoading = false,
+                    charactersError = "Could not load characters right now. Pull to refresh or tap retry."
+                )
+            }
+        }
+    }
+
+    fun refreshCommunityStats() {
+        val current = _uiState.value as? MangaDetailsUiState.Success ?: return
+        viewModelScope.launch {
+            _uiState.value = current.copy(isCommunityStatsRefreshing = true, communityStatsError = null)
+            val refreshed = runCatching { repository.getMangaDetailsLite(mangaId) }.getOrNull()
+            val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
+            if (refreshed == null) {
+                _uiState.value = latest.copy(
+                    isCommunityStatsRefreshing = false,
+                    communityStatsError = "Could not refresh community stats right now. Please try again."
+                )
+                return@launch
+            }
+            val mergedDetails = latest.details.copy(
+                statistics = refreshed.statistics,
+                numListUsers = refreshed.numListUsers,
+                numScoringUsers = refreshed.numScoringUsers,
+                mean = refreshed.mean
+            )
+            val updated = latest.copy(
+                details = mergedDetails,
+                isCommunityStatsRefreshing = false,
+                communityStatsError = null
+            )
+            detailsCache[mangaId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+            refreshScoreDistribution(userTriggered = true)
+        }
+    }
+
+    fun refreshReviews() = loadReviews(forceRefresh = true)
+    fun refreshRecommendations() = loadRecommendations(forceRefresh = true)
+    fun refreshCharactersSection() = loadCharacters(forceRefresh = true)
+    fun refreshScoreDistribution(userTriggered: Boolean = true) {
+        scoreDistributionJob?.cancel()
+        scoreDistributionJob = viewModelScope.launch {
+            val current = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
+            _uiState.value = current.copy(isScoreDistributionLoading = true, scoreDistributionError = null)
+            val statsPayload = runCatching {
+                if (userTriggered) fetchWithRetry { repository.getMangaStatistics(mangaId).data }
+                else repository.getMangaStatistics(mangaId).data
+            }.getOrNull()
+
+            val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
+            val buckets = statsPayload?.scores.orEmpty()
+            val hasGoodData = !buckets.isNullOrEmpty() && buckets.any { it.votes > 0 || it.percentage > 0.0 }
+            val jikanBackedStatus = statsPayload?.let {
+                StatusStatistics(
+                    watching = it.reading,
+                    completed = it.completed,
+                    onHold = it.on_hold,
+                    dropped = it.dropped,
+                    planToWatch = it.plan_to_read
+                )
+            }
+            val mergedDetails = if (latest.details.statistics == null && jikanBackedStatus != null) {
+                latest.details.copy(
+                    statistics = Statistics(
+                        status = jikanBackedStatus,
+                        numListUsers = statsPayload.total ?: latest.details.numListUsers
+                    )
+                )
+            } else {
+                latest.details
+            }
+            val updated = latest.copy(
+                details = mergedDetails,
+                scoreDistribution = if (hasGoodData) buckets else latest.scoreDistribution,
+                isScoreDistributionLoading = false,
+                scoreDistributionError = if (hasGoodData) null else "Score distribution source is temporarily unavailable.",
+                lastScoreDistributionUpdatedAt = if (hasGoodData) SystemClock.elapsedRealtime() else latest.lastScoreDistributionUpdatedAt
+            )
+            detailsCache[mangaId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
+    private suspend fun <T> fetchWithRetry(
+        attempts: Int = 3,
+        initialDelayMs: Long = 350L,
+        block: suspend () -> T
+    ): T {
+        var currentDelay = initialDelayMs
+        repeat(attempts - 1) {
+            runCatching { return block() }
+            kotlinx.coroutines.delay(currentDelay)
+            currentDelay *= 2
+        }
+        return block()
     }
 
     private suspend fun getMangaCardMeta(
@@ -284,11 +447,23 @@ sealed interface MangaDetailsUiState {
         val cardMeta: Map<Int, MangaCardMeta> = emptyMap(),
         val recommendations: List<MangaRecommendation> = emptyList(),
         val reviews: List<JikanReviewData> = emptyList(),
+        val characters: List<JikanCharacterData> = emptyList(),
+        val scoreDistribution: List<JikanAnimeScoreBucket> = emptyList(),
         val allReviewsCount: Int = 0,
         val isRecommendationsLoaded: Boolean = false,
         val isRecommendationsLoading: Boolean = false,
         val isReviewsLoaded: Boolean = false,
-        val isReviewsLoading: Boolean = false
+        val isReviewsLoading: Boolean = false,
+        val isCharactersLoaded: Boolean = false,
+        val isCharactersLoading: Boolean = false,
+        val isScoreDistributionLoading: Boolean = false,
+        val isCommunityStatsRefreshing: Boolean = false,
+        val recommendationsError: String? = null,
+        val reviewsError: String? = null,
+        val charactersError: String? = null,
+        val communityStatsError: String? = null,
+        val scoreDistributionError: String? = null,
+        val lastScoreDistributionUpdatedAt: Long = 0L
     ) : MangaDetailsUiState
     data class Error(val message: String) : MangaDetailsUiState
 }

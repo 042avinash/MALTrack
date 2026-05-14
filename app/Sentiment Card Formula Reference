@@ -18,9 +18,29 @@
 | **Obscure**        | `members < 25000`                                                                             |
 | **Slowburn**       | `totalRuntimeMinutes >= 90 AND score_9_10 >= 18 && < 35 AND score_1_4 <= 5 AND dropRate <= 8` |
 
+Manga
+Card	Formula
+Trending	readingRate >= 25 OR (readingRate >= 20 AND planRate >= 20)
+Beloved	highScoreShare >= 40 AND lowScoreShare <= 8
+HiddenGem	highScoreShare >= 38 AND lowScoreShare <= 8 AND members < 70000
+Polarizing	highScoreShare >= 25 AND score5to8Share >= 45 AND lowScoreShare >= 7
+High Dropoff	dropRate >= 16 AND dropRate >= completionRate * 0.35
+Disliked	lowScoreShare >= 18
+High Retention	completionRate >= 40 AND dropRate <= 10
+Mixed	largestBucketShare < 35 AND score5to6Share >= 15 AND lowScoreShare >= 7
+Stalled	onHoldRate >= 15
+Mid	score5to7Share >= 50 AND highScoreShare < 30 AND lowScoreShare < 15
+Broad Appeal	lowScoreShare <= 5 AND score5to10Share >= 92
+High Interest	planRate >= 60
+Niche	highScoreShare >= 25 AND members < 150000 AND lowScoreShare >= 4
+Obscure	members < 12000
+Slowburn	highScoreShare >= 20 AND highScoreShare < 32 AND dropRate <= 5 AND lowScoreShare <= 5
+
 #### Notes
+
 
 * All values are derived from live MyAnimeList API statistics
 * Score share values represent percentage distribution across score ranges
 * Only the top 5 qualifying cards are rendered per anime
 * Cards are prioritized before rendering to avoid contradictory or low-signal combinations
+

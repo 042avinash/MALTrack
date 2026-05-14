@@ -102,6 +102,7 @@ fun AnimeListScreen(
     viewModel: AnimeViewModel,
     titleLanguage: TitleLanguage,
     initialTab: Int = 0,
+    initialSearchQuery: String = "",
     onAnimeClick: (Int) -> Unit,
     onMangaClick: (Int) -> Unit,
     onOpenAnimeUserList: () -> Unit,
@@ -136,6 +137,7 @@ fun AnimeListScreen(
     var pendingMangaEdit by remember { mutableStateOf<QuickMangaEdit?>(null) }
     var loadingViewContext by remember { mutableStateOf(LoadingViewContext.HOME) }
     var hasRequestedInitialHomeLoad by rememberSaveable { mutableStateOf(false) }
+    var appliedInitialSearchQuery by rememberSaveable { mutableStateOf("") }
     var searchMediaType by remember(initialTab) {
         mutableStateOf(if (initialTab == 0) SearchMediaType.ANIME else SearchMediaType.MANGA)
     }
@@ -162,6 +164,17 @@ fun AnimeListScreen(
             hasRequestedInitialHomeLoad = true
             viewModel.loadHomeData()
         }
+    }
+
+    LaunchedEffect(initialSearchQuery) {
+        val query = initialSearchQuery.trim()
+        if (query.isBlank() || query == appliedInitialSearchQuery) return@LaunchedEffect
+        appliedInitialSearchQuery = query
+        searchMediaType = SearchMediaType.ANIME
+        searchQuery = query
+        isSearchExpanded = true
+        viewModel.searchAnime(query, isAnimeSearch = true)
+        viewModel.saveRecentSearch(query)
     }
 
     LaunchedEffect(errorMessage) {

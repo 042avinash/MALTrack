@@ -34,9 +34,25 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.PauseCircle
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -69,6 +85,8 @@ import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaNode
 import com.example.myapplication.data.model.MangaRecommendation
 import com.example.myapplication.data.model.MyMangaListStatus
+import com.example.myapplication.data.remote.JikanCharacterData
+import com.example.myapplication.data.remote.JikanAnimeScoreBucket
 import com.example.myapplication.data.remote.JikanReviewData
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -193,14 +211,30 @@ fun MangaDetailsScreen(
                             cardMeta = state.cardMeta,
                             recommendations = state.recommendations,
                             reviews = state.reviews,
+                            characters = state.characters,
                             allReviewsCount = state.allReviewsCount,
                             isRecommendationsLoaded = state.isRecommendationsLoaded,
                             isRecommendationsLoading = state.isRecommendationsLoading,
                             isReviewsLoaded = state.isReviewsLoaded,
                             isReviewsLoading = state.isReviewsLoading,
+                            isCharactersLoaded = state.isCharactersLoaded,
+                            isCharactersLoading = state.isCharactersLoading,
+                            isCommunityStatsRefreshing = state.isCommunityStatsRefreshing,
+                            scoreDistribution = state.scoreDistribution,
+                            isScoreDistributionLoading = state.isScoreDistributionLoading,
+                            recommendationsError = state.recommendationsError,
+                            reviewsError = state.reviewsError,
+                            charactersError = state.charactersError,
+                            communityStatsError = state.communityStatsError,
+                            scoreDistributionError = state.scoreDistributionError,
                             titleLanguage = titleLanguage,
-                            onLoadRecommendations = { viewModel.loadRecommendations() },
-                            onLoadReviews = { viewModel.loadReviews() },
+                            onLoadRecommendations = { viewModel.loadRecommendations(forceRefresh = false) },
+                            onLoadReviews = { viewModel.loadReviews(forceRefresh = false) },
+                            onRefreshRecommendations = { viewModel.refreshRecommendations() },
+                            onRefreshReviews = { viewModel.refreshReviews() },
+                            onLoadCharacters = { viewModel.loadCharacters(forceRefresh = false) },
+                            onRefreshCharacters = { viewModel.refreshCharactersSection() },
+                            onRefreshCommunityStats = { viewModel.refreshCommunityStats() },
                             onMangaClick = onMangaClick,
                             onUpdateStatus = { status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish ->
                                 viewModel.updateListStatus(status, isRereading, score, vols, chaps, priority, timesReread, rereadVal, tags, comments, start, finish)
@@ -220,14 +254,30 @@ fun MangaDetailsContent(
     cardMeta: Map<Int, MangaCardMeta> = emptyMap(),
     recommendations: List<MangaRecommendation>,
     reviews: List<JikanReviewData>,
+    characters: List<JikanCharacterData>,
     allReviewsCount: Int,
     isRecommendationsLoaded: Boolean,
     isRecommendationsLoading: Boolean,
     isReviewsLoaded: Boolean,
     isReviewsLoading: Boolean,
+    isCharactersLoaded: Boolean,
+    isCharactersLoading: Boolean,
+    isCommunityStatsRefreshing: Boolean,
+    scoreDistribution: List<JikanAnimeScoreBucket>,
+    isScoreDistributionLoading: Boolean,
+    recommendationsError: String?,
+    reviewsError: String?,
+    charactersError: String?,
+    communityStatsError: String?,
+    scoreDistributionError: String?,
     titleLanguage: TitleLanguage,
     onLoadRecommendations: () -> Unit,
     onLoadReviews: () -> Unit,
+    onRefreshRecommendations: () -> Unit,
+    onRefreshReviews: () -> Unit,
+    onLoadCharacters: () -> Unit,
+    onRefreshCharacters: () -> Unit,
+    onRefreshCommunityStats: () -> Unit,
     onMangaClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
     onDeleteStatus: () -> Unit
@@ -239,6 +289,14 @@ fun MangaDetailsContent(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showRelatedPopup by remember { mutableStateOf(false) }
     var showRecommendationsPopup by remember { mutableStateOf(false) }
+    var showAllCharactersPopup by remember { mutableStateOf(false) }
+    var communityStatsInfo by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    LaunchedEffect(isCharactersLoaded, isCharactersLoading) {
+        if (!isCharactersLoaded && !isCharactersLoading) {
+            onLoadCharacters()
+        }
+    }
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -284,6 +342,89 @@ fun MangaDetailsContent(
             isLoading = isRecommendationsLoading,
             onMangaClick = onMangaClick,
             onDismiss = { showRecommendationsPopup = false }
+        )
+    }
+
+    if (showAllCharactersPopup) {
+        Dialog(
+            onDismissRequest = { showAllCharactersPopup = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("All Characters", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { showAllCharactersPopup = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close")
+                        }
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 12.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        gridItems(characters) { entry ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.character.url)))
+                                    },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                AsyncImage(
+                                    model = entry.character.images.jpg?.image_url,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(84.dp)
+                                        .clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = entry.character.name,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = entry.role.ifBlank { "Unknown" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    communityStatsInfo?.let { (title, message) ->
+        AlertDialog(
+            onDismissRequest = { communityStatsInfo = null },
+            title = { Text(title) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { communityStatsInfo = null }) { Text("OK") }
+            }
         )
     }
 
@@ -471,6 +612,29 @@ fun MangaDetailsContent(
             }
         }
 
+        // Genres
+        if (!details.genres.isNullOrEmpty()) {
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    Text(
+                        text = "Genres",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(details.genres) { genre ->
+                            SuggestionChip(
+                                onClick = { },
+                                label = { Text(genre.name) }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+
         // Synopsis
         if (!details.synopsis.isNullOrEmpty()) {
             item {
@@ -499,6 +663,103 @@ fun MangaDetailsContent(
             }
         }
 
+        // Characters
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Characters",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = onRefreshCharacters, enabled = !isCharactersLoading) {
+                        if (isCharactersLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh characters")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                when {
+                    isCharactersLoading && characters.isEmpty() -> {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                    characters.isNotEmpty() -> {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            items(characters.take(5)) { entry ->
+                                Column(
+                                    modifier = Modifier
+                                        .width(92.dp)
+                                        .clickable {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.character.url)))
+                                        },
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    AsyncImage(
+                                        model = entry.character.images.jpg?.image_url,
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .size(80.dp)
+                                            .clip(CircleShape),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = entry.character.name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = entry.role.ifBlank { "Unknown" },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            if (characters.size > 5) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(92.dp)
+                                            .height(120.dp)
+                                            .clickable { showAllCharactersPopup = true },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(62.dp)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "View\nAll",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        MangaSectionFallbackCard(
+                            title = "Characters Unavailable",
+                            message = charactersError ?: "Character entries are not available for this manga right now. Try reloading this section in a moment."
+                        )
+                    }
+                }
+            }
+        }
+
         // Information Details
         item {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -509,40 +770,17 @@ fun MangaDetailsContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                InfoRow("English", details.alternativeTitles?.en ?: "N/A", copyOnLongPress = true)
-                InfoRow("Japanese", details.alternativeTitles?.ja ?: "N/A", copyOnLongPress = true)
-                InfoRow("Romaji", details.title.takeIf { it.isNotBlank() } ?: "N/A", copyOnLongPress = true)
-                InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "N/A")
+                InfoRow("English", details.alternativeTitles?.en ?: "Unknown", copyOnLongPress = true)
+                InfoRow("Japanese", details.alternativeTitles?.ja ?: "Unknown", copyOnLongPress = true)
+                InfoRow("Romaji", details.title.takeIf { it.isNotBlank() } ?: "Unknown", copyOnLongPress = true)
+                InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "Unknown")
                 Spacer(modifier = Modifier.height(8.dp))
 
-                InfoRow("Rank", "#${details.rank ?: "N/A"}")
-                InfoRow("Popularity", "#${details.popularity ?: "N/A"}")
-                InfoRow("Aired", "${details.startDate ?: "?"} to ${details.endDate ?: "?"}")
-                InfoRow("Authors", details.authors?.joinToString { "${it.node.firstName} ${it.node.lastName} (${it.role})" } ?: "N/A")
-                InfoRow("Serialization", details.serialization?.joinToString { it.node.name } ?: "N/A")
-            }
-        }
-
-        // Genres
-        if (!details.genres.isNullOrEmpty()) {
-            item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(
-                        text = "Genres",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(details.genres) { genre ->
-                            SuggestionChip(
-                                onClick = { },
-                                label = { Text(genre.name) }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+                InfoRow("Rank", "#${details.rank ?: "Unknown"}")
+                InfoRow("Popularity", "#${details.popularity ?: "Unknown"}")
+                InfoRow("Published", "${details.startDate ?: "Unknown"} to ${details.endDate ?: "Unknown"}")
+                InfoRow("Authors", details.authors?.joinToString { "${it.node.firstName} ${it.node.lastName} (${it.role})" } ?: "Unknown")
+                InfoRow("Serialization", details.serialization?.joinToString { it.node.name } ?: "Unknown")
             }
         }
 
@@ -578,6 +816,31 @@ fun MangaDetailsContent(
                     Text("Recommendations")
                 }
             }
+            if (!recommendationsError.isNullOrBlank()) {
+                MangaSectionFallbackCard(
+                    title = "Recommendations Unavailable",
+                    message = recommendationsError
+                )
+            }
+        }
+
+        // Reviews
+        item {
+            FilledTonalButton(
+                onClick = onLoadReviews,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                if (isReviewsLoading && !isReviewsLoaded) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text("User Reviews")
+            }
         }
 
         // Pictures
@@ -608,47 +871,6 @@ fun MangaDetailsContent(
             }
         }
 
-        // Reviews
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Top Reviews",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                if (!isReviewsLoaded) {
-                    FilledTonalButton(
-                        onClick = onLoadReviews,
-                        enabled = !isReviewsLoading
-                    ) {
-                        if (isReviewsLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                        }
-                        Text(
-                            text = if (isReviewsLoading) "Loading..." else "Load Reviews",
-                            style = MaterialTheme.typography.labelSmall,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                } else if (allReviewsCount > 0) {
-                    Text(
-                        text = "$allReviewsCount total",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
         if (isReviewsLoaded && reviews.isNotEmpty()) {
             items(reviews) { review ->
                 var expanded by remember { mutableStateOf(false) }
@@ -723,28 +945,200 @@ fun MangaDetailsContent(
                     }
                 }
             }
+        } else if (isReviewsLoading || isReviewsLoaded || !reviewsError.isNullOrBlank()) {
+            item {
+                val reviewMessage = when {
+                    isReviewsLoading -> "Fetching reviews from Jikan..."
+                    !reviewsError.isNullOrBlank() -> "Could not refresh reviews right now. Please try again."
+                    allReviewsCount > 0 -> "Jikan reports %,d reviews, but the review preview did not return entries yet.".format(allReviewsCount)
+                    else -> "No public reviews are available for this manga yet."
+                }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (isReviewsLoading) "Loading Reviews" else "Reviews Unavailable",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = reviewMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // Stats Donut Chart
-        if (details.statistics?.status != null) {
+        if (details.statistics?.status != null || scoreDistribution.isNotEmpty() || (details.numScoringUsers ?: 0) > 0 || !communityStatsError.isNullOrBlank()) {
             item {
-                val stats = details.statistics.status
-                val watching = stats.watching ?: 0
-                val completed = stats.completed ?: 0
-                val onHold = stats.onHold ?: 0
-                val dropped = stats.dropped ?: 0
-                val planToWatch = stats.planToWatch ?: 0
-                
-                val total = watching + completed + onHold + dropped + planToWatch
-                if (total > 0) {
-                    Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                val stats = details.statistics?.status
+                val scoringUsers = details.numScoringUsers ?: 0
+                val hasScoreDistribution = scoreDistribution.any { it.votes > 0 || it.percentage > 0.0 }
+                Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = "Community Stats",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.Start)
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        IconButton(
+                            onClick = onRefreshCommunityStats,
+                            enabled = !isCommunityStatsRefreshing
+                        ) {
+                            if (isCommunityStatsRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh community stats"
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (stats == null) {
+                        MangaSectionFallbackCard(
+                            title = "Community Stats Unavailable",
+                            message = communityStatsError ?: "Community status distribution is not available for this title yet."
+                        )
+                        return@Column
+                    }
+
+                    val watching = stats.watching ?: 0
+                    val completed = stats.completed ?: 0
+                    val onHold = stats.onHold ?: 0
+                    val dropped = stats.dropped ?: 0
+                    val planToWatch = stats.planToWatch ?: 0
+                    val total = watching + completed + onHold + dropped + planToWatch
+                    if (total > 0 || hasScoreDistribution || scoringUsers > 0) {
+                        fun pct(value: Int): Float = if (total > 0) (value * 100f / total) else 0f
+                    val completionRate = pct(completed)
+                    val dropRate = pct(dropped)
+                    val watchingRate = pct(watching)
+                    val planRate = pct(planToWatch)
+                    val onHoldRate = pct(onHold)
+                    val members = details.statistics?.numListUsers ?: details.numListUsers ?: total
+
+                    val readingRate = watchingRate
+                    val showTrendingCard = readingRate >= 25f || (readingRate >= 20f && planRate >= 20f)
+                    val showCompletionCard = completionRate >= 40f && dropRate <= 10f
+                    val showDropCard = dropRate >= 16f && dropRate >= completionRate * 0.35f
+                    val showOnHoldCard = onHoldRate >= 15f
+                    val showPlannedCard = planRate >= 60f
+
+                    val scoreBuckets = scoreDistribution.associateBy { it.score }
+                    fun scoreShare(vararg scores: Int): Float {
+                        return scores.sumOf { score -> scoreBuckets[score]?.percentage ?: 0.0 }.toFloat()
+                    }
+                    val highScoreShare = scoreShare(9, 10)
+                    val score5to8Share = scoreShare(5, 6, 7, 8)
+                    val score5to10Share = scoreShare(5, 6, 7, 8, 9, 10)
+                    val score5to7Share = scoreShare(5, 6, 7)
+                    val score5to6Share = scoreShare(5, 6)
+                    val lowScoreShare = scoreShare(1, 2, 3, 4)
+                    val largestBucketShare = scoreDistribution.maxOfOrNull { it.percentage }?.toFloat() ?: 0f
+
+                    val showCommunityLovedCard = highScoreShare >= 40f && lowScoreShare <= 8f
+                    val showHiddenGemCard = highScoreShare >= 38f && lowScoreShare <= 8f && members < 70_000
+                    val showPolarizingCard = highScoreShare >= 25f && score5to8Share >= 45f && lowScoreShare >= 7f
+                    val showColdReceptionCard = lowScoreShare >= 18f
+                    val showMixedReceptionCard = largestBucketShare < 35f && score5to6Share >= 15f && lowScoreShare >= 7f
+                    val showMostlyMidCard = score5to7Share >= 50f && highScoreShare < 30f && lowScoreShare < 15f
+                    val showSafePickCard = lowScoreShare <= 5f && score5to10Share >= 92f
+                    val showNicheAppealCard = highScoreShare >= 25f && members < 150_000 && lowScoreShare >= 4f
+                    val showObscureCard = members < 12_000
+                    val showSlowBurnCard = highScoreShare >= 20f && highScoreShare < 32f && dropRate <= 5f && lowScoreShare <= 5f && members > 15_000
+
+                    val allMatchingCards = listOfNotNull(
+                        if (showTrendingCard) MangaStatsPillData("Trending", Icons.Default.TrendingUp, Color(0xFF1E88E5), Color.White, "Trending", "This manga is seeing a lot of active attention right now, often because it is currently popular or gaining momentum within the community.") else null,
+                        if (showCommunityLovedCard) MangaStatsPillData("Beloved", Icons.Default.Favorite, Color(0xFFE91E63), Color.White, "Beloved", "Readers who rate this manga tend to rate it very highly, giving it a reputation for strong emotional impact and broad fan appreciation.") else null,
+                        if (showHiddenGemCard) MangaStatsPillData("HiddenGem", Icons.Default.AutoAwesome, Color(0xFF00796B), Color.White, "HiddenGem", "Despite its smaller audience, this manga receives unusually strong praise from the people who read it.") else null,
+                        if (showPolarizingCard) MangaStatsPillData("Polarizing", Icons.Default.CompareArrows, Color(0xFF8E24AA), Color.White, "Polarizing", "Reactions to this manga vary heavily between readers, with strong praise and noticeable disagreement.") else null,
+                        if (showDropCard) MangaStatsPillData("High Dropoff", Icons.Default.ExitToApp, Color(0xFFD32F2F), Color.White, "High Dropoff", "A noticeable number of users stop reading before completion.") else null,
+                        if (showColdReceptionCard) MangaStatsPillData("Disliked", Icons.Default.ThumbDown, Color(0xFF546E7A), Color.White, "Disliked", "Lower ratings appear more frequently here than usual, suggesting weaker overall reception.") else null,
+                        if (showCompletionCard) MangaStatsPillData("High Retention", Icons.Default.TaskAlt, Color(0xFF43A047), Color.White, "High Retention", "People who start this manga tend to stay with it through completion.") else null,
+                        if (showMixedReceptionCard) MangaStatsPillData("Mixed", Icons.Default.Shuffle, Color(0xFF78909C), Color.White, "Mixed", "Reader opinions are spread across several score ranges rather than clustering around one clear consensus.") else null,
+                        if (showOnHoldCard) MangaStatsPillData("Stalled", Icons.Default.PauseCircle, Color(0xFFFDD835), Color(0xFF212121), "Stalled", "Readers place this manga on hold more often than usual.") else null,
+                        if (showMostlyMidCard) MangaStatsPillData("Mid", Icons.Default.Remove, Color(0xFF757575), Color.White, "Mid", "Most reactions land around the middle rather than extremes.") else null,
+                        if (showSafePickCard) MangaStatsPillData("Broad Appeal", Icons.Default.Verified, Color(0xFF66BB6A), Color.White, "Broad Appeal", "Very few readers strongly dislike this manga, making it broadly approachable.") else null,
+                        if (showPlannedCard) MangaStatsPillData("High Interest", Icons.Default.Bookmark, Color(0xFF607D8B), Color.White, "High Interest", "A large number of users have this manga saved for later, suggesting strong curiosity.") else null,
+                        if (showNicheAppealCard) MangaStatsPillData("Niche", Icons.Default.Tune, Color(0xFF26A69A), Color.White, "Niche", "This manga resonates strongly with a more specific audience.") else null,
+                        if (showObscureCard) MangaStatsPillData("Obscure", Icons.Default.VisibilityOff, Color(0xFF6D4C41), Color.White, "Obscure", "Relatively few users have discovered or added this manga.") else null,
+                        if (showSlowBurnCard) MangaStatsPillData("Slowburn", Icons.Default.HourglassTop, Color(0xFF8D6E63), Color.White, "Slowburn", "This manga tends to build appreciation gradually over time.") else null
+                    )
+
+                    val suppressionMap = mapOf(
+                        "Beloved" to setOf("Broad Appeal"),
+                        "Polarizing" to setOf("Broad Appeal", "Mixed"),
+                        "HiddenGem" to setOf("Obscure"),
+                        "Disliked" to setOf("Mid")
+                    )
+                    val priorityMap = mapOf(
+                        "Trending" to 1, "Beloved" to 2, "HiddenGem" to 3, "Polarizing" to 4, "High Dropoff" to 5,
+                        "Disliked" to 6, "High Retention" to 7, "Mixed" to 8, "Stalled" to 9, "Mid" to 10,
+                        "Broad Appeal" to 11, "High Interest" to 12, "Niche" to 13, "Obscure" to 14, "Slowburn" to 15
+                    )
+                    val activeTitles = allMatchingCards.map { it.label }.toSet()
+                    val suppressedTitles = activeTitles.flatMap { title -> suppressionMap[title] ?: emptySet() }.toSet()
+                    val statPills = allMatchingCards
+                        .filterNot { card -> card.label in suppressedTitles }
+                        .sortedBy { card -> priorityMap[card.label] ?: Int.MAX_VALUE }
+                        .take(5)
+
+                    
+                        if (statPills.isNotEmpty()) {
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(end = 16.dp)
+                            ) {
+                                items(statPills) { pill ->
+                                    MangaStatsTrendPill(
+                                        label = pill.label,
+                                        icon = pill.icon,
+                                        containerColor = pill.containerColor,
+                                        contentColor = pill.contentColor,
+                                        infoText = pill.infoText,
+                                        onInfoClick = { communityStatsInfo = pill.dialogTitle to it },
+                                        modifier = Modifier.width(154.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
                         
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center) {
@@ -783,11 +1177,145 @@ fun MangaDetailsContent(
                             Spacer(modifier = Modifier.width(32.dp))
                             
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                LegendItem(Color(0xFF4CAF50), "Completed", completed)
-                                LegendItem(Color(0xFF2196F3), "Reading", watching)
-                                LegendItem(Color(0xFF9E9E9E), "Plan to Read", planToWatch)
-                                LegendItem(Color(0xFFFFC107), "On Hold", onHold)
-                                LegendItem(Color(0xFFF44336), "Dropped", dropped)
+                                LegendItem(Color(0xFF4CAF50), "Completed", completed, pct(completed))
+                                LegendItem(Color(0xFF2196F3), "Reading", watching, pct(watching))
+                                LegendItem(Color(0xFF9E9E9E), "Plan to Read", planToWatch, pct(planToWatch))
+                                LegendItem(Color(0xFFFFC107), "On Hold", onHold, pct(onHold))
+                                LegendItem(Color(0xFFF44336), "Dropped", dropped, pct(dropped))
+                            }
+                        }
+
+                        if (hasScoreDistribution) {
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Score Distribution",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = "Scored by %,d".format(scoringUsers),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (isScoreDistributionLoading) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Refreshing score distribution...",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val scoreMap = scoreDistribution.associateBy { it.score }
+                            val maxVotes = (scoreDistribution.maxOfOrNull { it.votes } ?: 0).coerceAtLeast(1)
+                            (10 downTo 1).forEach { score ->
+                                val bucket = scoreMap[score]
+                                val votes = bucket?.votes ?: 0
+                                val percent = bucket?.percentage?.toFloat() ?: 0f
+                                val fillRatio = votes.toFloat() / maxVotes.toFloat()
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = score.toString(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.width(22.dp)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(fillRatio.coerceIn(0f, 1f))
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(MaterialTheme.colorScheme.primary)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "${String.format(Locale.US, "%.1f", percent)}%",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.width(44.dp),
+                                        textAlign = TextAlign.End
+                                    )
+                                }
+                            }
+                        } else {
+                            val unavailableReason = when {
+                                isScoreDistributionLoading -> "Refreshing score distribution..."
+                                !scoreDistributionError.isNullOrBlank() && scoringUsers >= 25 ->
+                                    "MAL reports %,d scoring users, but the score breakdown source is temporarily unavailable. Tap refresh to retry.".format(scoringUsers)
+                                !scoreDistributionError.isNullOrBlank() && scoringUsers > 0 ->
+                                    "Only %,d MAL scoring users are available right now. More scorers are needed for a reliable score breakdown.".format(scoringUsers)
+                                !scoreDistributionError.isNullOrBlank() && details.mean != null ->
+                                    "MAL has an average score, but score breakdown data is temporarily unavailable."
+                                !scoreDistributionError.isNullOrBlank() ->
+                                    "Score breakdown data is temporarily unavailable. Tap refresh to retry."
+                                scoringUsers >= 25 -> "MAL reports %,d scoring users, but the score buckets source is temporarily unavailable. Tap refresh to retry.".format(scoringUsers)
+                                scoringUsers > 0 -> "Only %,d MAL scoring users are available right now. More scorers are needed for a reliable score breakdown.".format(scoringUsers)
+                                details.mean != null -> "MAL has an average score, but no score bucket breakdown is available yet."
+                                else -> "No public score distribution is available for this manga yet."
+                            }
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Score Distribution Unavailable",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = unavailableReason,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1274,13 +1802,92 @@ private fun PriorityChip(label: String, isSelected: Boolean, onClick: () -> Unit
     )
 }
 
+private data class MangaStatsPillData(
+    val label: String,
+    val icon: ImageVector,
+    val containerColor: Color,
+    val contentColor: Color,
+    val dialogTitle: String,
+    val infoText: String
+)
+
 @Composable
-private fun LegendItem(color: Color, label: String, count: Int) {
+private fun MangaStatsTrendPill(
+    label: String,
+    icon: ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    infoText: String,
+    onInfoClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.clickable { onInfoClick(infoText) },
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MangaSectionFallbackCard(
+    title: String,
+    message: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(color: Color, label: String, count: Int, percentage: Float) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(12.dp).background(color, CircleShape))
         Spacer(modifier = Modifier.width(8.dp))
         Text(text = label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-        Text(text = "%,d".format(count), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        Text(
+            text = "%,d (%.1f%%)".format(count, percentage),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -1308,7 +1915,7 @@ private fun InfoRow(label: String, value: String) {
 private fun InfoRow(label: String, value: String, copyOnLongPress: Boolean) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val canCopy = copyOnLongPress && value.isNotBlank() && value != "N/A"
+    val canCopy = copyOnLongPress && value.isNotBlank() && value != "N/A" && value != "Unknown"
     val copyText: () -> Unit = {
         clipboardManager.setText(AnnotatedString(value))
         Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()

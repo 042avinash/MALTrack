@@ -296,12 +296,14 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable(
-                            route = "anime_list?initialTab={initialTab}",
+                            route = "anime_list?initialTab={initialTab}&initialQuery={initialQuery}",
                             arguments = listOf(
-                                navArgument("initialTab") { defaultValue = 0; type = NavType.IntType }
+                                navArgument("initialTab") { defaultValue = 0; type = NavType.IntType },
+                                navArgument("initialQuery") { defaultValue = ""; type = NavType.StringType }
                             )
                         ) { backStackEntry ->
                             val initialTab = backStackEntry.arguments?.getInt("initialTab") ?: 0
+                            val initialQuery = backStackEntry.arguments?.getString("initialQuery").orEmpty()
                             
                             LaunchedEffect(Unit) {
                                 if (loginUiState is LoginUiState.Idle) {
@@ -313,6 +315,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel = animeViewModel,
                                 titleLanguage = titleLanguage,
                                 initialTab = initialTab,
+                                initialSearchQuery = initialQuery,
                                 onAnimeClick = { animeId ->
                                     navigateToExistingOrPush("anime_details/$animeId")
                                 },
@@ -365,6 +368,13 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onOpenSettings = {
                                     navigateSingleTop("settings")
+                                },
+                                onOpenHomeSearch = { query ->
+                                    val encodedQuery = Uri.encode(query)
+                                    navigateToBottomDestination(
+                                        route = "anime_list?initialTab=0&initialQuery=$encodedQuery",
+                                        destinationPrefix = "anime_list"
+                                    )
                                 }
                             )
                         }

@@ -23,6 +23,7 @@ import com.example.myapplication.data.remote.JikanApiService
 import com.example.myapplication.data.remote.JikanCharactersResponse
 import com.example.myapplication.data.remote.JikanFriend
 import com.example.myapplication.data.remote.JikanMangaData
+import com.example.myapplication.data.remote.JikanMangaStatisticsResponse
 import com.example.myapplication.data.remote.JikanReviewsResponse
 import com.example.myapplication.data.remote.JikanAnimeStatisticsResponse
 import com.example.myapplication.data.remote.JikanStaffResponse
@@ -410,6 +411,10 @@ class AnimeRepository @Inject constructor(
         return jikanApiService.getAnimeCharacters(id)
     }
 
+    suspend fun getMangaCharacters(id: Int): JikanCharactersResponse {
+        return jikanApiService.getMangaCharacters(id)
+    }
+
     suspend fun getAnimeStaff(id: Int): JikanStaffResponse {
         return jikanApiService.getAnimeStaff(id)
     }
@@ -432,6 +437,10 @@ class AnimeRepository @Inject constructor(
 
     suspend fun getAnimeStatistics(id: Int): JikanAnimeStatisticsResponse {
         return jikanApiService.getAnimeStatistics(id)
+    }
+
+    suspend fun getMangaStatistics(id: Int): JikanMangaStatisticsResponse {
+        return jikanApiService.getMangaStatistics(id)
     }
 
     suspend fun getMyUserProfile(): UserProfile {
