@@ -457,11 +457,11 @@ fun UserAnimeSection(
                 val pageIsGridView by viewModel.getGridModeFlow(pageStatus)
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
                 val pageListState = rememberSaveable(
-                    "anime_list_${username ?: "@me"}_$pageStatus",
+                    key = "anime_list_${username ?: "@me"}_$pageStatus",
                     saver = LazyListState.Saver
                 ) { LazyListState() }
                 val pageGridState = rememberSaveable(
-                    "anime_grid_${username ?: "@me"}_$pageStatus",
+                    key = "anime_grid_${username ?: "@me"}_$pageStatus",
                     saver = LazyGridState.Saver
                 ) { LazyGridState() }
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
@@ -740,11 +740,11 @@ fun UserMangaSection(
                 val pageIsGridView by viewModel.getGridModeFlow(pageStatus)
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
                 val pageListState = rememberSaveable(
-                    "manga_list_${username ?: "@me"}_$pageStatus",
+                    key = "manga_list_${username ?: "@me"}_$pageStatus",
                     saver = LazyListState.Saver
                 ) { LazyListState() }
                 val pageGridState = rememberSaveable(
-                    "manga_grid_${username ?: "@me"}_$pageStatus",
+                    key = "manga_grid_${username ?: "@me"}_$pageStatus",
                     saver = LazyGridState.Saver
                 ) { LazyGridState() }
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")

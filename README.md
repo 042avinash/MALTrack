@@ -336,6 +336,56 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 - Version alignment:
   - App version bumped to `1.3.8` (`versionCode 23`)
 
+## Version 1.3.9
+
+### Community Sentiment Cards
+
+Added a new sentiment and engagement card system powered by live MyAnimeList statistics.
+These cards analyze audience behavior, score distribution, completion trends, and popularity patterns to surface how anime are perceived by the community beyond a single aggregate score.
+
+Only the top 5 qualifying cards render for each anime.
+
+| Card               | Meaning                                                            |
+| ------------------ | ------------------------------------------------------------------ |
+| **Trending**       | Currently seeing strong active watcher activity                    |
+| **Beloved**        | Extremely high positive reception from viewers                     |
+| **HiddenGem**      | Strong praise despite a smaller audience                           |
+| **Polarizing**     | Viewers react very differently to the anime                        |
+| **High Dropoff**   | Many viewers stop watching before completion                       |
+| **Disliked**       | Noticeably negative overall reception                              |
+| **High Retention** | Viewers consistently finish the anime                              |
+| **Mixed**          | No strong consensus in audience scoring                            |
+| **Stalled**        | Frequently placed on hold by viewers                               |
+| **Mid**            | Mostly average or middle-range reception                           |
+| **Broad Appeal**   | Widely approachable with very low negativity                       |
+| **High Interest**  | Large number of users plan to watch it                             |
+| **Niche**          | Appreciated strongly by a more specific audience                   |
+| **Obscure**        | Very low visibility within the wider community                     |
+| **Slowburn**       | Gradually appreciated over time rather than through immediate hype |
+
+### Sentiment Card Improvements
+
+* Added distinct icons and color identities for every card
+* Reworked tooltip descriptions to better reflect audience sentiment
+* Added support for behavioral and pacing-oriented tags like:
+
+  * `Slowburn`
+  * `High Dropoff`
+  * `High Retention`
+  * `Stalled`
+* Improved detection logic for divisive and niche anime
+* Added runtime-aware logic for Slowburn classification
+* Refined rendering priority so only the most relevant cards appear
+* Added support for mixed reception and audience fragmentation detection
+
+### UI / UX
+
+* Redesigned card naming for cleaner chip-style presentation
+* Improved readability and visual distinction between positive, negative, and behavioral cards
+* Added unique iconography for easier scanning
+* Limited rendered cards to the top 5 matches to avoid visual clutter
+
+
 ## Tech Stack
 
 - Kotlin

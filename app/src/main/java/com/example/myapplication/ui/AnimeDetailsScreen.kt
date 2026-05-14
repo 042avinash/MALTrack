@@ -37,22 +37,36 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -244,18 +258,27 @@ fun AnimeDetailsScreen(
                             isRecommendationsLoading = state.isRecommendationsLoading,
                             isPeopleLoaded = state.isPeopleLoaded,
                             isPeopleLoading = state.isPeopleLoading,
+                            isCharactersRefreshing = state.isCharactersRefreshing,
+                            isStaffRefreshing = state.isStaffRefreshing,
+                            charactersError = state.charactersError,
+                            staffError = state.staffError,
                             isReviewsLoaded = state.isReviewsLoaded,
                             isReviewsLoading = state.isReviewsLoading,
                             streaming = state.streaming,
                             scoreDistribution = state.scoreDistribution,
                             isCommunityStatsRefreshing = state.isCommunityStatsRefreshing,
+                            isScoreDistributionLoading = state.isScoreDistributionLoading,
+                            scoreDistributionError = state.scoreDistributionError,
+                            isAvailabilityRefreshing = state.isAvailabilityRefreshing,
                             airingMedia = state.airingMedia,
                             recommendationMeta = state.recommendationMeta,
                             titleLanguage = titleLanguage,
                             onReviewsClick = { onReviewsClick(state.details.id) },
-                            onLoadReviews = { viewModel.loadReviews() },
-                            onLoadRecommendations = { viewModel.loadRecommendations() },
-                            onLoadPeople = { viewModel.loadPeople() },
+                            onLoadReviews = { viewModel.loadReviews(userTriggered = true) },
+                            onLoadRecommendations = { viewModel.loadRecommendations(userTriggered = true) },
+                            onRefreshCharactersSection = { viewModel.refreshCharactersSection() },
+                            onRefreshStaffSection = { viewModel.refreshStaffSection() },
+                            onRefreshAvailability = { viewModel.refreshAvailability() },
                             onRefreshCommunityStats = { viewModel.refreshCommunityStats() },
                             onAnimeClick = onAnimeClick,
                             onUpdateStatus = { status, isRewatching, score, eps, priority, timesRewatched, rewatchVal, tags, comments, start, finish ->
@@ -283,18 +306,27 @@ fun AnimeDetailsContent(
     isRecommendationsLoading: Boolean,
     isPeopleLoaded: Boolean,
     isPeopleLoading: Boolean,
+    isCharactersRefreshing: Boolean,
+    isStaffRefreshing: Boolean,
+    charactersError: String?,
+    staffError: String?,
     isReviewsLoaded: Boolean,
     isReviewsLoading: Boolean,
     streaming: List<JikanStreamingData>,
     scoreDistribution: List<JikanAnimeScoreBucket>,
     isCommunityStatsRefreshing: Boolean,
+    isScoreDistributionLoading: Boolean,
+    scoreDistributionError: String?,
+    isAvailabilityRefreshing: Boolean,
     airingMedia: AniListMedia?,
     recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
     titleLanguage: TitleLanguage,
     onReviewsClick: () -> Unit,
     onLoadReviews: () -> Unit,
     onLoadRecommendations: () -> Unit,
-    onLoadPeople: () -> Unit,
+    onRefreshCharactersSection: () -> Unit,
+    onRefreshStaffSection: () -> Unit,
+    onRefreshAvailability: () -> Unit,
     onRefreshCommunityStats: () -> Unit,
     onAnimeClick: (Int) -> Unit,
     onUpdateStatus: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit,
@@ -307,6 +339,7 @@ fun AnimeDetailsContent(
     var showStorageSettingsPrompt by remember { mutableStateOf(false) }
     var showAllCast by remember { mutableStateOf(false) }
     var showAllPeople by remember { mutableStateOf(false) }
+    var isStaffCreditsExpanded by rememberSaveable { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showRelatedPopup by remember { mutableStateOf(false) }
@@ -674,12 +707,35 @@ fun AnimeDetailsContent(
         // Characters
         item {
             Column(modifier = Modifier.padding(vertical = 16.dp)) {
-                Text(
-                    text = "Characters",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Characters",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = onRefreshCharactersSection,
+                        enabled = !isCharactersRefreshing
+                    ) {
+                        if (isCharactersRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh characters and staff"
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 if (characters.isNotEmpty()) {
                     LazyRow(
@@ -753,6 +809,8 @@ fun AnimeDetailsContent(
                         title = "Characters Unavailable",
                         message = if (isPeopleLoading) {
                             "Loading character credits..."
+                        } else if (!charactersError.isNullOrBlank()) {
+                            "Could not refresh character credits right now. ${charactersError.take(120)}"
                         } else {
                             "No character credits were returned. This can happen for newer, niche, or lightly documented titles."
                         },
@@ -841,7 +899,8 @@ fun AnimeDetailsContent(
                     }
                 } else {
                     val voiceActorReason = when {
-                        isPeopleLoading -> "Loading voice actor credits..."
+                        isCharactersRefreshing -> "Loading voice actor credits..."
+                        !charactersError.isNullOrBlank() -> "Voice actors are derived from character data, and character refresh failed just now."
                         characters.isEmpty() -> "Voice actor credits depend on character data, and no character credits were returned."
                         else -> "Characters were returned, but no voice actor credits were included. This can happen when cast data is incomplete or not localized yet."
                     }
@@ -857,23 +916,59 @@ fun AnimeDetailsContent(
         // Staff
         item {
             Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                Text(
-                    text = "Staff",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                if (!isPeopleLoaded && !isPeopleLoading) {
-                    Button(
-                        onClick = onLoadPeople,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Staff",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = onRefreshStaffSection,
+                        enabled = !isStaffRefreshing
                     ) {
-                        Text("Show Staff Credits")
+                        if (isStaffRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh staff and characters"
+                            )
+                        }
                     }
-                } else if (isPeopleLoading) {
+                    FilledTonalButton(
+                        onClick = {
+                            val nextExpanded = !isStaffCreditsExpanded
+                            isStaffCreditsExpanded = nextExpanded
+                            if (nextExpanded && displayStaff.isEmpty() && !isStaffRefreshing) {
+                                onRefreshStaffSection()
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isStaffCreditsExpanded) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isStaffCreditsExpanded) "Hide" else "Show",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (isStaffCreditsExpanded && (isPeopleLoading || isStaffRefreshing) && displayStaff.isEmpty()) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -881,25 +976,29 @@ fun AnimeDetailsContent(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Loading people...",
+                            text = "Loading staff credits...",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
-                } else if (displayStaff.isEmpty()) {
+                } else if (isStaffCreditsExpanded && displayStaff.isEmpty()) {
                     DetailsInfoMessageCard(
                         title = "Staff Credits Unavailable",
-                        message = "No staff credits were returned. This can happen when people data is incomplete, delayed, or unavailable from the source.",
+                        message = if (!staffError.isNullOrBlank()) {
+                            "Could not refresh staff credits right now. ${staffError.take(120)}"
+                        } else {
+                            "No staff credits were returned. This can happen when people data is incomplete, delayed, or unavailable from the source."
+                        },
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
                     TextButton(
-                        onClick = onLoadPeople,
+                        onClick = onRefreshStaffSection,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp)
                     ) {
                         Text("Retry Staff Load")
                     }
-                } else {
+                } else if (isStaffCreditsExpanded) {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1010,11 +1109,33 @@ fun AnimeDetailsContent(
         // Streaming Platforms
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                Text(
-                    text = "Available On",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Available On",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = onRefreshAvailability,
+                        enabled = !isAvailabilityRefreshing
+                    ) {
+                        if (isAvailabilityRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh availability"
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 if (streaming.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1317,154 +1438,197 @@ fun AnimeDetailsContent(
                     val watchingRate = pct(watching)
                     val planRate = pct(planToWatch)
                     val onHoldRate = pct(onHold)
-                    val showTrendingCard = watchingRate > 45f
-                    val showCompletionCard = completionRate > 55f
+                    val totalRuntimeMinutes = details.numEpisodes
+                        ?.takeIf { it > 0 }
+                        ?.let { episodes ->
+                            details.averageEpisodeDuration
+                                ?.takeIf { it > 0 }
+                                ?.let { durationSeconds -> (episodes * durationSeconds) / 60f }
+                        } ?: 0f
+                    val showTrendingCard = watchingRate >= 40f ||
+                        (watchingRate >= 35f && planRate >= 20f)
+                    val showCompletionCard = completionRate >= 55f && dropRate <= 8f
                     val showDropCard = dropRate >= 12f && dropRate >= completionRate * 0.30f
                     val showOnHoldCard = onHoldRate >= 8f
-                    val showPlannedCard = planRate > 50f
+                    val showPlannedCard = planRate >= 50f
                     val scoreBuckets = scoreDistribution.associateBy { it.score }
                     fun scoreShare(vararg scores: Int): Float {
                         return scores.sumOf { score -> scoreBuckets[score]?.percentage ?: 0.0 }.toFloat()
                     }
                     val highScoreShare = scoreShare(9, 10)
-                    val midScoreShare = scoreShare(5, 6)
+                    val score5to8Share = scoreShare(5, 6, 7, 8)
+                    val score5to10Share = scoreShare(5, 6, 7, 8, 9, 10)
+                    val score5to7Share = scoreShare(5, 6, 7)
+                    val score5to6Share = scoreShare(5, 6)
                     val lowScoreShare = scoreShare(1, 2, 3, 4)
-                    val score6Share = scoreShare(6)
-                    val positiveScoreShare = scoreShare(7, 8, 9, 10)
                     val largestBucketShare = scoreDistribution.maxOfOrNull { it.percentage }?.toFloat() ?: 0f
-                    val showCommunityLovedCard = highScoreShare >= 45f
-                    val showPolarizingCard = highScoreShare >= 30f && lowScoreShare >= 15f
-                    val showMixedReceptionCard = largestBucketShare < 25f &&
-                        highScoreShare >= 20f &&
-                        midScoreShare >= 20f &&
-                        lowScoreShare >= 10f
-                    val showNicheAppealCard = highScoreShare >= 35f && members < 250_000
-                    val showColdReceptionCard = lowScoreShare >= 20f
-                    val showSafePickCard = lowScoreShare <= 3f &&
-                        positiveScoreShare >= 70f &&
-                        !showCommunityLovedCard &&
-                        !showPolarizingCard &&
-                        !showColdReceptionCard
-                    val showMostlyMidCard = score6Share >= 25f && highScoreShare < 35f && lowScoreShare < 25f
+                    val showCommunityLovedCard = highScoreShare >= 40f && lowScoreShare <= 8f
+                    val showHiddenGemCard = highScoreShare >= 38f && lowScoreShare <= 8f && members < 120_000
+                    val showPolarizingCard = highScoreShare >= 25f && score5to8Share >= 45f && lowScoreShare >= 3f
+                    val showColdReceptionCard = lowScoreShare >= 18f
+                    val showMixedReceptionCard = largestBucketShare < 35f &&
+                        score5to6Share >= 15f &&
+                        lowScoreShare >= 7f
+                    val showMostlyMidCard = score5to7Share >= 50f &&
+                        highScoreShare < 30f &&
+                        lowScoreShare < 15f
+                    val showSafePickCard = lowScoreShare <= 5f && score5to10Share >= 90f
+                    val showNicheAppealCard = highScoreShare >= 25f && members < 250_000 && lowScoreShare >= 4f
+                    val showObscureCard = members < 25_000
+                    val showSlowBurnCard = totalRuntimeMinutes >= 90f &&
+                        highScoreShare >= 18f &&
+                        highScoreShare < 35f &&
+                        dropRate <= 8f &&
+                        lowScoreShare <= 5f
                     val statPills = listOfNotNull(
                         if (showTrendingCard) {
                             StatsPillData(
-                                label = "Trending Now",
+                                label = "Trending",
                                 icon = Icons.Default.TrendingUp,
-                                containerColor = Color(0xFF1565C0),
+                                containerColor = Color(0xFF1E88E5),
                                 contentColor = Color.White,
-                                dialogTitle = "Trending Now",
-                                infoText = "This anime has a lot of active watchers right now, so it is likely being followed while it airs or recently gained momentum."
+                                dialogTitle = "Trending",
+                                infoText = "This anime is seeing a lot of active attention right now, often because it is currently airing, recently released, or gaining momentum within the community."
                             )
                         } else null,
                         if (showCommunityLovedCard) {
                             StatsPillData(
-                                label = "Community Loved",
-                                icon = Icons.Default.Star,
-                                containerColor = Color(0xFFD81B60),
+                                label = "Beloved",
+                                icon = Icons.Default.Favorite,
+                                containerColor = Color(0xFFE91E63),
                                 contentColor = Color.White,
-                                dialogTitle = "Community Loved",
-                                infoText = "A large share of score votes land at the very top, so the viewers who rate it tend to really love it."
+                                dialogTitle = "Beloved",
+                                infoText = "Viewers who rate this anime tend to rate it very highly, giving it a reputation for strong emotional impact and broad fan appreciation."
+                            )
+                        } else null,
+                        if (showHiddenGemCard) {
+                            StatsPillData(
+                                label = "HiddenGem",
+                                icon = Icons.Default.AutoAwesome,
+                                containerColor = Color(0xFF00796B),
+                                contentColor = Color.White,
+                                dialogTitle = "HiddenGem",
+                                infoText = "Despite its smaller audience, this anime receives unusually strong praise from the people who watch it, giving it the feel of a lesser-known standout."
                             )
                         } else null,
                         if (showPolarizingCard) {
                             StatsPillData(
                                 label = "Polarizing",
-                                icon = Icons.Default.Warning,
-                                containerColor = Color(0xFF6A1B9A),
+                                icon = Icons.Default.CompareArrows,
+                                containerColor = Color(0xFF8E24AA),
                                 contentColor = Color.White,
                                 dialogTitle = "Polarizing",
-                                infoText = "Both very high and very low scores have a strong presence, so viewers seem split on this one."
+                                infoText = "Reactions to this anime vary heavily between viewers. Some rate it extremely highly, while others remain unconvinced or conflicted."
                             )
                         } else null,
                         if (showDropCard) {
                             StatsPillData(
-                                label = "Highly Dropped",
-                                icon = Icons.Default.TrendingDown,
-                                containerColor = Color(0xFFC62828),
+                                label = "High Dropoff",
+                                icon = Icons.Default.ExitToApp,
+                                containerColor = Color(0xFFD32F2F),
                                 contentColor = Color.White,
-                                dialogTitle = "Highly Dropped",
-                                infoText = "A noticeable share of users stopped watching compared with how many finished it, so it may lose some viewers along the way."
+                                dialogTitle = "High Dropoff",
+                                infoText = "A noticeable number of viewers stop watching before finishing, which may point to pacing issues, tonal shifts, or difficulty maintaining interest."
                             )
                         } else null,
                         if (showColdReceptionCard) {
                             StatsPillData(
-                                label = "Cold Reception",
-                                icon = Icons.Default.TrendingDown,
-                                containerColor = Color(0xFF455A64),
+                                label = "Disliked",
+                                icon = Icons.Default.ThumbDown,
+                                containerColor = Color(0xFF546E7A),
                                 contentColor = Color.White,
-                                dialogTitle = "Cold Reception",
-                                infoText = "Lower scores make up a noticeable part of the vote spread, so this anime may not land well for many viewers."
-                            )
-                        } else null,
-                        if (showNicheAppealCard) {
-                            StatsPillData(
-                                label = "Niche Appeal",
-                                icon = Icons.Default.Star,
-                                containerColor = Color(0xFF00897B),
-                                contentColor = Color.White,
-                                dialogTitle = "Niche Appeal",
-                                infoText = "The score spread is strong, but the audience is relatively smaller, so it may be especially loved by its niche."
+                                dialogTitle = "Disliked",
+                                infoText = "Lower ratings appear more frequently here than usual, suggesting this anime struggles to connect with a broader audience."
                             )
                         } else null,
                         if (showCompletionCard) {
                             StatsPillData(
-                                label = "Highly Completed",
-                                icon = Icons.Default.CheckCircle,
-                                containerColor = Color(0xFF2E7D32),
+                                label = "High Retention",
+                                icon = Icons.Default.TaskAlt,
+                                containerColor = Color(0xFF43A047),
                                 contentColor = Color.White,
-                                dialogTitle = "Highly Completed",
-                                infoText = "A large share of users who added this anime have finished it, which usually means people tend to stick with it."
+                                dialogTitle = "High Retention",
+                                infoText = "People who start this anime tend to stay with it through completion, which often reflects consistent engagement or strong pacing."
                             )
                         } else null,
                         if (showMixedReceptionCard) {
                             StatsPillData(
-                                label = "Mixed Reception",
-                                icon = Icons.Default.Star,
-                                containerColor = Color(0xFF5D6D7E),
+                                label = "Mixed",
+                                icon = Icons.Default.Shuffle,
+                                containerColor = Color(0xFF78909C),
                                 contentColor = Color.White,
-                                dialogTitle = "Mixed Reception",
-                                infoText = "The score votes are spread across several ranges, so there is no clear agreement around one rating."
+                                dialogTitle = "Mixed",
+                                infoText = "Viewer opinions are spread across several score ranges rather than clustering around one clear consensus."
                             )
                         } else null,
                         if (showOnHoldCard) {
                             StatsPillData(
-                                label = "On Hold Risk",
-                                icon = Icons.Default.Warning,
-                                containerColor = Color(0xFFFBC02D),
+                                label = "Stalled",
+                                icon = Icons.Default.PauseCircle,
+                                containerColor = Color(0xFFFDD835),
                                 contentColor = Color(0xFF212121),
-                                dialogTitle = "On Hold Risk",
-                                infoText = "More users than usual have paused this anime, which can mean pacing, timing, or interest drops off for some viewers."
+                                dialogTitle = "Stalled",
+                                infoText = "Viewers pause this anime more often than usual, which can happen when a series feels demanding, slow-moving, or difficult to continue consistently."
                             )
                         } else null,
                         if (showMostlyMidCard) {
                             StatsPillData(
-                                label = "Mostly Mid",
-                                icon = Icons.Default.Star,
+                                label = "Mid",
+                                icon = Icons.Default.Remove,
                                 containerColor = Color(0xFF757575),
                                 contentColor = Color.White,
-                                dialogTitle = "Mostly Mid",
-                                infoText = "Score 6 takes up a notable share, which points to a more okay-or-decent reception than a strongly loved one."
+                                dialogTitle = "Mid",
+                                infoText = "Most reactions land around the middle rather than the extremes, giving this anime a more decent-than-memorable reputation overall."
                             )
                         } else null,
                         if (showSafePickCard) {
                             StatsPillData(
-                                label = "Safe Pick",
-                                icon = Icons.Default.CheckCircle,
-                                containerColor = Color(0xFF43A047),
+                                label = "Broad Appeal",
+                                icon = Icons.Default.Verified,
+                                containerColor = Color(0xFF66BB6A),
                                 contentColor = Color.White,
-                                dialogTitle = "Safe Pick",
-                                infoText = "Very few voters rate it low, so even if not everyone adores it, most viewers seem at least okay with it."
+                                dialogTitle = "Broad Appeal",
+                                infoText = "Very few viewers strongly dislike this anime, making it a broadly approachable choice even for people outside its target audience."
                             )
                         } else null,
                         if (showPlannedCard) {
                             StatsPillData(
-                                label = "Planned by Many",
-                                icon = Icons.Default.Schedule,
-                                containerColor = Color(0xFF546E7A),
+                                label = "High Interest",
+                                icon = Icons.Default.Bookmark,
+                                containerColor = Color(0xFF607D8B),
                                 contentColor = Color.White,
-                                dialogTitle = "Planned by Many",
-                                infoText = "A large share of users have saved this anime to watch later, so there is strong interest even if many have not started it yet."
+                                dialogTitle = "High Interest",
+                                infoText = "A large number of users have this anime saved for later, suggesting strong curiosity, reputation, or word-of-mouth interest."
+                            )
+                        } else null,
+                        if (showNicheAppealCard) {
+                            StatsPillData(
+                                label = "Niche",
+                                icon = Icons.Default.Tune,
+                                containerColor = Color(0xFF26A69A),
+                                contentColor = Color.White,
+                                dialogTitle = "Niche",
+                                infoText = "This anime resonates strongly with a more specific audience, even if it remains relatively small compared with mainstream titles."
+                            )
+                        } else null,
+                        if (showObscureCard) {
+                            StatsPillData(
+                                label = "Obscure",
+                                icon = Icons.Default.VisibilityOff,
+                                containerColor = Color(0xFF6D4C41),
+                                contentColor = Color.White,
+                                dialogTitle = "Obscure",
+                                infoText = "Relatively few users have discovered or added this anime, giving it a much lower profile within the wider community."
+                            )
+                        } else null,
+                        if (showSlowBurnCard) {
+                            StatsPillData(
+                                label = "Slowburn",
+                                icon = Icons.Default.HourglassTop,
+                                containerColor = Color(0xFF8D6E63),
+                                contentColor = Color.White,
+                                dialogTitle = "Slowburn",
+                                infoText = "This anime tends to build appreciation gradually over time rather than relying on immediate excitement or explosive popularity."
                             )
                         } else null
                     ).take(5)
@@ -1580,6 +1744,21 @@ fun AnimeDetailsContent(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            if (isScoreDistributionLoading) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Refreshing score distribution...",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                             Spacer(modifier = Modifier.height(8.dp))
 
                             val scoreMap = scoreDistribution.associateBy { it.score }
@@ -1629,8 +1808,17 @@ fun AnimeDetailsContent(
                             }
                         } else {
                             val unavailableReason = when {
-                                isCommunityStatsRefreshing -> "Refreshing score distribution..."
-                                scoringUsers > 0 -> "MAL reports %,d scoring users, but the score buckets source did not return a distribution yet.".format(scoringUsers)
+                                isScoreDistributionLoading -> "Refreshing score distribution..."
+                                !scoreDistributionError.isNullOrBlank() && scoringUsers >= 25 ->
+                                    "MAL reports %,d scoring users, but the score breakdown source is temporarily unavailable. Tap refresh to retry.".format(scoringUsers)
+                                !scoreDistributionError.isNullOrBlank() && scoringUsers > 0 ->
+                                    "Only %,d MAL scoring users are available right now. More scorers are needed for a reliable score breakdown.".format(scoringUsers)
+                                !scoreDistributionError.isNullOrBlank() && details.mean != null ->
+                                    "MAL has an average score, but score breakdown data is temporarily unavailable."
+                                !scoreDistributionError.isNullOrBlank() ->
+                                    "Score breakdown data is temporarily unavailable. Tap refresh to retry."
+                                scoringUsers >= 25 -> "MAL reports %,d scoring users, but the score buckets source is temporarily unavailable. Tap refresh to retry.".format(scoringUsers)
+                                scoringUsers > 0 -> "Only %,d MAL scoring users are available right now. More scorers are needed for a reliable score breakdown.".format(scoringUsers)
                                 details.mean != null -> "MAL has an average score, but no score bucket breakdown is available yet."
                                 else -> "No public score distribution is available for this anime yet."
                             }

@@ -22,6 +22,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeoutOrNull
@@ -35,6 +36,10 @@ class AnimeDetailsViewModel @Inject constructor(
     companion object {
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
         private const val MAX_CARD_META_FETCH = 30
+        private const val SCORE_RETRY_COUNT = 2
+        private const val SCORE_RETRY_DELAY_MS = 700L
+        private const val HEAVY_RETRY_COUNT = 2
+        private const val HEAVY_RETRY_DELAY_MS = 800L
         private val detailsCache = mutableMapOf<Int, Pair<Long, AnimeDetailsUiState.Success>>()
         private val recommendationMetaCache = mutableMapOf<Int, Pair<Long, RecommendationCardMeta>>()
     }
@@ -45,8 +50,11 @@ class AnimeDetailsViewModel @Inject constructor(
     private var reviewsJob: Job? = null
     private var recommendationsJob: Job? = null
     private var peopleJob: Job? = null
+    private var charactersJob: Job? = null
+    private var staffJob: Job? = null
     private var myListStatusJob: Job? = null
     private var communityStatsJob: Job? = null
+    private var availabilityJob: Job? = null
 
     private val _uiState = MutableStateFlow<AnimeDetailsUiState>(AnimeDetailsUiState.Loading)
     val uiState: StateFlow<AnimeDetailsUiState> = _uiState.asStateFlow()
@@ -160,12 +168,13 @@ class AnimeDetailsViewModel @Inject constructor(
 
         communityStatsJob?.cancel()
         communityStatsJob = viewModelScope.launch {
-            _uiState.value = current.copy(isCommunityStatsRefreshing = true)
+            _uiState.value = current.copy(
+                isCommunityStatsRefreshing = true,
+                isScoreDistributionLoading = true,
+                scoreDistributionError = null
+            )
 
             val freshDetails = runCatching { repository.getAnimeDetailsLite(animeId) }.getOrNull()
-            val freshScoreDistribution = runCatching {
-                repository.getAnimeStatistics(animeId).data.scores
-            }.getOrDefault(current.scoreDistribution)
 
             val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
             if (latest.details.id != animeId) return@launch
@@ -178,10 +187,26 @@ class AnimeDetailsViewModel @Inject constructor(
                 )
             } ?: latest.details
 
+            val expectedScoringUsers = updatedDetails.numScoringUsers ?: latest.details.numScoringUsers ?: 0
+            val scoreFetch = fetchScoreDistributionWithRetry(expectedScoringUsers)
+            val shouldReplaceScoreDistribution = scoreFetch.errorMessage == null
+            val nextScoreDistribution = if (shouldReplaceScoreDistribution) {
+                scoreFetch.data
+            } else {
+                latest.scoreDistribution
+            }
+
             val updated = latest.copy(
                 details = updatedDetails,
-                scoreDistribution = freshScoreDistribution,
-                isCommunityStatsRefreshing = false
+                scoreDistribution = nextScoreDistribution,
+                isCommunityStatsRefreshing = false,
+                isScoreDistributionLoading = false,
+                scoreDistributionError = scoreFetch.errorMessage,
+                lastScoreDistributionUpdatedAt = if (shouldReplaceScoreDistribution) {
+                    SystemClock.elapsedRealtime()
+                } else {
+                    latest.lastScoreDistributionUpdatedAt
+                }
             )
             detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
             _uiState.value = updated
@@ -224,7 +249,7 @@ class AnimeDetailsViewModel @Inject constructor(
         }
     }
 
-    fun loadReviews(forceRefresh: Boolean = false) {
+    fun loadReviews(forceRefresh: Boolean = false, userTriggered: Boolean = false) {
         val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
         if (current.isReviewsLoaded && !forceRefresh) return
 
@@ -233,7 +258,13 @@ class AnimeDetailsViewModel @Inject constructor(
             val before = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
             _uiState.value = before.copy(isReviewsLoading = true)
 
-            val reviews = runCatching { repository.getAnimeReviews(animeId).data }.getOrDefault(emptyList())
+            val reviews = if (userTriggered) {
+                fetchWithRetry(HEAVY_RETRY_COUNT, HEAVY_RETRY_DELAY_MS) {
+                    repository.getAnimeReviews(animeId).data
+                }.getOrDefault(emptyList())
+            } else {
+                runCatching { repository.getAnimeReviews(animeId).data }.getOrDefault(emptyList())
+            }
             val recommended = reviews.find { it.tags.any { tag -> tag.contains("Recommended", ignoreCase = true) && !tag.contains("Not", ignoreCase = true) } }
             val mixed = reviews.find { it.tags.any { tag -> tag.contains("Mixed", ignoreCase = true) } }
             val notRecommended = reviews.find { it.tags.any { tag -> tag.contains("Not Recommended", ignoreCase = true) } }
@@ -254,7 +285,7 @@ class AnimeDetailsViewModel @Inject constructor(
         }
     }
 
-    fun loadRecommendations(forceRefresh: Boolean = false) {
+    fun loadRecommendations(forceRefresh: Boolean = false, userTriggered: Boolean = false) {
         val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
         if (current.isRecommendationsLoaded && !forceRefresh) return
 
@@ -263,9 +294,15 @@ class AnimeDetailsViewModel @Inject constructor(
             val before = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
             _uiState.value = before.copy(isRecommendationsLoading = true)
 
-            val recommendations = runCatching {
-                repository.getAnimeRecommendationsOnly(animeId).recommendations.orEmpty()
-            }.getOrDefault(emptyList())
+            val recommendations = if (userTriggered) {
+                fetchWithRetry(HEAVY_RETRY_COUNT, HEAVY_RETRY_DELAY_MS) {
+                    repository.getAnimeRecommendationsOnly(animeId).recommendations.orEmpty()
+                }.getOrDefault(emptyList())
+            } else {
+                runCatching {
+                    repository.getAnimeRecommendationsOnly(animeId).recommendations.orEmpty()
+                }.getOrDefault(emptyList())
+            }
 
             val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
             if (latest.details.id != animeId) return@launch
@@ -301,6 +338,90 @@ class AnimeDetailsViewModel @Inject constructor(
                 staff = staff,
                 isPeopleLoaded = true,
                 isPeopleLoading = false
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
+    fun refreshCharactersSection() {
+        val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
+        if (current.isCharactersRefreshing) return
+
+        charactersJob?.cancel()
+        charactersJob = viewModelScope.launch {
+            _uiState.value = current.copy(
+                isCharactersRefreshing = true,
+                charactersError = null
+            )
+
+            val refreshedCharacters = runCatching {
+                repository.getAnimeCharacters(animeId).data
+            }
+
+            val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (latest.details.id != animeId) return@launch
+
+            val updated = latest.copy(
+                characters = refreshedCharacters.getOrElse { latest.characters },
+                isPeopleLoaded = true,
+                isPeopleLoading = false,
+                isCharactersRefreshing = false,
+                charactersError = refreshedCharacters.exceptionOrNull()?.message
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
+    fun refreshStaffSection() {
+        val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
+        if (current.isStaffRefreshing) return
+
+        staffJob?.cancel()
+        staffJob = viewModelScope.launch {
+            _uiState.value = current.copy(
+                isStaffRefreshing = true,
+                staffError = null
+            )
+
+            val refreshedStaff = fetchWithRetry(HEAVY_RETRY_COUNT, HEAVY_RETRY_DELAY_MS) {
+                repository.getAnimeStaff(animeId).data
+            }
+
+            val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (latest.details.id != animeId) return@launch
+
+            val updated = latest.copy(
+                staff = refreshedStaff.getOrElse { latest.staff },
+                isPeopleLoaded = true,
+                isPeopleLoading = false,
+                isStaffRefreshing = false,
+                staffError = refreshedStaff.exceptionOrNull()?.message
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
+    fun refreshAvailability() {
+        val current = _uiState.value as? AnimeDetailsUiState.Success ?: return
+        if (current.isAvailabilityRefreshing) return
+
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch {
+            _uiState.value = current.copy(isAvailabilityRefreshing = true)
+
+            val refreshedStreaming = runCatching {
+                repository.getAnimeStreaming(animeId).data
+            }.getOrDefault(current.streaming)
+
+            val latest = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (latest.details.id != animeId) return@launch
+
+            val updated = latest.copy(
+                streaming = refreshedStreaming,
+                isAvailabilityRefreshing = false
             )
             detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
             _uiState.value = updated
@@ -376,6 +497,13 @@ class AnimeDetailsViewModel @Inject constructor(
     private fun launchSupplementaryRefresh(details: AnimeDetailsResponse) {
         supplementaryJob?.cancel()
         supplementaryJob = viewModelScope.launch {
+            val before = _uiState.value as? AnimeDetailsUiState.Success
+            if (before != null && before.details.id == details.id) {
+                _uiState.value = before.copy(
+                    isScoreDistributionLoading = true,
+                    scoreDistributionError = null
+                )
+            }
             val enriched = runCatching {
                 supervisorScope {
                     val charactersDeferred = async {
@@ -387,9 +515,6 @@ class AnimeDetailsViewModel @Inject constructor(
                     val streamingDeferred = async {
                         runCatching { repository.getAnimeStreaming(animeId).data }.getOrDefault(emptyList())
                     }
-                    val scoreDistributionDeferred = async {
-                        runCatching { repository.getAnimeStatistics(animeId).data.scores }.getOrDefault(emptyList())
-                    }
                     val airingDeferred = async {
                         runCatching { repository.getAiringAnimeDetails(listOf(animeId)).firstOrNull() }.getOrNull()
                     }
@@ -398,11 +523,22 @@ class AnimeDetailsViewModel @Inject constructor(
                         characters = charactersDeferred.await(),
                         themes = themesDeferred.await(),
                         streaming = streamingDeferred.await(),
-                        scoreDistribution = scoreDistributionDeferred.await(),
                         airingMedia = airingDeferred.await()
                     )
                 }
-            }.getOrNull() ?: return@launch
+            }.getOrNull()
+            if (enriched == null) {
+                val latest = _uiState.value as? AnimeDetailsUiState.Success
+                if (latest != null && latest.details.id == details.id) {
+                    val recovered = latest.copy(
+                        isScoreDistributionLoading = false,
+                        scoreDistributionError = latest.scoreDistributionError ?: "Supplementary refresh failed before score distribution could be updated."
+                    )
+                    detailsCache[animeId] = SystemClock.elapsedRealtime() to recovered
+                    _uiState.value = recovered
+                }
+                return@launch
+            }
 
             val current = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
             if (current.details.id != details.id) return@launch
@@ -411,13 +547,65 @@ class AnimeDetailsViewModel @Inject constructor(
                 characters = enriched.characters,
                 themes = enriched.themes,
                 streaming = enriched.streaming,
-                scoreDistribution = enriched.scoreDistribution,
                 airingMedia = enriched.airingMedia,
                 isSupplementaryLoaded = true
             )
-            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
             _uiState.value = updated
+
+            val expectedScoringUsers = updated.details.numScoringUsers ?: 0
+            val scoreFetch = fetchScoreDistributionWithRetry(expectedScoringUsers)
+            val shouldReplaceScoreDistribution = scoreFetch.errorMessage == null
+            val finalized = updated.copy(
+                scoreDistribution = if (shouldReplaceScoreDistribution) scoreFetch.data else updated.scoreDistribution,
+                isScoreDistributionLoading = false,
+                scoreDistributionError = scoreFetch.errorMessage,
+                lastScoreDistributionUpdatedAt = if (shouldReplaceScoreDistribution) {
+                    SystemClock.elapsedRealtime()
+                } else {
+                    updated.lastScoreDistributionUpdatedAt
+                }
+            )
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to finalized
+            _uiState.value = finalized
         }
+    }
+
+    private suspend fun fetchScoreDistributionWithRetry(expectedScoringUsers: Int): ScoreDistributionFetchResult {
+        var lastError: String? = null
+        repeat(SCORE_RETRY_COUNT + 1) { attempt ->
+            val result = runCatching { repository.getAnimeStatistics(animeId).data.scores }
+            if (result.isSuccess) {
+                val scores = result.getOrDefault(emptyList())
+                if (scores.isNotEmpty() || expectedScoringUsers <= 0) {
+                    return ScoreDistributionFetchResult(data = scores, errorMessage = null)
+                }
+                lastError = "Score buckets returned empty even though scorers exist."
+            } else {
+                lastError = result.exceptionOrNull()?.message ?: "Failed to fetch score distribution."
+            }
+
+            if (attempt < SCORE_RETRY_COUNT) {
+                delay(SCORE_RETRY_DELAY_MS * (attempt + 1))
+            }
+        }
+        return ScoreDistributionFetchResult(data = emptyList(), errorMessage = lastError)
+    }
+
+    private suspend fun <T> fetchWithRetry(
+        retries: Int,
+        baseDelayMs: Long,
+        block: suspend () -> T
+    ): Result<T> {
+        var lastResult: Result<T>? = null
+        repeat(retries + 1) { attempt ->
+            val current = runCatching { block() }
+            if (current.isSuccess) return current
+            lastResult = current
+            if (attempt < retries) {
+                delay(baseDelayMs * (attempt + 1))
+            }
+        }
+        return lastResult ?: runCatching { block() }
     }
 }
 
@@ -442,7 +630,15 @@ sealed interface AnimeDetailsUiState {
         val isRecommendationsLoading: Boolean = false,
         val isPeopleLoaded: Boolean = false,
         val isPeopleLoading: Boolean = false,
-        val isCommunityStatsRefreshing: Boolean = false
+        val isCommunityStatsRefreshing: Boolean = false,
+        val isScoreDistributionLoading: Boolean = false,
+        val scoreDistributionError: String? = null,
+        val lastScoreDistributionUpdatedAt: Long? = null,
+        val isAvailabilityRefreshing: Boolean = false,
+        val isCharactersRefreshing: Boolean = false,
+        val isStaffRefreshing: Boolean = false,
+        val charactersError: String? = null,
+        val staffError: String? = null
     ) : AnimeDetailsUiState
     data class Error(val message: String) : AnimeDetailsUiState
 }
@@ -457,6 +653,10 @@ private data class SupplementaryAnimeData(
     val characters: List<JikanCharacterData>,
     val themes: JikanThemesData?,
     val streaming: List<JikanStreamingData>,
-    val scoreDistribution: List<JikanAnimeScoreBucket>,
     val airingMedia: AniListMedia?
+)
+
+private data class ScoreDistributionFetchResult(
+    val data: List<JikanAnimeScoreBucket>,
+    val errorMessage: String?
 )
