@@ -149,6 +149,12 @@ class SettingsViewModel @Inject constructor(
         initialValue = true
     )
 
+    val homeDefaultSearchAnime = prefsManager.homeDefaultSearchAnimeFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
     fun setThemePreference(preference: ThemePreference) {
         viewModelScope.launch { prefsManager.saveTheme(preference) }
     }
@@ -249,6 +255,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setHomeMangaPicksEnabled(enabled: Boolean) {
         viewModelScope.launch { prefsManager.saveHomeMangaPicksEnabled(enabled) }
+    }
+
+    fun setHomeDefaultSearchAnime(isAnimeDefault: Boolean) {
+        viewModelScope.launch { prefsManager.saveHomeDefaultSearchAnime(isAnimeDefault) }
     }
 
     fun setHomeSectionsAndThen(

@@ -1022,6 +1022,13 @@ class AnimeViewModel @Inject constructor(
     fun getHomeRandomAnimeEnabledFlow() = prefsManager.homeRandomAnimeEnabledFlow
     fun getHomeAnimePicksEnabledFlow() = prefsManager.homeAnimePicksEnabledFlow
     fun getHomeMangaPicksEnabledFlow() = prefsManager.homeMangaPicksEnabledFlow
+    fun getHomeDefaultSearchAnimeFlow() = prefsManager.homeDefaultSearchAnimeFlow
+
+    fun setHomeDefaultSearchAnime(isAnimeDefault: Boolean) {
+        viewModelScope.launch {
+            prefsManager.saveHomeDefaultSearchAnime(isAnimeDefault)
+        }
+    }
 
     fun setDiscoverySort(isAnime: Boolean, sort: String) {
         viewModelScope.launch {

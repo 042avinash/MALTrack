@@ -65,7 +65,11 @@ interface JikanApiService {
 
 @Serializable
 data class JikanFullUserProfileResponse(
-    val data: JikanFullUserProfile
+    val data: JikanFullUserProfile? = null,
+    val status: Int? = null,
+    val type: String? = null,
+    val message: String? = null,
+    val error: String? = null
 )
 
 @Serializable

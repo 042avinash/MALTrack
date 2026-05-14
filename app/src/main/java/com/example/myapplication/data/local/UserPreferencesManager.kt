@@ -51,6 +51,7 @@ class UserPreferencesManager @Inject constructor(
     private val homeRandomAnimeEnabledKey = booleanPreferencesKey("home_random_anime_enabled")
     private val homeAnimePicksEnabledKey = booleanPreferencesKey("home_anime_picks_enabled")
     private val homeMangaPicksEnabledKey = booleanPreferencesKey("home_manga_picks_enabled")
+    private val homeDefaultSearchAnimeKey = booleanPreferencesKey("home_default_search_anime")
     private val episodeNotificationsEnabledKey = booleanPreferencesKey("episode_notifications_enabled")
     private val episodeNotificationBaselineKey = stringPreferencesKey("episode_notification_baselines")
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
@@ -155,6 +156,10 @@ class UserPreferencesManager @Inject constructor(
 
     val homeMangaPicksEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
         prefs[homeMangaPicksEnabledKey] ?: true
+    }
+
+    val homeDefaultSearchAnimeFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[homeDefaultSearchAnimeKey] ?: true
     }
 
     val episodeNotificationBaselinesFlow: Flow<Map<String, Int>> = context.userPrefsDataStore.data.map { prefs ->
@@ -292,6 +297,12 @@ class UserPreferencesManager @Inject constructor(
     suspend fun saveHomeMangaPicksEnabled(enabled: Boolean) {
         context.userPrefsDataStore.edit { prefs ->
             prefs[homeMangaPicksEnabledKey] = enabled
+        }
+    }
+
+    suspend fun saveHomeDefaultSearchAnime(isAnimeDefault: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[homeDefaultSearchAnimeKey] = isAnimeDefault
         }
     }
 

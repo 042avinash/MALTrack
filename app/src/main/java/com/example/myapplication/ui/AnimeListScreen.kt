@@ -126,6 +126,7 @@ fun AnimeListScreen(
     val homeRandomAnimeEnabled by viewModel.getHomeRandomAnimeEnabledFlow().collectAsState(initial = true)
     val homeAnimePicksEnabled by viewModel.getHomeAnimePicksEnabledFlow().collectAsState(initial = true)
     val homeMangaPicksEnabled by viewModel.getHomeMangaPicksEnabledFlow().collectAsState(initial = true)
+    val homeDefaultSearchAnime by viewModel.getHomeDefaultSearchAnimeFlow().collectAsState(initial = true)
     val recentSearches by viewModel.recentSearches.collectAsState()
     val listFilters by viewModel.listFilters.collectAsState()
     
@@ -138,9 +139,7 @@ fun AnimeListScreen(
     var loadingViewContext by remember { mutableStateOf(LoadingViewContext.HOME) }
     var hasRequestedInitialHomeLoad by rememberSaveable { mutableStateOf(false) }
     var appliedInitialSearchQuery by rememberSaveable { mutableStateOf("") }
-    var searchMediaType by remember(initialTab) {
-        mutableStateOf(if (initialTab == 0) SearchMediaType.ANIME else SearchMediaType.MANGA)
-    }
+    var searchMediaType by remember { mutableStateOf(if (homeDefaultSearchAnime) SearchMediaType.ANIME else SearchMediaType.MANGA) }
     val currentCalendar = Calendar.getInstance()
     val homeLabelYear = currentCalendar.get(Calendar.YEAR)
     val homeLabelSeason = when (currentCalendar.get(Calendar.MONTH)) {
@@ -170,11 +169,18 @@ fun AnimeListScreen(
         val query = initialSearchQuery.trim()
         if (query.isBlank() || query == appliedInitialSearchQuery) return@LaunchedEffect
         appliedInitialSearchQuery = query
-        searchMediaType = SearchMediaType.ANIME
+        val initialSearchType = if (initialTab == 1) SearchMediaType.MANGA else SearchMediaType.ANIME
+        searchMediaType = initialSearchType
         searchQuery = query
         isSearchExpanded = true
-        viewModel.searchAnime(query, isAnimeSearch = true)
+        viewModel.searchAnime(query, isAnimeSearch = initialSearchType == SearchMediaType.ANIME)
         viewModel.saveRecentSearch(query)
+    }
+
+    LaunchedEffect(homeDefaultSearchAnime, isSearchExpanded, searchQuery) {
+        if (!isSearchExpanded && searchQuery.isBlank()) {
+            searchMediaType = if (homeDefaultSearchAnime) SearchMediaType.ANIME else SearchMediaType.MANGA
+        }
     }
 
     LaunchedEffect(errorMessage) {
@@ -331,6 +337,7 @@ fun AnimeListScreen(
                 onMediaTypeToggle = {
                     val nextType = if (searchMediaType == SearchMediaType.ANIME) SearchMediaType.MANGA else SearchMediaType.ANIME
                     searchMediaType = nextType
+                    viewModel.setHomeDefaultSearchAnime(nextType == SearchMediaType.ANIME)
                     if (searchQuery.isNotBlank()) {
                         loadingViewContext = LoadingViewContext.SEARCH
                         viewModel.searchAnime(
@@ -769,6 +776,19 @@ fun AnimeListScreen(
 
                     Column(modifier = Modifier.fillMaxSize()) {
                         SearchActionToolbar(
+                            searchMediaType = searchMediaType,
+                            onMediaTypeToggle = {
+                                val nextType = if (searchMediaType == SearchMediaType.ANIME) SearchMediaType.MANGA else SearchMediaType.ANIME
+                                searchMediaType = nextType
+                                viewModel.setHomeDefaultSearchAnime(nextType == SearchMediaType.ANIME)
+                                if (searchQuery.isNotBlank()) {
+                                    loadingViewContext = LoadingViewContext.SEARCH
+                                    viewModel.searchAnime(
+                                        searchQuery,
+                                        isAnimeSearch = nextType == SearchMediaType.ANIME
+                                    )
+                                }
+                            },
                             isGridView = currentDiscoveryIsGrid,
                             onGridClick = {
                                 viewModel.setDiscoveryGridMode(
@@ -1253,7 +1273,9 @@ private fun HomeSearchToolbar(
 }
 
 @Composable
-fun SearchActionToolbar(
+private fun SearchActionToolbar(
+    searchMediaType: SearchMediaType,
+    onMediaTypeToggle: () -> Unit,
     isGridView: Boolean,
     onGridClick: () -> Unit
 ) {
@@ -1264,6 +1286,19 @@ fun SearchActionToolbar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.End
     ) {
+        FilledTonalButton(
+            onClick = onMediaTypeToggle,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            modifier = Modifier.height(34.dp)
+        ) {
+            Icon(
+                if (searchMediaType == SearchMediaType.ANIME) Icons.Default.Movie else Icons.AutoMirrored.Filled.MenuBook,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(searchMediaType.label, fontSize = 11.sp)
+        }
         IconButton(onClick = onGridClick) {
             Icon(
                 imageVector = if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
@@ -1463,7 +1498,7 @@ private data class QuickMangaEdit(
     val maxChapters: Int
 )
 
-private enum class SearchMediaType(val label: String) {
+enum class SearchMediaType(val label: String) {
     ANIME("Anime"),
     MANGA("Manga")
 }

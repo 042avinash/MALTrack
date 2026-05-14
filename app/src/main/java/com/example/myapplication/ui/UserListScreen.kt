@@ -123,7 +123,7 @@ fun UserListScreen(
     onAnimeClick: (Int) -> Unit,
     onMangaClick: (Int) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenHomeSearch: (String) -> Unit
+    onOpenHomeSearch: (String, Boolean) -> Unit
 ) {
     var isAnimeView by remember { mutableStateOf(initialMainTab == 0) }
 
@@ -137,7 +137,7 @@ fun UserListScreen(
                 onAnimeClick = onAnimeClick,
                 onTypeSwitch = { isAnimeView = false },
                 onOpenSettings = onOpenSettings,
-                onOpenHomeSearch = onOpenHomeSearch
+                onOpenHomeSearch = { query -> onOpenHomeSearch(query, true) }
             )
         } else {
             UserMangaSection(
@@ -147,7 +147,8 @@ fun UserListScreen(
                 username = username,
                 onMangaClick = onMangaClick,
                 onTypeSwitch = { isAnimeView = true },
-                onOpenSettings = onOpenSettings
+                onOpenSettings = onOpenSettings,
+                onOpenHomeSearch = { query -> onOpenHomeSearch(query, false) }
             )
         }
     }
@@ -568,7 +569,8 @@ fun UserMangaSection(
     username: String? = null,
     onMangaClick: (Int) -> Unit,
     onTypeSwitch: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenHomeSearch: (String) -> Unit
 ) {
     val userMangaListState by viewModel.userMangaListState.collectAsState()
     val searchState by viewModel.searchState.collectAsState()
@@ -783,11 +785,17 @@ fun UserMangaSection(
                         listKey = "manga_${username ?: "@me"}_$pageStatus",
                         mangaList = pageItems,
                         titleLanguage = titleLanguage,
+                        currentStatus = pageStatus,
                         searchQuery = if (page == activePage) submittedSearchQuery else "",
                         searchResults = if (page == activePage) searchState.results else emptyList(),
                         isSearchLoading = page == activePage && submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
                         isOwnList = username == null,
+                        onSwitchToAll = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                        },
+                        onSearchOnMal = onOpenHomeSearch,
+                        onSwitchToAnime = onTypeSwitch,
                         onMangaClick = onMangaClick,
                         onMangaPlusOne = { item -> viewModel.quickIncrement(item.node.id) },
                         onMangaEdit = { item -> pendingMangaEdit = item },
@@ -1013,11 +1021,15 @@ fun UserMangaList(
     listKey: String,
     mangaList: List<UserMangaData>,
     titleLanguage: TitleLanguage,
+    currentStatus: String,
     searchQuery: String,
     searchResults: List<UserMangaData>,
     isSearchLoading: Boolean,
     isGridView: Boolean,
     isOwnList: Boolean = true,
+    onSwitchToAll: () -> Unit,
+    onSearchOnMal: (String) -> Unit,
+    onSwitchToAnime: () -> Unit,
     onMangaClick: (Int) -> Unit,
     onMangaPlusOne: (UserMangaData) -> Unit,
     onMangaEdit: (UserMangaData) -> Unit,
@@ -1038,13 +1050,21 @@ fun UserMangaList(
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
                     item {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 48.dp),
-                            contentAlignment = Alignment.Center
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text("No matches found")
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (currentStatus != "all") {
+                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                }
+                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                TextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
+                            }
                         }
                     }
                 } else {
@@ -1090,13 +1110,21 @@ fun UserMangaList(
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
                     item {
-                        Box(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 48.dp),
-                            contentAlignment = Alignment.Center
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text("No matches found")
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (currentStatus != "all") {
+                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                }
+                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                TextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
+                            }
                         }
                     }
                 } else {

@@ -448,7 +448,18 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getUserFullProfile(username: String): JikanFullUserProfile {
-        return jikanApiService.getUserFullProfile(username).data
+        val response = jikanApiService.getUserFullProfile(username)
+        return response.data ?: throw IOException(
+            buildString {
+                append("Profile data is unavailable right now")
+                response.message?.takeIf { it.isNotBlank() }?.let { append(": $it") }
+                when (response.status) {
+                    404 -> append(". The user may not exist or the profile may be hidden.")
+                    429 -> append(". Too many requests; please wait and try again.")
+                    in 500..599 -> append(". Jikan server is currently having issues.")
+                }
+            }
+        )
     }
 
     suspend fun getUserFriends(username: String): List<JikanFriend> {

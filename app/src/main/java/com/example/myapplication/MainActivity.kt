@@ -369,10 +369,10 @@ class MainActivity : ComponentActivity() {
                                 onOpenSettings = {
                                     navigateSingleTop("settings")
                                 },
-                                onOpenHomeSearch = { query ->
+                                onOpenHomeSearch = { query, isAnimeSearch ->
                                     val encodedQuery = Uri.encode(query)
                                     navigateToBottomDestination(
-                                        route = "anime_list?initialTab=0&initialQuery=$encodedQuery",
+                                        route = "anime_list?initialTab=${if (isAnimeSearch) 0 else 1}&initialQuery=$encodedQuery",
                                         destinationPrefix = "anime_list"
                                     )
                                 }

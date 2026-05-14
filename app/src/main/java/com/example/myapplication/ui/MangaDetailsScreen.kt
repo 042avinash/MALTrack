@@ -12,6 +12,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -67,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -284,7 +286,7 @@ fun MangaDetailsContent(
 ) {
     val context = LocalContext.current
     var isSynopsisExpanded by remember { mutableStateOf(false) }
-    var selectedPicture by remember { mutableStateOf<String?>(null) }
+    var selectedPictureIndex by remember { mutableStateOf<Int?>(null) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showRelatedPopup by remember { mutableStateOf(false) }
@@ -862,7 +864,7 @@ fun MangaDetailsContent(
                                 modifier = Modifier
                                     .height(250.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { selectedPicture = picUrl },
+                                    .clickable { selectedPictureIndex = details.pictures.indexOf(pic) },
                                 contentScale = ContentScale.Fit
                             )
                         }
@@ -1055,7 +1057,7 @@ fun MangaDetailsContent(
                     val readingRate = watchingRate
                     val showTrendingCard = readingRate >= 25f || (readingRate >= 20f && planRate >= 20f)
                     val showCompletionCard = completionRate >= 40f && dropRate <= 10f
-                    val showDropCard = dropRate >= 16f && dropRate >= completionRate * 0.35f
+                    val showDropCard = dropRate >= 10f && dropRate >= completionRate * 0.25f
                     val showOnHoldCard = onHoldRate >= 15f
                     val showPlannedCard = planRate >= 60f
 
@@ -1071,16 +1073,16 @@ fun MangaDetailsContent(
                     val lowScoreShare = scoreShare(1, 2, 3, 4)
                     val largestBucketShare = scoreDistribution.maxOfOrNull { it.percentage }?.toFloat() ?: 0f
 
-                    val showCommunityLovedCard = highScoreShare >= 40f && lowScoreShare <= 8f
-                    val showHiddenGemCard = highScoreShare >= 38f && lowScoreShare <= 8f && members < 70_000
-                    val showPolarizingCard = highScoreShare >= 25f && score5to8Share >= 45f && lowScoreShare >= 7f
+                    val showCommunityLovedCard = highScoreShare >= 55f && lowScoreShare <= 5f
+                    val showHiddenGemCard = highScoreShare >= 38f && lowScoreShare <= 8f && members < 35_000
+                    val showPolarizingCard = highScoreShare >= 25f && score5to8Share >= 45f && lowScoreShare >= 10f
                     val showColdReceptionCard = lowScoreShare >= 18f
-                    val showMixedReceptionCard = largestBucketShare < 35f && score5to6Share >= 15f && lowScoreShare >= 7f
+                    val showMixedReceptionCard = largestBucketShare < 45f && score5to6Share >= 12f && lowScoreShare >= 5f
                     val showMostlyMidCard = score5to7Share >= 50f && highScoreShare < 30f && lowScoreShare < 15f
                     val showSafePickCard = lowScoreShare <= 5f && score5to10Share >= 92f
                     val showNicheAppealCard = highScoreShare >= 25f && members < 150_000 && lowScoreShare >= 4f
                     val showObscureCard = members < 12_000
-                    val showSlowBurnCard = highScoreShare >= 20f && highScoreShare < 32f && dropRate <= 5f && lowScoreShare <= 5f && members > 15_000
+                    val showSlowBurnCard = highScoreShare >= 25f && highScoreShare < 50f && dropRate <= 5f && lowScoreShare <= 5f && members > 15_000
 
                     val allMatchingCards = listOfNotNull(
                         if (showTrendingCard) MangaStatsPillData("Trending", Icons.Default.TrendingUp, Color(0xFF1E88E5), Color.White, "Trending", "This manga is seeing a lot of active attention right now, often because it is currently popular or gaining momentum within the community.") else null,
@@ -1103,7 +1105,7 @@ fun MangaDetailsContent(
                     val suppressionMap = mapOf(
                         "Beloved" to setOf("Broad Appeal"),
                         "Polarizing" to setOf("Broad Appeal", "Mixed"),
-                        "HiddenGem" to setOf("Obscure"),
+                        "HiddenGem" to setOf("Obscure", "Beloved"),
                         "Disliked" to setOf("Mid")
                     )
                     val priorityMap = mapOf(
@@ -1325,16 +1327,48 @@ fun MangaDetailsContent(
     }
 
     // Dialog for Full Screen Picture View & Download
-    if (selectedPicture != null) {
+    val pictureUrls = remember(details.pictures) {
+        details.pictures.orEmpty().mapNotNull { it.large ?: it.medium }
+    }
+    val currentPictureUrl = selectedPictureIndex?.let { idx -> pictureUrls.getOrNull(idx) }
+
+    if (currentPictureUrl != null) {
         Dialog(
-            onDismissRequest = { selectedPicture = null },
+            onDismissRequest = { selectedPictureIndex = null },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha=0.9f))) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.9f))
+            ) {
                 AsyncImage(
-                    model = selectedPicture,
+                    model = currentPictureUrl,
                     contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(selectedPictureIndex, pictureUrls.size) {
+                            var totalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDrag += dragAmount
+                                },
+                                onDragEnd = {
+                                    val current = selectedPictureIndex ?: return@detectHorizontalDragGestures
+                                    val threshold = 80f
+                                    when {
+                                        totalDrag <= -threshold && current < pictureUrls.lastIndex -> {
+                                            selectedPictureIndex = current + 1
+                                        }
+                                        totalDrag >= threshold && current > 0 -> {
+                                            selectedPictureIndex = current - 1
+                                        }
+                                    }
+                                    totalDrag = 0f
+                                },
+                                onDragCancel = { totalDrag = 0f }
+                            )
+                        },
                     contentScale = ContentScale.Fit
                 )
                 Row(
@@ -1343,14 +1377,14 @@ fun MangaDetailsContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = { selectedPicture = null },
+                        onClick = { selectedPictureIndex = null },
                         modifier = Modifier.background(Color.Black.copy(alpha=0.5f), CircleShape)
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
                     Button(
                         onClick = {
-                            downloadMangaImage(context, selectedPicture!!, details.getPreferredTitle(titleLanguage))
+                            downloadMangaImage(context, currentPictureUrl, details.getPreferredTitle(titleLanguage))
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer, 

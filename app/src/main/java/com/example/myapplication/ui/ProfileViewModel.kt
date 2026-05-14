@@ -19,6 +19,7 @@ import kotlinx.coroutines.supervisorScope
 import android.os.SystemClock
 import java.net.SocketTimeoutException
 import java.io.IOException
+import retrofit2.HttpException
 import javax.inject.Inject
 
 @HiltViewModel
@@ -171,6 +172,13 @@ class ProfileViewModel @Inject constructor(
     private fun getFriendlyErrorMessage(error: Throwable): String {
         return if (isTimeoutError(error)) {
             "Request timed out. MAL or Jikan may be responding slowly, too many requests may have fired close together, a request may have stalled while switching screens, or your network may be unstable."
+        } else if (error is HttpException) {
+            when (error.code()) {
+                404 -> "Profile not found. The username may be wrong or the profile may be unavailable."
+                429 -> "Too many requests right now. Please wait a bit and try again."
+                in 500..599 -> "Jikan server is having a temporary issue. Please retry shortly."
+                else -> error.message()
+            }
         } else {
             error.message ?: "Something went wrong."
         }

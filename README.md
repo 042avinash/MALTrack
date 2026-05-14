@@ -7,7 +7,7 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.3.8`
+- `v1.4.1`
 
 ## Core Features
 
@@ -450,6 +450,41 @@ When no results are found, users can now:
 * Anime and manga now use separately calibrated sentiment thresholds
 * Suppression is applied before priority sorting and rendering
 * Only the top 5 qualifying cards render at once to reduce visual clutter
+
+## Version 1.4.1
+
+### Home Search Preference
+
+* Added a new Settings option for default Home search type (`Anime`/`Manga`)
+* Home search media toggle now initializes from this saved preference
+* Changing the Home toggle now also updates the saved default
+
+### Details & Profile Reliability
+
+* Added safer Jikan profile response handling for missing `data` payload cases
+* Added friendlier profile error messaging for rate-limit (`429`), server (`5xx`), and not-found (`404`) scenarios
+
+### Edit List Status (Anime)
+
+* In Edit List Status, setting watched episodes equal to total episodes now auto-triggers completed flow:
+  * status becomes `completed`
+  * finish date is auto-filled when empty
+
+### Picture Viewer UX
+
+* Anime Details and Manga Details picture dialogs now support swipe navigation between available images
+* Download action remains available for the currently visible image
+
+### Manga Sentiment Formula Updates
+
+* Updated manga-only sentiment thresholds:
+  * `Beloved`: `highScoreShare >= 55` and `lowScoreShare <= 5`
+  * `HiddenGem`: `highScoreShare >= 38` and `lowScoreShare <= 8` and `members < 35000`
+  * `Polarizing`: `highScoreShare >= 25` and `score5to8Share >= 45` and `lowScoreShare >= 10`
+  * `High Dropoff`: `dropRate >= 10` and `dropRate >= completionRate * 0.25`
+  * `Mixed`: `largestBucketShare < 45` and `score5to6Share >= 12` and `lowScoreShare >= 5`
+  * `Slowburn`: `highScoreShare >= 25` and `highScoreShare < 50` and `dropRate <= 5` and `lowScoreShare <= 5` and `members > 15000`
+* Added suppression rule: `HiddenGem` suppresses `Beloved`
 
 
 

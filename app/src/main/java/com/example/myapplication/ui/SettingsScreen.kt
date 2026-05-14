@@ -71,6 +71,7 @@ fun SettingsScreen(
     val homeRandomAnimeEnabled by viewModel.homeRandomAnimeEnabled.collectAsState()
     val homeAnimePicksEnabled by viewModel.homeAnimePicksEnabled.collectAsState()
     val homeMangaPicksEnabled by viewModel.homeMangaPicksEnabled.collectAsState()
+    val homeDefaultSearchAnime by viewModel.homeDefaultSearchAnime.collectAsState()
     val nsfwEnabled by viewModel.nsfwEnabled.collectAsState()
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -97,6 +98,7 @@ fun SettingsScreen(
     var showAnimeDiscoveryStyleDialog by remember { mutableStateOf(false) }
     var showMangaDiscoveryStyleDialog by remember { mutableStateOf(false) }
     var showHomeSectionsDialog by remember { mutableStateOf(false) }
+    var showHomeSearchDefaultDialog by remember { mutableStateOf(false) }
     var showAppInfoDialog by remember { mutableStateOf(false) }
     var showDefaultsPage by remember { mutableStateOf(false) }
     var startupParentSelection by remember { mutableStateOf<StartupParentOption?>(null) }
@@ -180,6 +182,13 @@ fun SettingsScreen(
                     title = "Home Sections",
                     subtitle = "Customize which home tabs are visible",
                     onClick = { showHomeSectionsDialog = true }
+                )
+
+                SettingClickableItem(
+                    icon = Icons.Default.Movie,
+                    title = "Default Home Search",
+                    subtitle = if (homeDefaultSearchAnime) "Anime" else "Manga",
+                    onClick = { showHomeSearchDefaultDialog = true }
                 )
 
                 Row(
@@ -432,6 +441,19 @@ fun SettingsScreen(
             onSave = { config ->
                 showHomeSectionsDialog = false
                 pendingHomeSectionsConfig = config
+            }
+        )
+    }
+
+    if (showHomeSearchDefaultDialog) {
+        StatusDialog(
+            title = "Default Home Search",
+            options = listOf("anime", "manga"),
+            currentValue = if (homeDefaultSearchAnime) "anime" else "manga",
+            onDismiss = { showHomeSearchDefaultDialog = false },
+            onSelect = {
+                viewModel.setHomeDefaultSearchAnime(it == "anime")
+                showHomeSearchDefaultDialog = false
             }
         )
     }
