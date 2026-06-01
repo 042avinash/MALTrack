@@ -5,6 +5,7 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,14 +74,46 @@ fun SettingsScreen(
     val homeMangaPicksEnabled by viewModel.homeMangaPicksEnabled.collectAsState()
     val homeDefaultSearchAnime by viewModel.homeDefaultSearchAnime.collectAsState()
     val nsfwEnabled by viewModel.nsfwEnabled.collectAsState()
+    val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as? PowerManager
+    var pendingBatteryOptimizationPrompt by remember { mutableStateOf(false) }
+    var showBatteryOptimizationWarning by remember { mutableStateOf(false) }
+    val batteryOptimizationIgnoredNow = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        } else {
+            true
+        }
+    }
+    val batteryOptimizationRequestLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (!pendingBatteryOptimizationPrompt) return@rememberLauncherForActivityResult
+        if (batteryOptimizationIgnoredNow()) {
+            pendingBatteryOptimizationPrompt = false
+            showBatteryOptimizationWarning = false
+        } else {
+            showBatteryOptimizationWarning = true
+        }
+    }
+    val maybePromptBatteryOptimization = {
+        if (pendingBatteryOptimizationPrompt && !batteryOptimizationIgnoredNow()) {
+            launchBatteryOptimizationRequest(context, batteryOptimizationRequestLauncher)
+        } else {
+            pendingBatteryOptimizationPrompt = false
+        }
+    }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             viewModel.setEpisodeNotificationsEnabled(true)
             AiringNotificationScheduler.schedule(context)
+            AiringNotificationScheduler.triggerNow(context)
+            maybePromptBatteryOptimization()
         } else {
             viewModel.setEpisodeNotificationsEnabled(false)
+            pendingBatteryOptimizationPrompt = false
+            showBatteryOptimizationWarning = false
         }
     }
 
@@ -191,74 +224,112 @@ fun SettingsScreen(
                     onClick = { showHomeSearchDefaultDialog = true }
                 )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            toggleEpisodeNotifications(
-                                enabled = !episodeNotificationsEnabled,
-                                viewModel = viewModel,
-                                context = context,
-                                permissionLauncher = notificationPermissionLauncher
-                            )
-                        }
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                SettingsSection(title = "Notifications") {
                     Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                pendingBatteryOptimizationPrompt = !episodeNotificationsEnabled
+                                toggleEpisodeNotifications(
+                                    enabled = !episodeNotificationsEnabled,
+                                    viewModel = viewModel,
+                                    context = context,
+                                    permissionLauncher = notificationPermissionLauncher,
+                                    onEnabled = maybePromptBatteryOptimization
+                                )
+                            }
+                            .padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 16.dp)
-                        )
-                        Column {
-                            Text(
-                                text = "Notify When New Episode Releases",
-                                style = MaterialTheme.typography.bodyLarge
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(end = 16.dp)
                             )
-                            Text(
-                                text = "For anime in your watching list",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column {
+                                Text(
+                                    text = "Notify When New Episode Releases",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = "For anime in your watching list",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+                        Switch(
+                            checked = episodeNotificationsEnabled,
+                            onCheckedChange = { checked ->
+                                pendingBatteryOptimizationPrompt = checked
+                                toggleEpisodeNotifications(
+                                    enabled = checked,
+                                    viewModel = viewModel,
+                                    context = context,
+                                    permissionLauncher = notificationPermissionLauncher,
+                                    onEnabled = maybePromptBatteryOptimization
+                                )
+                            }
+                        )
                     }
-                    Switch(
-                        checked = episodeNotificationsEnabled,
-                        onCheckedChange = {
+
+                    HorizontalDivider()
+
+                    SettingClickableItem(
+                        icon = Icons.Default.Notifications,
+                        title = "Test Notification",
+                        subtitle = "Send a sample notification to verify alerts are working",
+                        onClick = {
                             toggleEpisodeNotifications(
-                                enabled = it,
+                                enabled = true,
                                 viewModel = viewModel,
                                 context = context,
-                                permissionLauncher = notificationPermissionLauncher
+                                permissionLauncher = notificationPermissionLauncher,
+                                onEnabled = { AiringNotificationScheduler.triggerTest(context) }
                             )
                         }
                     )
+
+                    HorizontalDivider()
                 }
 
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.Notifications,
-                    title = "Test Notification",
-                    subtitle = "Send a sample notification to verify alerts are working",
-                    onClick = {
-                        toggleEpisodeNotifications(
-                            enabled = true,
-                            viewModel = viewModel,
-                            context = context,
-                            permissionLauncher = notificationPermissionLauncher,
-                            onEnabled = { AiringNotificationScheduler.triggerTest(context) }
-                        )
-                    }
-                )
-
-                HorizontalDivider()
+                if (showBatteryOptimizationWarning) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            showBatteryOptimizationWarning = false
+                            pendingBatteryOptimizationPrompt = false
+                        },
+                        title = { Text("Battery optimization is still on") },
+                        text = {
+                            Text(
+                                "If battery optimization stays enabled, background notification checks may stop and you may miss airing alerts."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showBatteryOptimizationWarning = false
+                                pendingBatteryOptimizationPrompt = true
+                                launchBatteryOptimizationRequest(context, batteryOptimizationRequestLauncher)
+                            }) {
+                                Text("Retry")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showBatteryOptimizationWarning = false
+                                pendingBatteryOptimizationPrompt = false
+                            }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
 
                 Row(
                     modifier = Modifier
@@ -642,6 +713,22 @@ private fun openNotificationSettings(context: android.content.Context) {
         )
     }
     context.startActivity(intent)
+}
+
+private fun launchBatteryOptimizationRequest(
+    context: android.content.Context,
+    launcher: androidx.activity.result.ActivityResultLauncher<Intent>
+) {
+    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${context.packageName}")
+        }
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+    }
+    launcher.launch(intent)
 }
 
 private fun toggleEpisodeNotifications(

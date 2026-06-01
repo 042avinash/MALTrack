@@ -36,6 +36,7 @@ private const val AIRING_NOTIFICATION_CHANNEL_ID = "airing_updates"
 private const val AIRING_NOTIFICATION_WORK_NAME = "airing_notification_work"
 private const val AIRING_NOTIFICATION_IMMEDIATE_WORK_NAME = "airing_notification_immediate_work"
 private const val INPUT_IS_TEST_NOTIFICATION = "is_test_notification"
+const val EXTRA_OPEN_ANIME_ID = "extra_open_anime_id"
 
 object AiringNotificationScheduler {
     fun schedule(context: Context) {
@@ -116,6 +117,7 @@ class AiringNotificationWorker(
 
             val repository = entryPoint.repository()
             val prefsManager = entryPoint.preferencesManager()
+            val titleLanguage = prefsManager.titleLanguageFlow.first()
 
             if (!prefsManager.episodeNotificationsEnabledFlow.first()) {
                 return Result.success()
@@ -147,7 +149,7 @@ class AiringNotificationWorker(
 
                 if (nextEpisode > previousBaseline) {
                     val airedEpisode = nextEpisode - 1
-                    postNotification(anime.node.id, anime.node.getPreferredTitle(TitleLanguage.ROMAJI), airedEpisode)
+                    postNotification(anime.node.id, anime.node.getPreferredTitle(titleLanguage), airedEpisode)
                     baselines[key] = nextEpisode
                     baselinesChanged = true
                 }
@@ -193,6 +195,9 @@ class AiringNotificationWorker(
     private fun postNotification(animeId: Int, title: String, airedEpisode: Int, isTest: Boolean = false) {
         val intent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (!isTest) {
+                putExtra(EXTRA_OPEN_ANIME_ID, animeId)
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             applicationContext,
@@ -203,12 +208,12 @@ class AiringNotificationWorker(
 
         val notification = NotificationCompat.Builder(applicationContext, AIRING_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_small)
-            .setContentTitle(if (isTest) "Test notification" else "New episode aired")
+            .setContentTitle(if (isTest) "Test notification" else title)
             .setContentText(
                 if (isTest) {
                     "Notifications are working on this device."
                 } else {
-                    "$title episode $airedEpisode is now out."
+                    "Episode $airedEpisode is now out."
                 }
             )
             .setStyle(
@@ -217,7 +222,7 @@ class AiringNotificationWorker(
                         if (isTest) {
                             "Notifications are working on this device."
                         } else {
-                            "$title episode $airedEpisode is now out."
+                            "Episode $airedEpisode is now out."
                         }
                     )
             )

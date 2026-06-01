@@ -36,18 +36,22 @@ import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
+import com.example.myapplication.notifications.EXTRA_OPEN_ANIME_ID
 import com.example.myapplication.ui.*
 import com.example.myapplication.ui.theme.MALTrackTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private lateinit var loginViewModel: LoginViewModel
+    private val pendingLaunchRoute = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_MyApplication)
         super.onCreate(savedInstanceState)
+        pendingLaunchRoute.value = resolveLaunchRoute(intent)
         enableEdgeToEdge()
         setContent {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
@@ -111,6 +115,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val loginUiState by loginViewModel.uiState.collectAsState()
+                val pendingRoute by pendingLaunchRoute.collectAsState()
                 
                 val defaultSection by settingsViewModel.defaultSection.collectAsState()
                 val defaultAnimeStatus by settingsViewModel.defaultAnimeStatus.collectAsState()
@@ -168,7 +173,7 @@ class MainActivity : ComponentActivity() {
                 
                 LaunchedEffect(loginUiState) {
                     if (loginUiState is LoginUiState.Success) {
-                        if (navController.currentDestination?.route == "login") {
+                        if (pendingRoute == null && navController.currentDestination?.route == "login") {
                             val targetRoute = when (defaultSection) {
                                 DefaultSection.HOME_ANIME -> "anime_list?initialTab=0"
                                 DefaultSection.HOME_MANGA -> "anime_list?initialTab=1"
@@ -188,6 +193,14 @@ class MainActivity : ComponentActivity() {
                                 popUpTo("login") { inclusive = true }
                             }
                         }
+                    }
+                }
+
+                LaunchedEffect(loginUiState, pendingRoute) {
+                    val route = pendingRoute ?: return@LaunchedEffect
+                    if (loginUiState is LoginUiState.Success) {
+                        navigateToExistingOrPush(route)
+                        pendingLaunchRoute.value = null
                     }
                 }
 
@@ -568,6 +581,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        pendingLaunchRoute.value = resolveLaunchRoute(intent)
         intent.data?.let { uri ->
             if (uri.scheme == "myanimelist" && uri.host == "auth") {
                 val code = uri.getQueryParameter("code")
@@ -575,6 +589,15 @@ class MainActivity : ComponentActivity() {
                     loginViewModel.handleAuthRedirect(code)
                 }
             }
+        }
+    }
+
+    private fun resolveLaunchRoute(intent: Intent): String? {
+        val animeId = intent.getIntExtra(EXTRA_OPEN_ANIME_ID, -1)
+        return if (animeId > 0) {
+            "anime_details/$animeId"
+        } else {
+            null
         }
     }
 }

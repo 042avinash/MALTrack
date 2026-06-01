@@ -2,17 +2,24 @@
 
 | Card               | Formula                                                                 |
 | ------------------ | ------------------------------------------------------------------------ |
-| **Completionist**  | `completionRate >= 65 AND totalEntries >= 150`                          |
-| **Archivist**      | `plannedRate >= 40 AND totalEntries >= 50`                              |
-| **Binge Watcher**  | `completedTotal >= 120 AND currentActive <= 5`                          |
-| **Curator**        | `totalEntries <= 60 AND combinedMeanScore >= 8`                         |
-| **Veteran**        | `totalEntries >= 400`                                                   |
+| **Completionist**  | `animeCompletionRate >= 65 AND animeTotal >= 150` or `mangaCompletionRate >= 65 AND mangaTotal >= 150` |
+| **Archivist**      | `animePlanRate >= 55 AND animeTotal >= 100` or `mangaPlanRate >= 55 AND mangaTotal >= 100`             |
+| **Binge Watcher**  | `animeActiveRatio <= 2 AND animeCompleted >= 100` or `mangaActiveRatio <= 2 AND mangaCompleted >= 100` |
+| **Club**           | `totalEntries >= 500` *(title changes to 1K / 2.5K / 5K as milestones are crossed)* |
+| **Founding Member** | `joinedYear <= 2006`                                                   |
+| **Legacy User**    | `yearsOnMAL >= 12`                                                      |
+| **Old Guard**      | `yearsOnMAL >= 8`                                                       |
+| **Veteran**        | `yearsOnMAL >= 5`                                                       |
+| **Seasoned**       | `yearsOnMAL > 1 AND yearsOnMAL < 5`                                     |
 | **Explorer**       | `totalEntries >= 180 AND animeShare BETWEEN 45 AND 55`                  |
 | **Dedicated Reader** | `mangaShare >= 75 AND mangaTotal >= 100`                              |
 | **Casual Viewer**  | `totalEntries <= 30 AND completionRate <= 45`                           |
-| **Critical Rater** | `combinedMeanScore <= 6.8 AND completionRate >= 50`                     |
-| **Rewatcher**      | `rewatchRate >= 10 AND completedTotal >= 100`                            |
-| **Longform Fan**   | `daysTotal >= 250 AND completionRate >= 55`                              |
+| **Newbie**         | `yearsOnMAL <= 1`                                                       |
+| **Critic**         | `animeMeanScore <= 6` or `mangaMeanScore <= 6`                          |
+| **Lenient**        | `animeMeanScore >= 8` or `mangaMeanScore >= 8`                          |
+| **Rewatcher**      | `animeRewatchRate >= 10 AND animeCompleted >= 100`                       |
+| **Rereader**       | `mangaRewatchRate >= 10 AND mangaCompleted >= 100`                       |
+| **Time Wasted**    | `daysTotal >= 30` *(title updates by months until 1 year, then by years)* |
 | **Active Reader**  | `readingRate >= 35`                                                     |
 | **Dedicated Viewer** | `animeShare >= 75`                                                    |
 
@@ -20,5 +27,11 @@
 
 * `completionRate`, `plannedRate`, `animeShare`, `mangaShare`, `rewatchRate`, and `readingRate` are percentages.
 * `totalEntries`, `completedTotal`, `currentActive`, `daysTotal`, `mangaTotal`, and `animeTotal` are absolute counts.
-* `combinedMeanScore` is a score out of 10.
+* `animeCompletionRate`, `animePlanRate`, `animeActiveRatio`, `animeRewatchRate`, `animeMeanScore`, `animeCompleted`, `animeTotal`, `mangaCompletionRate`, `mangaPlanRate`, `mangaActiveRatio`, `mangaRewatchRate`, `mangaMeanScore`, `mangaCompleted`, and `mangaTotal` are the medium-specific profile metrics used for the merged cards.
+* `yearsOnMAL` is derived from the user's `joined` date.
+* `joinedYear` is the calendar year extracted from the user's `joined` date.
+* The profile uses the dominant medium's score for the merged rating cards.
+* The MAL-tenure cards are exclusive and every profile gets exactly one of them.
+* `Club` is a single evolving card that changes its title from `500 Club` to `1K Club`, `2.5K Club`, and `5K Club` as `totalEntries` grows.
+* For merged cards, the app shows the same title for either medium and switches the underlying stats based on the dominant medium.
 * The profile page shows up to 5 qualifying cards at a time.

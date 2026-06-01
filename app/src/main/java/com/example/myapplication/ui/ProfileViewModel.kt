@@ -18,13 +18,11 @@ import java.net.UnknownHostException
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.supervisorScope
 import retrofit2.HttpException
 
 @HiltViewModel
@@ -36,7 +34,6 @@ class ProfileViewModel @Inject constructor(
         private const val PROFILE_CACHE_TTL_MS = 10 * 60 * 1000L
         private const val VIEWER_NAME_CACHE_TTL_MS = 10 * 60 * 1000L
         private const val VIEWER_FRIENDS_CACHE_TTL_MS = 10 * 60 * 1000L
-        private const val MAX_FAVORITE_META_FETCH = 12
         private val globalCachedProfiles = mutableMapOf<String, ProfileUiState.Success>()
         private val globalCachedProfileTimestamps = mutableMapOf<String, Long>()
         private var globalViewerName: String? = null
@@ -49,7 +46,6 @@ class ProfileViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
     private var loadJob: Job? = null
-    private var favoriteMetaJob: Job? = null
     private var friendsJob: Job? = null
 
     fun retryProfile(username: String? = null) {
@@ -83,7 +79,6 @@ class ProfileViewModel @Inject constructor(
         }
 
         loadJob?.cancel()
-        favoriteMetaJob?.cancel()
         friendsJob?.cancel()
         loadJob = viewModelScope.launch {
             if (cachedState == null) {
@@ -101,10 +96,7 @@ class ProfileViewModel @Inject constructor(
                         friends = cachedState?.friends.orEmpty(),
                         isOwnProfile = true,
                         viewerIsFriendWithProfileOwner = null,
-                        animeFavoriteMeta = cachedState?.animeFavoriteMeta.orEmpty(),
-                        mangaFavoriteMeta = cachedState?.mangaFavoriteMeta.orEmpty(),
-                        friendsLoaded = cachedState?.friendsLoaded ?: false,
-                        favoriteMetaLoaded = cachedState?.favoriteMetaLoaded ?: false
+                        friendsLoaded = cachedState?.friendsLoaded ?: false
                     )
                     globalCachedProfiles[normalizedUsername] = successState
                     globalCachedProfileTimestamps[normalizedUsername] = SystemClock.elapsedRealtime()
@@ -118,10 +110,7 @@ class ProfileViewModel @Inject constructor(
                         friends = cachedState?.friends.orEmpty(),
                         isOwnProfile = false,
                         viewerIsFriendWithProfileOwner = viewerIsFriendWithProfileOwner,
-                        animeFavoriteMeta = cachedState?.animeFavoriteMeta.orEmpty(),
-                        mangaFavoriteMeta = cachedState?.mangaFavoriteMeta.orEmpty(),
-                        friendsLoaded = cachedState?.friendsLoaded ?: false,
-                        favoriteMetaLoaded = cachedState?.favoriteMetaLoaded ?: false
+                        friendsLoaded = cachedState?.friendsLoaded ?: false
                     )
                     globalCachedProfiles[normalizedUsername] = successState
                     globalCachedProfileTimestamps[normalizedUsername] = SystemClock.elapsedRealtime()
@@ -171,58 +160,11 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    fun loadFavoriteMeta(username: String? = null, forceRefresh: Boolean = false) {
-        val state = _uiState.value as? ProfileUiState.Success ?: return
-        if (state.favoriteMetaLoading) return
-        if (!forceRefresh && state.favoriteMetaLoaded && (state.animeFavoriteMeta.isNotEmpty() || state.mangaFavoriteMeta.isNotEmpty())) return
-
-        val targetUsername = if (username == "null") null else username
-        val cacheKey = targetUsername ?: "__self__"
-        _uiState.value = state.copy(favoriteMetaLoading = true, favoriteMetaError = null)
-        loadFavoriteMetaInBackground(cacheKey, state.jikanUser, state)
-    }
-
     private fun updateCacheForCurrentProfile() {
         val current = _uiState.value as? ProfileUiState.Success ?: return
         val key = if (current.isOwnProfile) "__self__" else current.jikanUser.username
         globalCachedProfiles[key] = current
         globalCachedProfileTimestamps[key] = SystemClock.elapsedRealtime()
-    }
-
-    private fun loadFavoriteMetaInBackground(
-        cacheKey: String,
-        fullProfile: JikanFullUserProfile,
-        baseState: ProfileUiState.Success
-    ) {
-        favoriteMetaJob?.cancel()
-        favoriteMetaJob = viewModelScope.launch {
-            val favoriteMetaResult = runCatching { loadFavoriteMetaInternal(fullProfile) }
-            val currentSuccess = _uiState.value as? ProfileUiState.Success ?: return@launch
-            if (favoriteMetaResult.isSuccess) {
-                val (animeFavoriteMeta, mangaFavoriteMeta) = favoriteMetaResult.getOrDefault(
-                    emptyMap<Int, FavoriteMediaMeta>() to emptyMap<Int, FavoriteMediaMeta>()
-                )
-                val updatedState = currentSuccess.copy(
-                    animeFavoriteMeta = animeFavoriteMeta,
-                    mangaFavoriteMeta = mangaFavoriteMeta,
-                    favoriteMetaLoading = false,
-                    favoriteMetaLoaded = true,
-                    favoriteMetaError = null
-                )
-                globalCachedProfiles[cacheKey] = updatedState
-                globalCachedProfileTimestamps[cacheKey] = SystemClock.elapsedRealtime()
-                _uiState.value = updatedState
-            } else {
-                val updatedState = currentSuccess.copy(
-                    favoriteMetaLoading = false,
-                    favoriteMetaLoaded = true,
-                    favoriteMetaError = getFriendlyErrorMessage(favoriteMetaResult.exceptionOrNull() ?: Exception("Failed to load favorites"))
-                )
-                globalCachedProfiles[cacheKey] = updatedState
-                globalCachedProfileTimestamps[cacheKey] = SystemClock.elapsedRealtime()
-                _uiState.value = updatedState
-            }
-        }
     }
 
     private suspend fun <T> withTimeoutRetry(block: suspend () -> T): T {
@@ -372,64 +314,7 @@ class ProfileViewModel @Inject constructor(
         return "$current | cause=${diagnosticErrorSummary(cause, depth + 1)}"
     }
 
-    private suspend fun loadFavoriteMetaInternal(
-        fullProfile: JikanFullUserProfile
-    ): Pair<Map<Int, FavoriteMediaMeta>, Map<Int, FavoriteMediaMeta>> = supervisorScope {
-        val animeIds = fullProfile.favorites?.anime.orEmpty().map { it.mal_id }.distinct().take(MAX_FAVORITE_META_FETCH)
-        val mangaIds = fullProfile.favorites?.manga.orEmpty().map { it.mal_id }.distinct().take(MAX_FAVORITE_META_FETCH)
-
-        val animeMeta = mutableMapOf<Int, FavoriteMediaMeta>()
-        animeIds.chunked(2).forEach { batch ->
-            batch.map { id ->
-                async {
-                    id to runCatching { repository.getAnimeDetails(id) }
-                        .getOrNull()
-                        ?.let {
-                            FavoriteMediaMeta(
-                                mean = it.mean,
-                                numListUsers = it.numListUsers,
-                                userStatus = it.myListStatus?.status,
-                                userScore = it.myListStatus?.score
-                            )
-                        }
-                }
-            }.forEach { deferred ->
-                val (id, meta) = deferred.await()
-                if (meta != null) animeMeta[id] = meta
-            }
-        }
-
-        val mangaMeta = mutableMapOf<Int, FavoriteMediaMeta>()
-        mangaIds.chunked(2).forEach { batch ->
-            batch.map { id ->
-                async {
-                    id to runCatching { repository.getMangaDetails(id) }
-                        .getOrNull()
-                        ?.let {
-                            FavoriteMediaMeta(
-                                mean = it.mean,
-                                numListUsers = it.numListUsers,
-                                userStatus = it.myListStatus?.status,
-                                userScore = it.myListStatus?.score
-                            )
-                        }
-                }
-            }.forEach { deferred ->
-                val (id, meta) = deferred.await()
-                if (meta != null) mangaMeta[id] = meta
-            }
-        }
-
-        animeMeta to mangaMeta
-    }
 }
-
-data class FavoriteMediaMeta(
-    val mean: Float? = null,
-    val numListUsers: Int? = null,
-    val userStatus: String? = null,
-    val userScore: Int? = null
-)
 
 sealed interface ProfileUiState {
     data object Loading : ProfileUiState
@@ -439,14 +324,9 @@ sealed interface ProfileUiState {
         val friends: List<JikanFriend>,
         val isOwnProfile: Boolean,
         val viewerIsFriendWithProfileOwner: Boolean? = null,
-        val animeFavoriteMeta: Map<Int, FavoriteMediaMeta> = emptyMap(),
-        val mangaFavoriteMeta: Map<Int, FavoriteMediaMeta> = emptyMap(),
         val friendsLoading: Boolean = false,
         val friendsLoaded: Boolean = false,
-        val friendsError: String? = null,
-        val favoriteMetaLoading: Boolean = false,
-        val favoriteMetaLoaded: Boolean = false,
-        val favoriteMetaError: String? = null
+        val friendsError: String? = null
     ) : ProfileUiState
     data class Error(
         val message: String,

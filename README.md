@@ -7,7 +7,19 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.4.2`
+- `v1.4.3`
+
+## v1.4.3 Highlights
+
+- **Notification System Upgrades**:
+  - **Airing Page Mapping**: Tapping an airing notification now navigates directly to the specific anime's details page.
+  - **Title Language Localization**: Notifications now respect the app's "Title Language" setting (Romaji, English, or Japanese).
+  - **Battery Optimization Intelligence**: Added a proactive check for battery exemption when enabling notifications, with a dedicated warning dialog (Retry/Cancel) to ensure background alerts remain reliable.
+- **Profile & User Cards**:
+  - **Formula Overhaul**: Updated criteria for "Completionist", "Archivist", and "Binge Watcher" cards to better reflect both anime and manga list activity.
+  - **New Milestones**: Introduced the "Club" card with progressive title updates (1K, 2.5K, 5K) and the "Founding Member" card for accounts joined before 2007.
+- **Release Alignment**:
+  - App version bumped to `v1.4.3` (`versionCode 28`).
 
 ## v1.4.2 Highlights
 
