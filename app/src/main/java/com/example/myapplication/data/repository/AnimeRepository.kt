@@ -32,7 +32,10 @@ import com.example.myapplication.data.remote.JikanThemesResponse
 import com.example.myapplication.data.remote.MalApiService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import android.os.SystemClock
 import retrofit2.HttpException
 import java.net.SocketTimeoutException
 import java.io.IOException
@@ -42,6 +45,29 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
+
+class JikanProfileFetchException(
+    val status: Int?,
+    val responseMessage: String?,
+    val responseError: String?,
+    val username: String
+) : IOException(
+    buildString {
+        append("Profile fetch failed for ")
+        append(username)
+        append(" (status=")
+        append(status?.toString() ?: "unknown")
+        append(")")
+        responseMessage?.takeIf { it.isNotBlank() }?.let {
+            append(": ")
+            append(it)
+        }
+        responseError?.takeIf { it.isNotBlank() && it != responseMessage }?.let {
+            append(" | error=")
+            append(it)
+        }
+    }
+)
 
 @Singleton
 class AnimeRepository @Inject constructor(
@@ -54,6 +80,9 @@ class AnimeRepository @Inject constructor(
         private const val ANILIST_AIRING_SOFT_TIMEOUT_MS = 2_500L
         private const val ANILIST_AIRING_BATCH_SIZE = 25
         private const val ANILIST_AIRING_CACHE_TTL_MS = 15 * 60 * 1000L
+        private const val JIKAN_MIN_REQUEST_INTERVAL_MS = 350L
+        private const val JIKAN_INITIAL_BACKOFF_MS = 1_500L
+        private const val JIKAN_MAX_BACKOFF_MS = 15_000L
     }
 
     private val clientId = "16b21f717a3e9f733f121971c122db16"
@@ -61,6 +90,9 @@ class AnimeRepository @Inject constructor(
     private val publishingMangaCache = mutableMapOf<String, List<JikanMangaData>>()
     private val anilistAiringCache = mutableMapOf<Int, Pair<Long, AniListMedia>>()
     private val anilistAiringCacheLock = Any()
+    private val jikanRequestMutex = Mutex()
+    private var lastJikanRequestAtMs = 0L
+    private var jikanBackoffUntilMs = 0L
 
     private suspend fun isNsfw(): Boolean {
         return prefsManager.nsfwFlow.first()
@@ -72,8 +104,10 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getRandomAnimeId(): Int {
-        return retryTimeoutRequest {
-            jikanApiService.getRandomAnime().data.mal_id
+        return withJikanThrottle {
+            retryTimeoutRequest {
+                jikanApiService.getRandomAnime().data.mal_id
+            }
         }
     }
 
@@ -167,6 +201,41 @@ class AnimeRepository @Inject constructor(
         return cause != null && isTimeoutError(cause)
     }
 
+    private suspend fun <T> withJikanThrottle(block: suspend () -> T): T {
+        return jikanRequestMutex.withLock {
+            val now = SystemClock.elapsedRealtime()
+            val waitUntil = maxOf(lastJikanRequestAtMs + JIKAN_MIN_REQUEST_INTERVAL_MS, jikanBackoffUntilMs)
+            if (waitUntil > now) {
+                delay(waitUntil - now)
+            }
+            lastJikanRequestAtMs = SystemClock.elapsedRealtime()
+            try {
+                block()
+            } catch (e: Throwable) {
+                registerJikanBackoffIfNeeded(e)
+                throw e
+            }
+        }
+    }
+
+    private fun registerJikanBackoffIfNeeded(error: Throwable) {
+        val status = when (error) {
+            is HttpException -> error.code()
+            is JikanProfileFetchException -> error.status
+            else -> null
+        }
+        if (status != 429) return
+
+        val now = SystemClock.elapsedRealtime()
+        val remaining = (jikanBackoffUntilMs - now).coerceAtLeast(0L)
+        val nextBackoff = if (remaining <= 0L) {
+            JIKAN_INITIAL_BACKOFF_MS
+        } else {
+            (remaining * 2).coerceAtMost(JIKAN_MAX_BACKOFF_MS)
+        }
+        jikanBackoffUntilMs = maxOf(jikanBackoffUntilMs, now + nextBackoff)
+    }
+
     suspend fun getTopManga(limit: Int = 20, rankingType: String = "all"): MangaResponse {
         return if (limit == 20 && rankingType == "all") apiService.getMangaRanking(clientId = clientId, nsfw = isNsfw())
         else apiService.getMangaRankingWithLimit(clientId = clientId, limit = limit, rankingType = rankingType, nsfw = isNsfw())
@@ -181,7 +250,9 @@ class AnimeRepository @Inject constructor(
 
         while (true) {
             val response = try {
-                jikanApiService.getTopManga(filter = "publishing", page = page)
+                withJikanThrottle {
+                    jikanApiService.getTopManga(filter = "publishing", page = page)
+                }
             } catch (e: HttpException) {
                 if (e.code() == 429 && allItems.isNotEmpty()) break
                 throw e
@@ -408,39 +479,39 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getAnimeCharacters(id: Int): JikanCharactersResponse {
-        return jikanApiService.getAnimeCharacters(id)
+        return withJikanThrottle { jikanApiService.getAnimeCharacters(id) }
     }
 
     suspend fun getMangaCharacters(id: Int): JikanCharactersResponse {
-        return jikanApiService.getMangaCharacters(id)
+        return withJikanThrottle { jikanApiService.getMangaCharacters(id) }
     }
 
     suspend fun getAnimeStaff(id: Int): JikanStaffResponse {
-        return jikanApiService.getAnimeStaff(id)
+        return withJikanThrottle { jikanApiService.getAnimeStaff(id) }
     }
 
     suspend fun getAnimeThemes(id: Int): JikanThemesResponse {
-        return jikanApiService.getAnimeThemes(id)
+        return withJikanThrottle { jikanApiService.getAnimeThemes(id) }
     }
 
     suspend fun getAnimeReviews(id: Int): JikanReviewsResponse {
-        return jikanApiService.getAnimeReviews(id, preliminary = true)
+        return withJikanThrottle { jikanApiService.getAnimeReviews(id, preliminary = true) }
     }
 
     suspend fun getMangaReviews(id: Int): JikanReviewsResponse {
-        return jikanApiService.getMangaReviews(id, preliminary = true)
+        return withJikanThrottle { jikanApiService.getMangaReviews(id, preliminary = true) }
     }
 
     suspend fun getAnimeStreaming(id: Int): JikanStreamingResponse {
-        return jikanApiService.getAnimeStreaming(id)
+        return withJikanThrottle { jikanApiService.getAnimeStreaming(id) }
     }
 
     suspend fun getAnimeStatistics(id: Int): JikanAnimeStatisticsResponse {
-        return jikanApiService.getAnimeStatistics(id)
+        return withJikanThrottle { jikanApiService.getAnimeStatistics(id) }
     }
 
     suspend fun getMangaStatistics(id: Int): JikanMangaStatisticsResponse {
-        return jikanApiService.getMangaStatistics(id)
+        return withJikanThrottle { jikanApiService.getMangaStatistics(id) }
     }
 
     suspend fun getMyUserProfile(): UserProfile {
@@ -448,22 +519,17 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getUserFullProfile(username: String): JikanFullUserProfile {
-        val response = jikanApiService.getUserFullProfile(username)
-        return response.data ?: throw IOException(
-            buildString {
-                append("Profile data is unavailable right now")
-                response.message?.takeIf { it.isNotBlank() }?.let { append(": $it") }
-                when (response.status) {
-                    404 -> append(". The user may not exist or the profile may be hidden.")
-                    429 -> append(". Too many requests; please wait and try again.")
-                    in 500..599 -> append(". Jikan server is currently having issues.")
-                }
-            }
+        val response = withJikanThrottle { jikanApiService.getUserFullProfile(username) }
+        return response.data ?: throw JikanProfileFetchException(
+            status = response.status,
+            responseMessage = response.message,
+            responseError = response.error,
+            username = username
         )
     }
 
     suspend fun getUserFriends(username: String): List<JikanFriend> {
-        return jikanApiService.getUserFriends(username).data
+        return withJikanThrottle { jikanApiService.getUserFriends(username).data }
     }
 
     suspend fun getUserAnimeList(username: String? = null, status: String? = null, sort: String = "list_score", offset: Int = 0, limit: Int = 100): UserAnimeListResponse {

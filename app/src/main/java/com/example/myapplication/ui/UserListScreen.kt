@@ -1399,7 +1399,7 @@ fun UserAnimeItem(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         val nextLabel = if (data.node.status == "currently_airing") {
-                            formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds) ?: "?"
+                            formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds, data.node.numEpisodes)
                         } else null
 
                         Row(
@@ -1734,7 +1734,7 @@ fun UserAnimeGridItem(
                     )
                     
                     val nextLabel = if (data.node.status == "currently_airing") {
-                        formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds) ?: "?"
+                        formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds, data.node.numEpisodes)
                     } else null
                     if (nextLabel != null) {
                         Box(
@@ -1801,11 +1801,27 @@ private fun rememberCurrentEpochSeconds(refreshMillis: Long = 60_000L): State<Lo
     return now
 }
 
-private fun formatNextEpisodeCountdown(anilistMedia: AniListMedia?, nowEpochSeconds: Long): String? {
+private fun formatNextEpisodeCountdown(
+    anilistMedia: AniListMedia?,
+    nowEpochSeconds: Long,
+    totalEpisodes: Int?
+): String? {
     val nextAiring = anilistMedia?.nextAiringEpisode ?: return null
     val timeUntil = nextAiring.airingAt - nowEpochSeconds
-    if (timeUntil <= 0) return "Soon"
+    if (timeUntil <= 0) {
+        val total = totalEpisodes?.takeIf { it > 0 } ?: return null
+        if (nextAiring.episode >= total) return null
 
+        val estimatedNextAiringAt = nextAiring.airingAt + 7 * 86400
+        val estimatedTimeUntil = estimatedNextAiringAt - nowEpochSeconds
+        if (estimatedTimeUntil <= 0) return null
+        return "~${formatCountdownDuration(estimatedTimeUntil)}"
+    }
+
+    return formatCountdownDuration(timeUntil)
+}
+
+private fun formatCountdownDuration(timeUntil: Long): String {
     val days = timeUntil / 86400
     val hours = (timeUntil % 86400) / 3600
     val mins = (timeUntil % 3600) / 60

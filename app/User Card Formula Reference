@@ -1,0 +1,24 @@
+### User Card Formula Reference
+
+| Card               | Formula                                                                 |
+| ------------------ | ------------------------------------------------------------------------ |
+| **Completionist**  | `completionRate >= 65 AND totalEntries >= 150`                          |
+| **Archivist**      | `plannedRate >= 40 AND totalEntries >= 50`                              |
+| **Binge Watcher**  | `completedTotal >= 120 AND currentActive <= 5`                          |
+| **Curator**        | `totalEntries <= 60 AND combinedMeanScore >= 8`                         |
+| **Veteran**        | `totalEntries >= 400`                                                   |
+| **Explorer**       | `totalEntries >= 180 AND animeShare BETWEEN 45 AND 55`                  |
+| **Dedicated Reader** | `mangaShare >= 75 AND mangaTotal >= 100`                              |
+| **Casual Viewer**  | `totalEntries <= 30 AND completionRate <= 45`                           |
+| **Critical Rater** | `combinedMeanScore <= 6.8 AND completionRate >= 50`                     |
+| **Rewatcher**      | `rewatchRate >= 10 AND completedTotal >= 100`                            |
+| **Longform Fan**   | `daysTotal >= 250 AND completionRate >= 55`                              |
+| **Active Reader**  | `readingRate >= 35`                                                     |
+| **Dedicated Viewer** | `animeShare >= 75`                                                    |
+
+#### Notes
+
+* `completionRate`, `plannedRate`, `animeShare`, `mangaShare`, `rewatchRate`, and `readingRate` are percentages.
+* `totalEntries`, `completedTotal`, `currentActive`, `daysTotal`, `mangaTotal`, and `animeTotal` are absolute counts.
+* `combinedMeanScore` is a score out of 10.
+* The profile page shows up to 5 qualifying cards at a time.

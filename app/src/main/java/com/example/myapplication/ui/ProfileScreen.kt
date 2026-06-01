@@ -22,10 +22,30 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.TravelExplore
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Chair
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.ImportContacts
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.AutoGraph
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -48,6 +68,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -155,11 +176,6 @@ fun ProfileScreen(
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showSearchDialog = true }) {
-                Icon(Icons.Default.Search, contentDescription = "Search User")
-            }
         }
     ) { paddingValues ->
         PullToRefreshBox(
@@ -179,13 +195,24 @@ fun ProfileScreen(
                             malUser = state.malUser,
                             jikanUser = state.jikanUser,
                             friends = state.friends,
+                            friendsLoading = state.friendsLoading,
+                            friendsError = state.friendsError,
+                            favoritesMetaLoading = state.favoriteMetaLoading,
+                            favoritesMetaError = state.favoriteMetaError,
                             animeFavoriteMeta = state.animeFavoriteMeta,
                             mangaFavoriteMeta = state.mangaFavoriteMeta,
+                            onLoadFriends = { viewModel.loadFriends(username) },
+                            onRefreshFriends = { viewModel.loadFriends(username, forceRefresh = true) },
+                            onLoadFavorites = { viewModel.loadFavoriteMeta(username) },
+                            onRefreshFavorites = { viewModel.loadFavoriteMeta(username, forceRefresh = true) },
                             onAnimeClick = onAnimeClick,
                             onMangaClick = onMangaClick,
-                            onUserClick = onUserClick
-                        )
-                    }
+                            onUserClick = onUserClick,
+                            isOwnProfile = state.isOwnProfile,
+                            viewerIsFriendWithProfileOwner = state.viewerIsFriendWithProfileOwner,
+                            onFindUserClick = { showSearchDialog = true }
+                    )
+                }
                     is ProfileUiState.Error -> {
                         Column(
                             modifier = Modifier
@@ -199,7 +226,7 @@ fun ProfileScreen(
                                 textAlign = TextAlign.Center
                             )
                             Spacer(modifier = Modifier.height(16.dp))
-                            Button(onClick = { viewModel.getProfile(username) }) {
+                            Button(onClick = { viewModel.retryProfile(username) }) {
                                 Text("Retry")
                             }
                         }
@@ -382,17 +409,32 @@ fun ProfileContent(
     malUser: UserProfile?, 
     jikanUser: JikanFullUserProfile, 
     friends: List<JikanFriend>,
+    friendsLoading: Boolean,
+    friendsError: String?,
+    favoritesMetaLoading: Boolean,
+    favoritesMetaError: String?,
     animeFavoriteMeta: Map<Int, FavoriteMediaMeta>,
     mangaFavoriteMeta: Map<Int, FavoriteMediaMeta>,
+    onLoadFriends: () -> Unit,
+    onRefreshFriends: () -> Unit,
+    onLoadFavorites: () -> Unit,
+    onRefreshFavorites: () -> Unit,
     onAnimeClick: (Int) -> Unit,
     onMangaClick: (Int) -> Unit,
-    onUserClick: (String) -> Unit
+    onUserClick: (String) -> Unit,
+    isOwnProfile: Boolean,
+    viewerIsFriendWithProfileOwner: Boolean?,
+    onFindUserClick: () -> Unit
 ) {
     val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val tabs = listOf("Anime", "Manga")
     var showAboutDialog by remember { mutableStateOf(false) }
     var showFriendsDialog by remember { mutableStateOf(false) }
+    var showFriendsSection by remember { mutableStateOf(false) }
+    var showFavoritesSection by remember { mutableStateOf(false) }
+    var selectedSignal by remember { mutableStateOf<ProfileSignalCard?>(null) }
+    val signalCards = remember(jikanUser.statistics) { buildProfileSignalCards(jikanUser.statistics) }
 
     if (showAboutDialog) {
         AboutDialog(about = jikanUser.about ?: "No about information provided.", onDismiss = { showAboutDialog = false })
@@ -408,6 +450,16 @@ fun ProfileContent(
             }
         )
     }
+    selectedSignal?.let { signal ->
+        AlertDialog(
+            onDismissRequest = { selectedSignal = null },
+            title = { Text(signal.title) },
+            text = { Text(signal.description) },
+            confirmButton = {
+                TextButton(onClick = { selectedSignal = null }) { Text("Close") }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -420,32 +472,99 @@ fun ProfileContent(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(contentAlignment = Alignment.BottomEnd) {
-                    UserAvatar(
-                        imageUrl = malUser?.picture ?: jikanUser.images?.jpg?.image_url,
-                        contentDescription = "Profile Picture",
-                        size = 100.dp
-                    )
-                    IconButton(
-                        onClick = { showAboutDialog = true },
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(132.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    FilledTonalIconButton(
+                        onClick = onFindUserClick,
                         modifier = Modifier
-                            .size(32.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                            .padding(4.dp)
+                            .size(88.dp)
+                            .align(Alignment.CenterStart)
+                            .offset(x = 8.dp)
+                            .zIndex(1f)
                     ) {
-                        Icon(
-                            Icons.Default.Info, 
-                            contentDescription = "About Me", 
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Find user"
+                            )
+                            Text(
+                                text = when {
+                                    isOwnProfile -> "You"
+                                    viewerIsFriendWithProfileOwner == true -> "Friend"
+                                    viewerIsFriendWithProfileOwner == false -> "Not friends"
+                                    else -> "Friend status"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(118.dp)
+                            .zIndex(2f),
+                        contentAlignment = Alignment.BottomEnd
+                    ) {
+                        UserAvatar(
+                            imageUrl = malUser?.picture ?: jikanUser.images?.jpg?.image_url,
+                            contentDescription = "Profile Picture",
+                            size = 118.dp
                         )
+                        IconButton(
+                            onClick = { showAboutDialog = true },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                .padding(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = "About Me",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    FilledTonalIconButton(
+                        onClick = {
+                            val url = jikanUser.url ?: "https://myanimelist.net/profile/${jikanUser.username}"
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        },
+                        modifier = Modifier
+                            .size(88.dp)
+                            .align(Alignment.CenterEnd)
+                            .offset(x = (-8).dp)
+                            .zIndex(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Link,
+                                contentDescription = "Visit MAL"
+                            )
+                            Text(
+                                text = "Visit MAL",
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2
+                            )
+                        }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(12.dp))
-                
+
                 Text(text = jikanUser.username, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                
+
                 val infoParts = mutableListOf<String>()
                 jikanUser.gender?.let { infoParts.add(it) }
                 jikanUser.location?.let { infoParts.add(it) }
@@ -479,7 +598,7 @@ fun ProfileContent(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(validExternalLinks) { link ->
                             AssistChip(
-                                onClick = { 
+                                onClick = {
                                     link.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
                                 },
                                 label = { Text(link.name ?: "Link") },
@@ -489,21 +608,41 @@ fun ProfileContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = { 
-                        val url = jikanUser.url ?: "https://myanimelist.net/profile/${jikanUser.username}"
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                FilledTonalButton(
+                    onClick = {
+                        if (showFriendsSection) {
+                            showFriendsSection = false
+                        } else {
+                            onLoadFriends()
+                            showFriendsSection = true
+                        }
                     },
-                    modifier = Modifier.fillMaxWidth(0.8f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("View Profile on MAL")
+                    if (friendsLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                    } else {
+                        Icon(
+                            imageVector = if (showFriendsSection) Icons.Default.Group else Icons.Default.PersonAdd,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                    }
+                    Text(if (showFriendsSection) "Hide Friends" else "Load Friends")
                 }
+
             }
         }
+        // Friends section remains below the top profile action row.
 
-        // Friends Section
-        if (friends.isNotEmpty()) {
+        if (showFriendsSection) {
             item {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -512,42 +651,61 @@ fun ProfileContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(text = "Friends", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        if (friends.size > 8) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (friends.size > 8) {
+                                AssistChip(
+                                    onClick = { showFriendsDialog = true },
+                                    label = { Text("More") },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowForward,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                )
+                            }
                             AssistChip(
-                                onClick = { showFriendsDialog = true },
-                                label = { Text("More") },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                onClick = onRefreshFriends,
+                                enabled = !friendsLoading,
+                                label = { Text("Refresh") }
                             )
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(friends.take(8)) { friend ->
-                            Column(
-                                modifier = Modifier
-                                    .width(70.dp)
-                                    .clickable { onUserClick(friend.user.username) },
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                UserAvatar(
-                                    imageUrl = friend.user.images.jpg?.image_url,
-                                    contentDescription = friend.user.username,
-                                    size = 60.dp
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = friend.user.username,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center
-                                )
+                    when {
+                        friendsLoading && friends.isEmpty() -> CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        friendsError != null -> {
+                            Text(text = friendsError, color = MaterialTheme.colorScheme.error)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            TextButton(onClick = onRefreshFriends) { Text("Retry Friends") }
+                        }
+                        friends.isEmpty() -> Text("No friends to show.")
+                        else -> {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(friends.take(8)) { friend ->
+                                    Column(
+                                        modifier = Modifier
+                                            .width(70.dp)
+                                            .clickable { onUserClick(friend.user.username) },
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        UserAvatar(
+                                            imageUrl = friend.user.images.jpg?.image_url,
+                                            contentDescription = friend.user.username,
+                                            size = 60.dp
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = friend.user.username,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -590,6 +748,8 @@ fun ProfileContent(
             animeProfileItems(
                 user = jikanUser,
                 malStats = malUser?.animeStatistics,
+                signalCards = signalCards,
+                onSignalClick = { selectedSignal = it },
                 animeFavoriteMeta = animeFavoriteMeta,
                 onAnimeClick = onAnimeClick
             )
@@ -597,23 +757,76 @@ fun ProfileContent(
             mangaProfileItems(
                 user = jikanUser,
                 malStats = malUser?.mangaStatistics,
+                signalCards = signalCards,
+                onSignalClick = { selectedSignal = it },
                 mangaFavoriteMeta = mangaFavoriteMeta,
                 onMangaClick = onMangaClick
             )
         }
 
-        jikanUser.favorites?.let { favs ->
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                FilledTonalButton(
+                    onClick = {
+                        if (showFavoritesSection) {
+                            showFavoritesSection = false
+                        } else {
+                            showFavoritesSection = true
+                            onLoadFavorites()
+                        }
+                    },
+                    enabled = !favoritesMetaLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (favoritesMetaLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Loading Favorites")
+                    } else {
+                        Text(if (showFavoritesSection) "Hide Favorites" else "Load Favorites")
+                    }
+                }
+            }
+        }
+
+        if (showFavoritesSection) {
+            if (favoritesMetaError != null) {
+                item {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text(text = favoritesMetaError, color = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = onRefreshFavorites) { Text("Retry Favorites") }
+                    }
+                }
+            }
+            jikanUser.favorites?.let { favs ->
             favs.characters?.takeIf { it.isNotEmpty() }?.let {
                 item {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        FavoriteCharactersSection(items = it)
+                        FavoriteCharactersSection(
+                            items = it,
+                            onRefresh = onRefreshFavorites,
+                            refreshEnabled = !favoritesMetaLoading
+                        )
                     }
                 }
             }
             favs.people?.takeIf { it.isNotEmpty() }?.let {
                 item {
                     Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 28.dp, bottom = 16.dp)) {
-                        FavoritePeopleSection(items = it)
+                        FavoritePeopleSection(
+                            items = it,
+                            onRefresh = onRefreshFavorites,
+                            refreshEnabled = !favoritesMetaLoading
+                        )
                     }
                 }
             }
@@ -625,7 +838,132 @@ fun ProfileContent(
                 }
             }
         }
+        }
     }
+}
+
+data class ProfileSignalCard(
+    val title: String,
+    val description: String,
+    val icon: ImageVector,
+    val color: Color
+)
+
+@Composable
+private fun ProfileSignalPill(
+    modifier: Modifier = Modifier,
+    label: String,
+    icon: ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier.clickable { onClick() },
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.JikanUserStatistics?): List<ProfileSignalCard> {
+    val anime = stats?.anime
+    val manga = stats?.manga
+    if (anime == null && manga == null) return emptyList()
+
+    val cards = mutableListOf<ProfileSignalCard>()
+    val animeTotal = anime?.total_entries ?: 0
+    val mangaTotal = manga?.total_entries ?: 0
+    val total = animeTotal + mangaTotal
+
+    if (total > 0) {
+        val completedTotal = (anime?.completed ?: 0) + (manga?.completed ?: 0)
+        val plannedTotal = (anime?.plan_to_watch ?: 0) + (manga?.plan_to_read ?: 0)
+        val rewatchTotal = (anime?.rewatched ?: 0) + (manga?.reread ?: 0)
+        val currentActive = (anime?.watching ?: 0) + (manga?.reading ?: 0)
+        val daysTotal = (anime?.days_watched ?: 0f) + (manga?.days_read ?: 0f)
+        val completionRate = (completedTotal * 100f) / total
+        val plannedRate = (plannedTotal * 100f) / total
+        val activeRatio = (currentActive * 100f) / total
+        val rewatchRate = if (completedTotal > 0) (rewatchTotal * 100f) / completedTotal else 0f
+        val animeShare = (animeTotal * 100f) / total
+        val mangaShare = (mangaTotal * 100f) / total
+        val combinedMeanScore = buildList {
+            if (animeTotal > 0) add(anime?.mean_score ?: 0f)
+            if (mangaTotal > 0) add(manga?.mean_score ?: 0f)
+        }.takeIf { it.isNotEmpty() }?.average()?.toFloat() ?: 0f
+
+        if (completionRate >= 65f && total >= 150) {
+            cards += ProfileSignalCard("Completionist", "Finishing what they start seems to be a consistent habit here, with plenty of titles carried through to completion.", Icons.Default.TaskAlt, Color(0xFF2E7D32))
+        }
+        if (plannedRate >= 55f && total >= 100) {
+            cards += ProfileSignalCard("Archivist", "A growing backlog seems to build faster than titles are completed, giving the profile a very collector-like feel.", Icons.Default.Inventory2, Color(0xFF546E7A))
+        }
+        if (activeRatio <= 3f && completedTotal >= 100) {
+            cards += ProfileSignalCard("Binge Watcher", "Titles seem to get consumed in bigger bursts rather than slowly followed over time, giving the profile a more finish-first rhythm.", Icons.Default.Bolt, Color(0xFF1E88E5))
+        }
+        if (total <= 35 && combinedMeanScore >= 8.3f) {
+            cards += ProfileSignalCard("Curator", "Choices here feel fairly intentional, with a smaller and more carefully rated collection shaping the overall taste profile.", Icons.Default.AutoAwesome, Color(0xFFAB47BC))
+        }
+        if (total >= 400) {
+            cards += ProfileSignalCard("Veteran", "Years of activity and a large overall footprint give the profile the feel of a long-running MAL history.", Icons.Default.WorkspacePremium, Color(0xFF78909C))
+        }
+        if (total >= 180 && animeShare in 45f..55f) {
+            cards += ProfileSignalCard("Explorer", "Activity stays fairly balanced across anime and manga, suggesting broad curiosity rather than sticking to one lane.", Icons.Default.TravelExplore, Color(0xFF26A69A))
+        }
+        if (mangaShare >= 75f && mangaTotal >= 100) {
+            cards += ProfileSignalCard("Dedicated Reader", "Most of the activity leans heavily toward manga, with enough consistency to suggest a deep and long-term reading habit.", Icons.Default.MenuBook, Color(0xFF7E57C2))
+        }
+        if (total <= 15 && completionRate <= 35f) {
+            cards += ProfileSignalCard("Casual Viewer", "The smaller overall footprint gives the profile a lighter and more relaxed approach to tracking media.", Icons.Default.Chair, Color(0xFF90A4AE))
+        }
+        if (combinedMeanScore <= 6.2f && completionRate >= 65f) {
+            cards += ProfileSignalCard("Critical Rater", "Scores tend to land lower than average even across a fairly completed history, suggesting a more critical reaction style.", Icons.Default.Gavel, Color(0xFFE53935))
+        }
+        if (rewatchRate >= 10f && completedTotal >= 100) {
+            cards += ProfileSignalCard("Rewatcher", "Favorite titles seem worth revisiting here, with enough repeat watching to suggest a strong attachment to familiar series.", Icons.Default.Replay, Color(0xFF00897B))
+        }
+        if (daysTotal >= 700f && completionRate >= 60f) {
+            cards += ProfileSignalCard("Longform Fan", "A large amount of accumulated time points toward comfort with long-running series and bigger commitments.", Icons.Default.LocalFireDepartment, Color(0xFFF4511E))
+        }
+        if (animeShare >= 75f) {
+            cards += ProfileSignalCard("Dedicated Viewer", "Most tracked activity revolves around anime rather than manga, giving the profile a strong viewer-first identity.", Icons.Default.LiveTv, Color(0xFF42A5F5))
+        }
+    }
+
+    anime?.let {
+        val completionRate = if (it.total_entries > 0) (it.completed * 100f) / it.total_entries else 0f
+        val dropRate = if (it.total_entries > 0) (it.dropped * 100f) / it.total_entries else 0f
+    }
+
+    manga?.let {
+        val readingRate = if (it.total_entries > 0) (it.reading * 100f) / it.total_entries else 0f
+        if (readingRate >= 35f) {
+            cards += ProfileSignalCard("Active Reader", "A noticeable amount of manga stays active at once, suggesting an ongoing and fairly consistent reading habit.", Icons.Default.ImportContacts, Color(0xFFFF7043))
+        }
+    }
+
+    return cards.distinctBy { it.title }.take(5)
 }
 
 @Composable
@@ -736,6 +1074,8 @@ private fun formatLastOnline(raw: String): String {
 fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
     user: JikanFullUserProfile,
     malStats: AnimeStatistics?,
+    signalCards: List<ProfileSignalCard>,
+    onSignalClick: (ProfileSignalCard) -> Unit,
     animeFavoriteMeta: Map<Int, FavoriteMediaMeta>,
     onAnimeClick: (Int) -> Unit
 ) {
@@ -753,6 +1093,28 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
             StatsDonutChart(title = "Anime Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
         }
     }
+    if (signalCards.isNotEmpty()) {
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(end = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(signalCards) { signal ->
+                        ProfileSignalPill(
+                            modifier = Modifier.width(154.dp),
+                            label = signal.title,
+                            icon = signal.icon,
+                            containerColor = signal.color,
+                            contentColor = Color.White,
+                            onClick = { onSignalClick(signal) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+    item { Spacer(modifier = Modifier.height(10.dp)) }
 
     item {
         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -785,6 +1147,8 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
 fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
     user: JikanFullUserProfile,
     malStats: MangaStatistics?,
+    signalCards: List<ProfileSignalCard>,
+    onSignalClick: (ProfileSignalCard) -> Unit,
     mangaFavoriteMeta: Map<Int, FavoriteMediaMeta>,
     onMangaClick: (Int) -> Unit
 ) {
@@ -802,6 +1166,28 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
             StatsDonutChart(title = "Manga Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
         }
     }
+    if (signalCards.isNotEmpty()) {
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                LazyRow(
+                    contentPadding = PaddingValues(end = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(signalCards) { signal ->
+                        ProfileSignalPill(
+                            modifier = Modifier.width(154.dp),
+                            label = signal.title,
+                            icon = signal.icon,
+                            containerColor = signal.color,
+                            contentColor = Color.White,
+                            onClick = { onSignalClick(signal) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+    item { Spacer(modifier = Modifier.height(10.dp)) }
 
     item {
         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -965,10 +1351,25 @@ fun FavoritesSection(title: String, items: List<JikanFavoriteItem>) {
 }
 
 @Composable
-fun FavoriteCharactersSection(items: List<JikanFavoriteItem>) {
+fun FavoriteCharactersSection(
+    items: List<JikanFavoriteItem>,
+    onRefresh: () -> Unit,
+    refreshEnabled: Boolean
+) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = "Favorite Characters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Favorite Characters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            AssistChip(
+                onClick = onRefresh,
+                enabled = refreshEnabled,
+                label = { Text("Refresh") }
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(items) { item ->
@@ -1003,10 +1404,25 @@ fun FavoriteCharactersSection(items: List<JikanFavoriteItem>) {
 }
 
 @Composable
-fun FavoritePeopleSection(items: List<JikanFavoriteItem>) {
+fun FavoritePeopleSection(
+    items: List<JikanFavoriteItem>,
+    onRefresh: () -> Unit,
+    refreshEnabled: Boolean
+) {
     val context = LocalContext.current
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = "Favorite People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Favorite People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            AssistChip(
+                onClick = onRefresh,
+                enabled = refreshEnabled,
+                label = { Text("Refresh") }
+            )
+        }
         Spacer(modifier = Modifier.height(12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(items) { item ->
@@ -1284,3 +1700,4 @@ fun parseBBCode(text: String): AnnotatedString {
         append(text.substring(lastEnd))
     }
 }
+

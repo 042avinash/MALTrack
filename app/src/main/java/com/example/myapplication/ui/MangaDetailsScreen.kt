@@ -1087,26 +1087,27 @@ fun MangaDetailsContent(
                     val allMatchingCards = listOfNotNull(
                         if (showTrendingCard) MangaStatsPillData("Trending", Icons.Default.TrendingUp, Color(0xFF1E88E5), Color.White, "Trending", "This manga is seeing a lot of active attention right now, often because it is currently popular or gaining momentum within the community.") else null,
                         if (showCommunityLovedCard) MangaStatsPillData("Beloved", Icons.Default.Favorite, Color(0xFFE91E63), Color.White, "Beloved", "Readers who rate this manga tend to rate it very highly, giving it a reputation for strong emotional impact and broad fan appreciation.") else null,
-                        if (showHiddenGemCard) MangaStatsPillData("HiddenGem", Icons.Default.AutoAwesome, Color(0xFF00796B), Color.White, "HiddenGem", "Despite its smaller audience, this manga receives unusually strong praise from the people who read it.") else null,
-                        if (showPolarizingCard) MangaStatsPillData("Polarizing", Icons.Default.CompareArrows, Color(0xFF8E24AA), Color.White, "Polarizing", "Reactions to this manga vary heavily between readers, with strong praise and noticeable disagreement.") else null,
-                        if (showDropCard) MangaStatsPillData("High Dropoff", Icons.Default.ExitToApp, Color(0xFFD32F2F), Color.White, "High Dropoff", "A noticeable number of users stop reading before completion.") else null,
-                        if (showColdReceptionCard) MangaStatsPillData("Disliked", Icons.Default.ThumbDown, Color(0xFF546E7A), Color.White, "Disliked", "Lower ratings appear more frequently here than usual, suggesting weaker overall reception.") else null,
-                        if (showCompletionCard) MangaStatsPillData("High Retention", Icons.Default.TaskAlt, Color(0xFF43A047), Color.White, "High Retention", "People who start this manga tend to stay with it through completion.") else null,
+                        if (showHiddenGemCard) MangaStatsPillData("HiddenGem", Icons.Default.AutoAwesome, Color(0xFF00796B), Color.White, "HiddenGem", "Despite its smaller audience, this manga receives unusually strong praise from the people who read it, giving it the feel of a lesser-known standout.") else null,
+                        if (showPolarizingCard) MangaStatsPillData("Polarizing", Icons.Default.CompareArrows, Color(0xFF8E24AA), Color.White, "Polarizing", "Reactions to this manga vary heavily between readers. Some rate it extremely highly, while others remain unconvinced or conflicted.") else null,
+                        if (showDropCard) MangaStatsPillData("High Dropoff", Icons.Default.ExitToApp, Color(0xFFD32F2F), Color.White, "High Dropoff", "A noticeable number of readers stop reading before finishing, which may point to pacing issues, tonal shifts, or difficulty maintaining interest.") else null,
+                        if (showColdReceptionCard) MangaStatsPillData("Disliked", Icons.Default.ThumbDown, Color(0xFF546E7A), Color.White, "Disliked", "Lower ratings appear more frequently here than usual, suggesting this manga struggles to connect with a broader audience.") else null,
+                        if (showCompletionCard) MangaStatsPillData("High Retention", Icons.Default.TaskAlt, Color(0xFF43A047), Color.White, "High Retention", "People who start this manga tend to stay with it through completion, which often reflects consistent engagement or strong pacing.") else null,
                         if (showMixedReceptionCard) MangaStatsPillData("Mixed", Icons.Default.Shuffle, Color(0xFF78909C), Color.White, "Mixed", "Reader opinions are spread across several score ranges rather than clustering around one clear consensus.") else null,
-                        if (showOnHoldCard) MangaStatsPillData("Stalled", Icons.Default.PauseCircle, Color(0xFFFDD835), Color(0xFF212121), "Stalled", "Readers place this manga on hold more often than usual.") else null,
-                        if (showMostlyMidCard) MangaStatsPillData("Mid", Icons.Default.Remove, Color(0xFF757575), Color.White, "Mid", "Most reactions land around the middle rather than extremes.") else null,
-                        if (showSafePickCard) MangaStatsPillData("Broad Appeal", Icons.Default.Verified, Color(0xFF66BB6A), Color.White, "Broad Appeal", "Very few readers strongly dislike this manga, making it broadly approachable.") else null,
-                        if (showPlannedCard) MangaStatsPillData("High Interest", Icons.Default.Bookmark, Color(0xFF607D8B), Color.White, "High Interest", "A large number of users have this manga saved for later, suggesting strong curiosity.") else null,
-                        if (showNicheAppealCard) MangaStatsPillData("Niche", Icons.Default.Tune, Color(0xFF26A69A), Color.White, "Niche", "This manga resonates strongly with a more specific audience.") else null,
-                        if (showObscureCard) MangaStatsPillData("Obscure", Icons.Default.VisibilityOff, Color(0xFF6D4C41), Color.White, "Obscure", "Relatively few users have discovered or added this manga.") else null,
-                        if (showSlowBurnCard) MangaStatsPillData("Slowburn", Icons.Default.HourglassTop, Color(0xFF8D6E63), Color.White, "Slowburn", "This manga tends to build appreciation gradually over time.") else null
+                        if (showOnHoldCard) MangaStatsPillData("Stalled", Icons.Default.PauseCircle, Color(0xFFFDD835), Color(0xFF212121), "Stalled", "Readers pause this manga more often than usual, which can happen when a series feels demanding, slow-moving, or difficult to continue consistently.") else null,
+                        if (showMostlyMidCard) MangaStatsPillData("Mid", Icons.Default.Remove, Color(0xFF757575), Color.White, "Mid", "Most reactions land around the middle rather than the extremes, giving this manga a more decent-than-memorable reputation overall.") else null,
+                        if (showSafePickCard) MangaStatsPillData("Broad Appeal", Icons.Default.Verified, Color(0xFF66BB6A), Color.White, "Broad Appeal", "Very few readers strongly dislike this manga, making it a broadly approachable choice even for people outside its target audience.") else null,
+                        if (showPlannedCard) MangaStatsPillData("High Interest", Icons.Default.Bookmark, Color(0xFF607D8B), Color.White, "High Interest", "A large number of users have this manga saved for later, suggesting strong curiosity, reputation, or word-of-mouth interest.") else null,
+                        if (showNicheAppealCard) MangaStatsPillData("Niche", Icons.Default.Tune, Color(0xFF26A69A), Color.White, "Niche", "This manga resonates strongly with a more specific audience, even if it remains relatively small compared with mainstream titles.") else null,
+                        if (showObscureCard) MangaStatsPillData("Obscure", Icons.Default.VisibilityOff, Color(0xFF6D4C41), Color.White, "Obscure", "Relatively few users have discovered or added this manga, giving it a much lower profile within the wider community.") else null,
+                        if (showSlowBurnCard) MangaStatsPillData("Slowburn", Icons.Default.HourglassTop, Color(0xFF8D6E63), Color.White, "Slowburn", "This manga tends to build appreciation gradually over time rather than relying on immediate excitement or explosive popularity.") else null
                     )
 
                     val suppressionMap = mapOf(
                         "Beloved" to setOf("Broad Appeal"),
                         "Polarizing" to setOf("Broad Appeal", "Mixed"),
                         "HiddenGem" to setOf("Obscure", "Beloved"),
-                        "Disliked" to setOf("Mid")
+                        "Disliked" to setOf("Mid", "Mixed"),
+                        "Mid" to setOf("Mixed")
                     )
                     val priorityMap = mapOf(
                         "Trending" to 1, "Beloved" to 2, "HiddenGem" to 3, "Polarizing" to 4, "High Dropoff" to 5,

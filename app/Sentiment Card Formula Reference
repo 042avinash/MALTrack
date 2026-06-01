@@ -8,7 +8,7 @@
 | **Polarizing**     | `score_9_10 >= 25 AND score_5_8 >= 45 AND score_1_4 >= 3`                                     |
 | **High Dropoff**   | `dropRate >= 12 AND dropRate >= completionRate * 0.30`                                        |
 | **Disliked**       | `score_1_4 >= 18`                                                                             |
-| **High Retention** | `completionRate >= 55 AND dropRate <= 8`                                                      |
+| **High Retention** | `episodeCount != 1 AND completionRate >= 55 AND dropRate <= 8`                                  |
 | **Mixed**          | `largestBucketShare < 35 AND score_5_6 >= 15 AND score_1_4 >= 7`                              |
 | **Stalled**        | `onHoldRate >= 8`                                                                             |
 | **Mid**            | `score_5_7 >= 50 AND score_9_10 < 30 AND score_1_4 < 15`                                      |
@@ -44,4 +44,5 @@ Slowburn	highScoreShare >= 25 AND highScoreShare < 50 AND dropRate <= 5 AND lowS
 * Only the top 5 qualifying cards are rendered per anime
 * Cards are prioritized before rendering to avoid contradictory or low-signal combinations
 * Manga suppression rules include: HiddenGem suppresses Beloved
+* Disliked and Mid suppress Mixed so only one broad negative/middle reception card appears
 

@@ -1449,7 +1449,7 @@ fun AnimeDetailsContent(
                         } ?: 0f
                     val showTrendingCard = watchingRate >= 40f ||
                         (watchingRate >= 35f && planRate >= 20f)
-                    val showCompletionCard = completionRate >= 55f && dropRate <= 8f
+                    val showCompletionCard = details.numEpisodes != 1 && completionRate >= 55f && dropRate <= 8f
                     val showDropCard = dropRate >= 12f && dropRate >= completionRate * 0.30f
                     val showOnHoldCard = onHoldRate >= 8f
                     val showPlannedCard = planRate >= 50f
@@ -1639,7 +1639,8 @@ fun AnimeDetailsContent(
                         "Beloved" to setOf("Broad Appeal"),
                         "Polarizing" to setOf("Broad Appeal", "Mixed"),
                         "HiddenGem" to setOf("Obscure"),
-                        "Disliked" to setOf("Mid")
+                        "Disliked" to setOf("Mid", "Mixed"),
+                        "Mid" to setOf("Mixed")
                     )
                     val priorityMap = mapOf(
                         "Trending" to 1,

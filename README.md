@@ -7,7 +7,29 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.4.1`
+- `v1.4.2`
+
+## v1.4.2 Highlights
+
+- Profile page resilience:
+  - Added cleaner error handling with stable status-based messages
+  - Improved retry behavior so the current profile can be re-fetched cleanly
+  - Added lighter request throttling/backoff for Jikan profile calls
+  - Split profile sections so friends and favorites can refresh independently
+- Profile UX improvements:
+  - Added profile identity cards with colorful pill styling
+  - Added dedicated profile search flow and friend-state indicators
+  - Moved profile actions into a cleaner circular action cluster
+- Anime/Manga details polish:
+  - Expanded community stats card logic and clarified sentiment descriptions
+  - Aligned review, character, staff, themes, and availability fallback handling
+  - Improved on-demand loading and refresh controls for heavy detail sections
+- User list/search updates:
+  - Search now supports switching between anime and manga targets more smoothly
+  - Search can preserve the entered keyword while changing the target source
+- Release/version alignment:
+  - App version bumped to `1.4.2`
+  - Release APK and metadata updated for the tagged release
 
 ## Core Features
 
