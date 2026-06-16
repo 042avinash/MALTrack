@@ -1583,8 +1583,13 @@ private fun MangaGridCard(
                     .padding(horizontal = 6.dp, vertical = 5.dp),
                 verticalArrangement = Arrangement.Bottom
             ) {
+                val displayTitle = getPreferredTitle(
+                    defaultTitle = manga.title,
+                    alternativeTitles = meta?.alternativeTitles ?: manga.alternativeTitles,
+                    titleLanguage = titleLanguage
+                )
                 Text(
-                    text = manga.getPreferredTitle(titleLanguage),
+                    text = displayTitle,
                     color = Color.White,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 2,

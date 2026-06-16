@@ -23,7 +23,7 @@ class LoginViewModel @Inject constructor(
     private val tokenManager: TokenManager
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
+    private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Checking)
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     private val clientId = "16b21f717a3e9f733f121971c122db16"
@@ -38,6 +38,8 @@ class LoginViewModel @Inject constructor(
             val token = tokenManager.accessToken.first()
             if (token != null) {
                 _uiState.value = LoginUiState.Success
+            } else {
+                _uiState.value = LoginUiState.Idle
             }
         }
     }
@@ -90,6 +92,7 @@ class LoginViewModel @Inject constructor(
 }
 
 sealed interface LoginUiState {
+    data object Checking : LoginUiState
     data object Idle : LoginUiState
     data object Loading : LoginUiState
     data object Success : LoginUiState

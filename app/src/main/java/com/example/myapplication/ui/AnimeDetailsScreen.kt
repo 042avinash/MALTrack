@@ -1639,6 +1639,7 @@ fun AnimeDetailsContent(
                         "Beloved" to setOf("Broad Appeal"),
                         "Polarizing" to setOf("Broad Appeal", "Mixed"),
                         "HiddenGem" to setOf("Obscure"),
+                        "Obscure" to setOf("Niche"),
                         "Disliked" to setOf("Mid", "Mixed"),
                         "Mid" to setOf("Mixed")
                     )
@@ -2322,6 +2323,12 @@ private fun RecommendationGridCard(
                 }
             }
 
+            val displayTitle = getPreferredTitle(
+                defaultTitle = anime.title,
+                alternativeTitles = meta?.alternativeTitles ?: anime.alternativeTitles,
+                titleLanguage = titleLanguage
+            )
+
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -2337,12 +2344,12 @@ private fun RecommendationGridCard(
                     )
                     .padding(horizontal = 6.dp, vertical = 5.dp),
                 verticalArrangement = Arrangement.Bottom
-            ) {
-                Text(
-                    text = anime.getPreferredTitle(titleLanguage),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = if (relationLabel.isNullOrBlank()) 2 else 1,
+                ) {
+                    Text(
+                        text = displayTitle,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = if (relationLabel.isNullOrBlank()) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.Medium
                 )

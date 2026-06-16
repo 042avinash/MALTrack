@@ -84,6 +84,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
+import com.example.myapplication.data.local.TitleLanguage
+import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.JikanFavoriteItem
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.UserProfile
@@ -102,6 +104,7 @@ import java.util.regex.Pattern
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel,
+    titleLanguage: TitleLanguage,
     username: String? = null,
     onBack: () -> Unit,
     onUserClick: (String) -> Unit,
@@ -203,6 +206,7 @@ fun ProfileScreen(
                         ProfileContent(
                             malUser = state.malUser,
                             jikanUser = state.jikanUser,
+                            titleLanguage = titleLanguage,
                             friends = state.friends,
                             friendsLoading = state.friendsLoading,
                             friendsError = state.friendsError,
@@ -214,9 +218,10 @@ fun ProfileScreen(
                             onListClick = onListClick,
                             isOwnProfile = state.isOwnProfile,
                             viewerIsFriendWithProfileOwner = state.viewerIsFriendWithProfileOwner,
-                            onFindUserClick = { showSearchDialog = true }
-                    )
-                }
+                            onFindUserClick = { showSearchDialog = true },
+                            loadFavoriteAnimeDetails = { animeId -> viewModel.getFavoriteAnimeDetails(animeId) }
+                        )
+                    }
                     is ProfileUiState.Error -> {
                         Column(
                             modifier = Modifier
@@ -412,6 +417,7 @@ private fun rememberProfileShimmerBrush(): Brush {
 fun ProfileContent(
     malUser: UserProfile?, 
     jikanUser: JikanFullUserProfile, 
+    titleLanguage: TitleLanguage,
     friends: List<JikanFriend>,
     friendsLoading: Boolean,
     friendsError: String?,
@@ -423,7 +429,8 @@ fun ProfileContent(
     onListClick: (String) -> Unit,
     isOwnProfile: Boolean,
     viewerIsFriendWithProfileOwner: Boolean?,
-    onFindUserClick: () -> Unit
+    onFindUserClick: () -> Unit,
+    loadFavoriteAnimeDetails: suspend (Int) -> AnimeDetailsResponse?
 ) {
     val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -753,14 +760,17 @@ fun ProfileContent(
             animeProfileItems(
                 user = jikanUser,
                 malStats = malUser?.animeStatistics,
+                titleLanguage = titleLanguage,
                 signalCards = signalCards,
                 onSignalClick = { selectedSignal = it },
-                onAnimeClick = onAnimeClick
+                onAnimeClick = onAnimeClick,
+                loadFavoriteAnimeDetails = loadFavoriteAnimeDetails
             )
         } else {
             mangaProfileItems(
                 user = jikanUser,
                 malStats = malUser?.mangaStatistics,
+                titleLanguage = titleLanguage,
                 signalCards = signalCards,
                 onSignalClick = { selectedSignal = it },
                 onMangaClick = onMangaClick
@@ -1207,9 +1217,11 @@ private fun formatLastOnline(raw: String): String {
 fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
     user: JikanFullUserProfile,
     malStats: AnimeStatistics?,
+    titleLanguage: TitleLanguage,
     signalCards: List<ProfileSignalCard>,
     onSignalClick: (ProfileSignalCard) -> Unit,
-    onAnimeClick: (Int) -> Unit
+    onAnimeClick: (Int) -> Unit,
+    loadFavoriteAnimeDetails: suspend (Int) -> AnimeDetailsResponse?
 ) {
     val stats = user.statistics?.anime ?: return
     
@@ -1264,12 +1276,14 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
         favs.anime?.takeIf { it.isNotEmpty() }?.let {
             item {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    FavoriteMediaSection(
-                        title = "Favorite Anime",
-                        items = it,
-                        onItemClick = onAnimeClick
-                    )
-                }
+                        FavoriteMediaSection(
+                            title = "Favorite Anime",
+                            items = it,
+                            titleLanguage = titleLanguage,
+                            loadFullAnimeDetails = loadFavoriteAnimeDetails,
+                            onItemClick = onAnimeClick
+                        )
+                    }
             }
         }
     }
@@ -1278,6 +1292,7 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
 fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
     user: JikanFullUserProfile,
     malStats: MangaStatistics?,
+    titleLanguage: TitleLanguage,
     signalCards: List<ProfileSignalCard>,
     onSignalClick: (ProfileSignalCard) -> Unit,
     onMangaClick: (Int) -> Unit
@@ -1338,6 +1353,8 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
                 FavoriteMediaSection(
                     title = "Favorite Manga",
                     items = it,
+                    titleLanguage = titleLanguage,
+                    loadFullAnimeDetails = null,
                     onItemClick = onMangaClick
                 )
             }
@@ -1563,6 +1580,8 @@ fun FavoritePeopleSection(
 fun FavoriteMediaSection(
     title: String,
     items: List<JikanFavoriteItem>,
+    titleLanguage: TitleLanguage,
+    loadFullAnimeDetails: (suspend (Int) -> AnimeDetailsResponse?)? = null,
     onItemClick: (Int) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -1570,6 +1589,27 @@ fun FavoriteMediaSection(
         Spacer(modifier = Modifier.height(12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(items) { item ->
+                val fallbackTitle = when (titleLanguage) {
+                    TitleLanguage.ENGLISH -> item.name?.takeIf { it.isNotBlank() }
+                        ?: item.title?.takeIf { it.isNotBlank() }
+                        ?: "Unknown"
+                    TitleLanguage.JAPANESE -> item.name?.takeIf { it.isNotBlank() }
+                        ?: item.title?.takeIf { it.isNotBlank() }
+                        ?: "Unknown"
+                    TitleLanguage.ROMAJI -> item.title?.takeIf { it.isNotBlank() }
+                        ?: item.name?.takeIf { it.isNotBlank() }
+                        ?: "Unknown"
+                }
+                val resolvedDetails by produceState<AnimeDetailsResponse?>(
+                    initialValue = null,
+                    key1 = item.mal_id,
+                    key2 = titleLanguage
+                ) {
+                    value = runCatching {
+                        loadFullAnimeDetails?.invoke(item.mal_id)
+                    }.getOrNull()
+                }
+                val displayTitle = resolvedDetails?.getPreferredTitle(titleLanguage) ?: fallbackTitle
                 Card(
                     modifier = Modifier
                         .width(108.dp)
@@ -1581,7 +1621,7 @@ fun FavoriteMediaSection(
                     Box(modifier = Modifier.fillMaxSize()) {
                         AsyncImage(
                             model = item.images?.jpg?.image_url,
-                            contentDescription = item.title ?: item.name,
+                            contentDescription = displayTitle,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
@@ -1600,7 +1640,7 @@ fun FavoriteMediaSection(
                                 .padding(horizontal = 8.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = item.title ?: item.name ?: "Unknown",
+                                text = displayTitle,
                                 color = Color.White,
                                 style = MaterialTheme.typography.bodySmall,
                                 maxLines = 2,

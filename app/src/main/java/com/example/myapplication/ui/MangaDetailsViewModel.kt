@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.os.SystemClock
+import com.example.myapplication.data.model.AlternativeTitles
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaRecommendation
 import com.example.myapplication.data.model.MyMangaListStatus
@@ -360,7 +361,8 @@ class MangaDetailsViewModel @Inject constructor(
                             MangaCardMeta(
                                 mean = it.mean,
                                 members = it.numListUsers,
-                                myListStatus = it.myListStatus
+                                myListStatus = it.myListStatus,
+                                alternativeTitles = it.alternativeTitles
                             )
                         } ?: MangaCardMeta()
                         mangaCardMetaCache[mangaId] = SystemClock.elapsedRealtime() to meta
@@ -471,5 +473,6 @@ sealed interface MangaDetailsUiState {
 data class MangaCardMeta(
     val mean: Float? = null,
     val members: Int? = null,
-    val myListStatus: MyMangaListStatus? = null
+    val myListStatus: MyMangaListStatus? = null,
+    val alternativeTitles: AlternativeTitles? = null
 )

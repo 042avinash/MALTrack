@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.os.SystemClock
 import com.example.myapplication.data.model.AniListMedia
+import com.example.myapplication.data.model.AlternativeTitles
 import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
@@ -464,7 +465,8 @@ class AnimeDetailsViewModel @Inject constructor(
                             RecommendationCardMeta(
                                 mean = it.mean,
                                 members = it.numListUsers,
-                                myListStatus = it.myListStatus
+                                myListStatus = it.myListStatus,
+                                alternativeTitles = it.alternativeTitles
                             )
                         } ?: RecommendationCardMeta()
                         recommendationMetaCache[targetId] = SystemClock.elapsedRealtime() to meta
@@ -646,7 +648,8 @@ sealed interface AnimeDetailsUiState {
 data class RecommendationCardMeta(
     val mean: Float? = null,
     val members: Int? = null,
-    val myListStatus: MyListStatus? = null
+    val myListStatus: MyListStatus? = null,
+    val alternativeTitles: AlternativeTitles? = null
 )
 
 private data class SupplementaryAnimeData(

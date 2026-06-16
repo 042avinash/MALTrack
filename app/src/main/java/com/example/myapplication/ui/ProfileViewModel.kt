@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.UserProfile
 import com.example.myapplication.data.remote.JikanFriend
@@ -32,10 +33,12 @@ class ProfileViewModel @Inject constructor(
     companion object {
         private const val TAG = "ProfileViewModel"
         private const val PROFILE_CACHE_TTL_MS = 10 * 60 * 1000L
+        private const val FAVORITE_ANIME_CACHE_TTL_MS = 24 * 60 * 60 * 1000L
         private const val VIEWER_NAME_CACHE_TTL_MS = 10 * 60 * 1000L
         private const val VIEWER_FRIENDS_CACHE_TTL_MS = 10 * 60 * 1000L
         private val globalCachedProfiles = mutableMapOf<String, ProfileUiState.Success>()
         private val globalCachedProfileTimestamps = mutableMapOf<String, Long>()
+        private val globalFavoriteAnimeDetails = mutableMapOf<Int, Pair<Long, AnimeDetailsResponse>>()
         private var globalViewerName: String? = null
         private var globalViewerNameTimestamp: Long = 0L
         private val globalViewerFriends = mutableMapOf<String, Pair<Long, Set<String>>>()
@@ -220,6 +223,20 @@ class ProfileViewModel @Inject constructor(
 
     fun clearErrorMessage() {
         _errorMessage.value = null
+    }
+
+    suspend fun getFavoriteAnimeDetails(animeId: Int, forceRefresh: Boolean = false): AnimeDetailsResponse? {
+        val now = SystemClock.elapsedRealtime()
+        val cached = globalFavoriteAnimeDetails[animeId]
+        val hasFreshCache = cached != null && now - cached.first < FAVORITE_ANIME_CACHE_TTL_MS
+        if (!forceRefresh && hasFreshCache) {
+            return cached?.second
+        }
+        return runCatching {
+            withTimeoutRetry { repository.getAnimeDetails(animeId) }
+        }.getOrNull()?.also {
+            globalFavoriteAnimeDetails[animeId] = SystemClock.elapsedRealtime() to it
+        }
     }
 
     private fun getFriendlyErrorMessage(error: Throwable): String {

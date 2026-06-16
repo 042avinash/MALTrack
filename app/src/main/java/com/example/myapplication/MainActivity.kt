@@ -10,6 +10,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -170,37 +172,31 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                
-                LaunchedEffect(loginUiState) {
-                    if (loginUiState is LoginUiState.Success) {
-                        if (pendingRoute == null && navController.currentDestination?.route == "login") {
-                            val targetRoute = when (defaultSection) {
-                                DefaultSection.HOME_ANIME -> "anime_list?initialTab=0"
-                                DefaultSection.HOME_MANGA -> "anime_list?initialTab=1"
-                                DefaultSection.USER_LIST_ANIME -> {
-                                    val subTab = getStatusIndex(defaultAnimeStatus, true)
-                                    "user_list?mainTab=0&subTab=$subTab"
-                                }
-                                DefaultSection.USER_LIST_MANGA -> {
-                                    val subTab = getStatusIndex(defaultMangaStatus, false)
-                                    "user_list?mainTab=1&subTab=$subTab"
-                                }
-                                DefaultSection.PROFILE -> "profile_route?username=null"
-                                DefaultSection.LAST_USED -> lastUsedSection
-                            }
-                            
-                            navController.navigate(targetRoute) {
-                                popUpTo("login") { inclusive = true }
-                            }
+
+                fun defaultRouteForLoggedInUser(): String {
+                    return when (defaultSection) {
+                        DefaultSection.HOME_ANIME -> "anime_list?initialTab=0"
+                        DefaultSection.HOME_MANGA -> "anime_list?initialTab=1"
+                        DefaultSection.USER_LIST_ANIME -> {
+                            val subTab = getStatusIndex(defaultAnimeStatus, true)
+                            "user_list?mainTab=0&subTab=$subTab"
                         }
+                        DefaultSection.USER_LIST_MANGA -> {
+                            val subTab = getStatusIndex(defaultMangaStatus, false)
+                            "user_list?mainTab=1&subTab=$subTab"
+                        }
+                        DefaultSection.PROFILE -> "profile_route?username=null"
+                        DefaultSection.LAST_USED -> lastUsedSection
                     }
                 }
-
-                LaunchedEffect(loginUiState, pendingRoute) {
-                    val route = pendingRoute ?: return@LaunchedEffect
+                
+                LaunchedEffect(loginUiState, pendingRoute, currentDestination?.route) {
                     if (loginUiState is LoginUiState.Success) {
-                        navigateToExistingOrPush(route)
-                        pendingLaunchRoute.value = null
+                        val route = pendingRoute ?: defaultRouteForLoggedInUser()
+                        if (pendingRoute != null || currentDestination?.route == "login") {
+                            navigateToExistingOrPush(route)
+                            pendingLaunchRoute.value = null
+                        }
                     }
                 }
 
@@ -240,247 +236,398 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    bottomBar = {
-                        if (showBottomBar) {
-                            NavigationBar {
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                                    label = { Text("Home") },
-                                    selected = currentDestination?.hierarchy?.any { it.route?.startsWith("anime_list") == true } == true,
-                                    onClick = {
-                                        navigateToBottomDestination(
-                                            route = "anime_list",
-                                            destinationPrefix = "anime_list"
-                                        )
-                                    }
-                                )
-                                NavigationBarItem(
-                                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "User List") },
-                                    label = { Text("My List") },
-                                    selected = currentDestination?.hierarchy?.any { it.route?.startsWith("user_list") == true } == true,
-                                    onClick = {
-                                        val subTab = getStatusIndex(defaultAnimeStatus, true)
-                                        navigateToBottomDestination(
-                                            route = "user_list?mainTab=0&subTab=$subTab",
-                                            destinationPrefix = "user_list"
-                                        )
-                                    }
-                                )
-                                NavigationBarItem(
-                                    icon = {
-                                        if (userPfp.isNullOrBlank()) {
-                                            Icon(Icons.Filled.Person, contentDescription = "Profile")
-                                        } else {
-                                            AsyncImage(
-                                                model = userPfp,
-                                                contentDescription = "Profile",
-                                                modifier = Modifier
-                                                    .size(24.dp)
-                                                    .clip(CircleShape),
-                                                contentScale = ContentScale.Crop
-                                            )
-                                        }
-                                    },
-                                    label = { Text("Profile") },
-                                    selected = currentDestination?.hierarchy?.any { it.route?.startsWith("profile_route") == true && currentDestination?.route?.contains("username=null") == true } == true,
-                                    onClick = {
-                                        navigateToBottomDestination(
-                                            route = "profile_route?username=null",
-                                            destinationPrefix = "profile_route"
-                                        )
-                                    }
-                                )
+                when (loginUiState) {
+                    LoginUiState.Checking, LoginUiState.Loading -> {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
                             }
                         }
                     }
-                ) { innerPadding ->
-                    NavHost(
-                        navController = navController,
-                        startDestination = "login",
-                        modifier = Modifier.padding(innerPadding)
-                    ) {
-                        composable("login") {
-                            LoginScreen(
-                                onLoginClick = {
-                                    loginViewModel.startLogin(this@MainActivity)
-                                }
-                            )
-                        }
-                        composable(
-                            route = "anime_list?initialTab={initialTab}&initialQuery={initialQuery}",
-                            arguments = listOf(
-                                navArgument("initialTab") { defaultValue = 0; type = NavType.IntType },
-                                navArgument("initialQuery") { defaultValue = ""; type = NavType.StringType }
-                            )
-                        ) { backStackEntry ->
-                            val initialTab = backStackEntry.arguments?.getInt("initialTab") ?: 0
-                            val initialQuery = backStackEntry.arguments?.getString("initialQuery").orEmpty()
-                            
-                            LaunchedEffect(Unit) {
-                                if (loginUiState is LoginUiState.Idle) {
-                                    navController.navigate("login") { popUpTo(0) }
-                                }
+                    LoginUiState.Idle, is LoginUiState.Error -> {
+                        LoginScreen(
+                            onLoginClick = {
+                                loginViewModel.startLogin(this@MainActivity)
                             }
+                        )
+                    }
+                    LoginUiState.Success -> {
+                        val startRoute = pendingRoute ?: defaultRouteForLoggedInUser()
+                        val navController = rememberNavController()
+                        val navBackStackEntry by navController.currentBackStackEntryAsState()
+                        val currentDestination = navBackStackEntry?.destination
+                        var showExitDialog by remember { mutableStateOf(false) }
+                        var lastBottomNavClickAt by remember { mutableLongStateOf(0L) }
+                        val routeHistory = remember { mutableStateListOf<String>() }
+                        val showBottomBar = currentDestination?.route != "settings" &&
+                            currentDestination?.route != "feedback" &&
+                            currentDestination?.route?.startsWith("anime_details") != true &&
+                            currentDestination?.route?.startsWith("manga_details") != true &&
+                            currentDestination?.route?.startsWith("all_reviews") != true
+                        val isHomeRootRoute = currentDestination?.route?.startsWith("anime_list") == true
+                        val userListUsernameArg = navBackStackEntry?.arguments?.getString("username")
+                        val isOwnUserListRootRoute =
+                            currentDestination?.route?.startsWith("user_list") == true &&
+                                (userListUsernameArg.isNullOrBlank() || userListUsernameArg == "null")
+                        val profileUsernameArg = navBackStackEntry?.arguments?.getString("username")
+                        val isOwnProfileRootRoute =
+                            currentDestination?.route?.startsWith("profile_route") == true &&
+                                (profileUsernameArg.isNullOrBlank() || profileUsernameArg == "null")
+                        val shouldInterceptBackForExit =
+                            isHomeRootRoute || isOwnUserListRootRoute || isOwnProfileRootRoute
 
-                            AnimeListScreen(
-                                viewModel = animeViewModel,
-                                titleLanguage = titleLanguage,
-                                initialTab = initialTab,
-                                initialSearchQuery = initialQuery,
-                                onAnimeClick = { animeId ->
-                                    navigateToExistingOrPush("anime_details/$animeId")
-                                },
-                                onMangaClick = { mangaId ->
-                                    navigateToExistingOrPush("manga_details/$mangaId")
-                                },
-                                onOpenAnimeUserList = {
-                                    navigateToBottomDestination(
-                                        route = "user_list?mainTab=0&subTab=1",
-                                        destinationPrefix = "user_list"
-                                    )
-                                },
-                                onOpenMangaUserList = {
-                                    navigateToBottomDestination(
-                                        route = "user_list?mainTab=1&subTab=1",
-                                        destinationPrefix = "user_list"
-                                    )
-                                },
-                                onSettingsClick = {
-                                    navigateSingleTop("settings")
-                                }
-                            )
+                        BackHandler(enabled = shouldInterceptBackForExit) {
+                            showExitDialog = true
                         }
-                        composable(
-                            route = "user_list?mainTab={mainTab}&subTab={subTab}&username={username}",
-                            arguments = listOf(
-                                navArgument("mainTab") { defaultValue = 0; type = NavType.IntType },
-                                navArgument("subTab") { defaultValue = 0; type = NavType.IntType },
-                                navArgument("username") { nullable = true; defaultValue = null }
-                            )
-                        ) { backStackEntry ->
-                            val mainTab = backStackEntry.arguments?.getInt("mainTab") ?: 0
-                            val subTab = backStackEntry.arguments?.getInt("subTab") ?: 0
-                            val username = backStackEntry.arguments?.getString("username")
-                            val userListViewModel: UserListViewModel = hiltViewModel()
-                            val userMangaListViewModel: UserMangaListViewModel = hiltViewModel()
-                            
-                            UserListScreen(
-                                animeViewModel = userListViewModel,
-                                mangaViewModel = userMangaListViewModel,
-                                titleLanguage = titleLanguage,
-                                initialMainTab = mainTab,
-                                initialSubTab = subTab,
-                                username = username,
-                                onAnimeClick = { animeId ->
-                                    navigateToExistingOrPush("anime_details/$animeId")
+
+                        if (showExitDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showExitDialog = false },
+                                title = { Text("Exit App") },
+                                text = { Text("Are you sure you want to exit?") },
+                                confirmButton = {
+                                    TextButton(onClick = { finish() }) {
+                                        Text("Exit")
+                                    }
                                 },
-                                onMangaClick = { mangaId ->
-                                    navigateToExistingOrPush("manga_details/$mangaId")
-                                },
-                                onOpenSettings = {
-                                    navigateSingleTop("settings")
-                                },
-                                onOpenHomeSearch = { query, isAnimeSearch ->
-                                    val encodedQuery = Uri.encode(query)
-                                    navigateToBottomDestination(
-                                        route = "anime_list?initialTab=${if (isAnimeSearch) 0 else 1}&initialQuery=$encodedQuery",
-                                        destinationPrefix = "anime_list"
-                                    )
-                                }
-                            )
-                        }
-                        composable(
-                            route = "anime_details/{animeId}",
-                            arguments = listOf(
-                                navArgument("animeId") { type = NavType.IntType }
-                            )
-                        ) {
-                            val viewModel: AnimeDetailsViewModel = hiltViewModel()
-                            AnimeDetailsScreen(
-                                viewModel = viewModel,
-                                titleLanguage = titleLanguage,
-                                onBackClick = { navController.popBackStack() },
-                                onReviewsClick = { animeId ->
-                                    navigateToExistingOrPush("all_reviews/$animeId")
-                                },
-                                onAnimeClick = { animeId ->
-                                    navigateToExistingOrPush("anime_details/$animeId")
-                                }
-                            )
-                        }
-                        composable(
-                            route = "manga_details/{mangaId}",
-                            arguments = listOf(
-                                navArgument("mangaId") { type = NavType.IntType }
-                            )
-                        ) {
-                            val viewModel: MangaDetailsViewModel = hiltViewModel()
-                            MangaDetailsScreen(
-                                viewModel = viewModel,
-                                titleLanguage = titleLanguage,
-                                onBackClick = { navController.popBackStack() },
-                                onMangaClick = { mangaId ->
-                                    navigateToExistingOrPush("manga_details/$mangaId")
-                                }
-                            )
-                        }
-                        composable(
-                            route = "all_reviews/{animeId}",
-                            arguments = listOf(
-                                navArgument("animeId") { type = NavType.IntType }
-                            )
-                        ) {
-                            val viewModel: AllReviewsViewModel = hiltViewModel()
-                            AllReviewsScreen(
-                                viewModel = viewModel,
-                                onBackClick = { navController.popBackStack() }
-                            )
-                        }
-                        composable(
-                            route = "profile_route?username={username}",
-                            arguments = listOf(
-                                navArgument("username") { nullable = true; defaultValue = null }
-                            )
-                        ) { backStackEntry ->
-                            val username = backStackEntry.arguments?.getString("username")
-                            val profileViewModel: ProfileViewModel = hiltViewModel()
-                            ProfileScreen(
-                                viewModel = profileViewModel,
-                                username = username,
-                                onBack = { navController.popBackStack() },
-                                onUserClick = { clickedUser ->
-                                    navigateToExistingOrPush("profile_route?username=$clickedUser")
-                                },
-                                onListClick = { listUser ->
-                                    navigateToExistingOrPush("user_list?mainTab=0&subTab=0&username=$listUser")
-                                },
-                                onAnimeClick = { animeId ->
-                                    navigateToExistingOrPush("anime_details/$animeId")
-                                },
-                                onMangaClick = { mangaId ->
-                                    navigateToExistingOrPush("manga_details/$mangaId")
-                                },
-                                onLogout = {
-                                    loginViewModel.logout()
-                                    navController.navigate("login") {
-                                        popUpTo(0) { inclusive = true }
+                                dismissButton = {
+                                    TextButton(onClick = { showExitDialog = false }) {
+                                        Text("Cancel")
                                     }
                                 }
                             )
                         }
-                        composable("settings") {
-                            SettingsScreen(
-                                viewModel = hiltViewModel(),
-                                onFeedbackClick = { navigateSingleTop("feedback") },
-                                onBack = { navController.popBackStack() }
-                            )
+
+                        fun navigateToBottomDestination(route: String, destinationPrefix: String) {
+                            val now = SystemClock.elapsedRealtime()
+                            val isAlreadySelected = currentDestination?.hierarchy?.any {
+                                it.route?.startsWith(destinationPrefix) == true
+                            } == true
+
+                            if (isAlreadySelected || now - lastBottomNavClickAt < 300) return
+
+                            lastBottomNavClickAt = now
+                            runCatching {
+                                navController.navigate(route) {
+                                    popUpTo(navController.graph.id) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            }
                         }
-                        composable("feedback") {
-                            FeedbackScreen(
-                                onBack = { navController.popBackStack() }
-                            )
+
+                        fun navigateSingleTop(route: String) {
+                            runCatching {
+                                navController.navigate(route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                        }
+
+                        fun navigateToExistingOrPush(route: String) {
+                            val targetKey = routeToKey(route) ?: route
+                            val targetIndex = routeHistory.indexOfLast { it == targetKey }
+                            if (targetIndex >= 0) {
+                                val popsNeeded = routeHistory.lastIndex - targetIndex
+                                repeat(popsNeeded) {
+                                    navController.popBackStack()
+                                }
+                            } else {
+                                val shouldAvoidSingleTop =
+                                    route.startsWith("anime_details/") ||
+                                        route.startsWith("manga_details/") ||
+                                        route.startsWith("all_reviews/") ||
+                                        (route.startsWith("profile_route?username=") &&
+                                            !route.endsWith("username=null"))
+                                if (shouldAvoidSingleTop) {
+                                    runCatching { navController.navigate(route) }
+                                } else {
+                                    navigateSingleTop(route)
+                                }
+                            }
+                        }
+
+                        LaunchedEffect(pendingRoute, startRoute) {
+                            val route = pendingRoute ?: return@LaunchedEffect
+                            if (loginUiState is LoginUiState.Success) {
+                                if (route != startRoute) {
+                                    navigateToExistingOrPush(route)
+                                }
+                                pendingLaunchRoute.value = null
+                            }
+                        }
+
+                        LaunchedEffect(currentDestination?.route) {
+                            val route = currentDestination?.route
+                            if (route != null && (route.startsWith("anime_list") || route.startsWith("user_list") || route.startsWith("profile_route"))) {
+                                val fullRoute = navBackStackEntry?.let { entry ->
+                                    val routePattern = entry.destination.route ?: return@let route
+                                    var finalRoute = routePattern
+                                    entry.arguments?.let { args ->
+                                        entry.destination.arguments.forEach { (key, argument) ->
+                                            val value = args.get(key)
+                                            if (value != null) {
+                                                finalRoute = finalRoute.replace("{$key}", value.toString())
+                                            }
+                                        }
+                                    }
+                                    finalRoute
+                                } ?: route
+
+                                settingsViewModel.setLastUsedSection(fullRoute)
+                            }
+                        }
+
+                        LaunchedEffect(navBackStackEntry) {
+                            val key = navBackStackEntry?.let { backStackEntryToKey(it) } ?: return@LaunchedEffect
+                            if (routeHistory.isEmpty()) {
+                                routeHistory.add(key)
+                            } else if (routeHistory.last() != key) {
+                                val existingIndex = routeHistory.indexOfLast { it == key }
+                                if (existingIndex >= 0) {
+                                    routeHistory.subList(existingIndex + 1, routeHistory.size).clear()
+                                } else {
+                                    routeHistory.add(key)
+                                }
+                            }
+                        }
+
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            bottomBar = {
+                                if (showBottomBar) {
+                                    NavigationBar {
+                                        NavigationBarItem(
+                                            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                                            label = { Text("Home") },
+                                            selected = currentDestination?.hierarchy?.any { it.route?.startsWith("anime_list") == true } == true,
+                                            onClick = {
+                                                navigateToBottomDestination(
+                                                    route = "anime_list",
+                                                    destinationPrefix = "anime_list"
+                                                )
+                                            }
+                                        )
+                                        NavigationBarItem(
+                                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "User List") },
+                                            label = { Text("My List") },
+                                            selected = currentDestination?.hierarchy?.any { it.route?.startsWith("user_list") == true } == true,
+                                            onClick = {
+                                                val subTab = getStatusIndex(defaultAnimeStatus, true)
+                                                navigateToBottomDestination(
+                                                    route = "user_list?mainTab=0&subTab=$subTab",
+                                                    destinationPrefix = "user_list"
+                                                )
+                                            }
+                                        )
+                                        NavigationBarItem(
+                                            icon = {
+                                                if (userPfp.isNullOrBlank()) {
+                                                    Icon(Icons.Filled.Person, contentDescription = "Profile")
+                                                } else {
+                                                    AsyncImage(
+                                                        model = userPfp,
+                                                        contentDescription = "Profile",
+                                                        modifier = Modifier
+                                                            .size(24.dp)
+                                                            .clip(CircleShape),
+                                                        contentScale = ContentScale.Crop
+                                                    )
+                                                }
+                                            },
+                                            label = { Text("Profile") },
+                                            selected = currentDestination?.hierarchy?.any { it.route?.startsWith("profile_route") == true && currentDestination?.route?.contains("username=null") == true } == true,
+                                            onClick = {
+                                                navigateToBottomDestination(
+                                                    route = "profile_route?username=null",
+                                                    destinationPrefix = "profile_route"
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        ) { innerPadding ->
+                            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                                NavHost(
+                                    navController = navController,
+                                    startDestination = startRoute,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    composable(
+                                        route = "anime_list?initialTab={initialTab}&initialQuery={initialQuery}",
+                                        arguments = listOf(
+                                            navArgument("initialTab") { defaultValue = 0; type = NavType.IntType },
+                                            navArgument("initialQuery") { defaultValue = ""; type = NavType.StringType }
+                                        )
+                                    ) { backStackEntry ->
+                                        val initialTab = backStackEntry.arguments?.getInt("initialTab") ?: 0
+                                        val initialQuery = backStackEntry.arguments?.getString("initialQuery").orEmpty()
+
+                                        AnimeListScreen(
+                                            viewModel = animeViewModel,
+                                            titleLanguage = titleLanguage,
+                                            initialTab = initialTab,
+                                            initialSearchQuery = initialQuery,
+                                            onAnimeClick = { animeId ->
+                                                navigateToExistingOrPush("anime_details/$animeId")
+                                            },
+                                            onMangaClick = { mangaId ->
+                                                navigateToExistingOrPush("manga_details/$mangaId")
+                                            },
+                                            onOpenAnimeUserList = {
+                                                navigateToBottomDestination(
+                                                    route = "user_list?mainTab=0&subTab=1",
+                                                    destinationPrefix = "user_list"
+                                                )
+                                            },
+                                            onOpenMangaUserList = {
+                                                navigateToBottomDestination(
+                                                    route = "user_list?mainTab=1&subTab=1",
+                                                    destinationPrefix = "user_list"
+                                                )
+                                            },
+                                            onSettingsClick = {
+                                                navigateSingleTop("settings")
+                                            }
+                                        )
+                                    }
+                                    composable(
+                                        route = "user_list?mainTab={mainTab}&subTab={subTab}&username={username}",
+                                        arguments = listOf(
+                                            navArgument("mainTab") { defaultValue = 0; type = NavType.IntType },
+                                            navArgument("subTab") { defaultValue = 0; type = NavType.IntType },
+                                            navArgument("username") { nullable = true; defaultValue = null }
+                                        )
+                                    ) { backStackEntry ->
+                                        val mainTab = backStackEntry.arguments?.getInt("mainTab") ?: 0
+                                        val subTab = backStackEntry.arguments?.getInt("subTab") ?: 0
+                                        val username = backStackEntry.arguments?.getString("username")
+                                        val userListViewModel: UserListViewModel = hiltViewModel()
+                                        val userMangaListViewModel: UserMangaListViewModel = hiltViewModel()
+
+                                        UserListScreen(
+                                            animeViewModel = userListViewModel,
+                                            mangaViewModel = userMangaListViewModel,
+                                            titleLanguage = titleLanguage,
+                                            initialMainTab = mainTab,
+                                            initialSubTab = subTab,
+                                            username = username,
+                                            onAnimeClick = { animeId ->
+                                                navigateToExistingOrPush("anime_details/$animeId")
+                                            },
+                                            onMangaClick = { mangaId ->
+                                                navigateToExistingOrPush("manga_details/$mangaId")
+                                            },
+                                            onOpenSettings = {
+                                                navigateSingleTop("settings")
+                                            },
+                                            onOpenHomeSearch = { query, isAnimeSearch ->
+                                                val encodedQuery = Uri.encode(query)
+                                                navigateToBottomDestination(
+                                                    route = "anime_list?initialTab=${if (isAnimeSearch) 0 else 1}&initialQuery=$encodedQuery",
+                                                    destinationPrefix = "anime_list"
+                                                )
+                                            }
+                                        )
+                                    }
+                                    composable(
+                                        route = "anime_details/{animeId}",
+                                        arguments = listOf(
+                                            navArgument("animeId") { type = NavType.IntType }
+                                        )
+                                    ) {
+                                        val viewModel: AnimeDetailsViewModel = hiltViewModel()
+                                        AnimeDetailsScreen(
+                                            viewModel = viewModel,
+                                            titleLanguage = titleLanguage,
+                                            onBackClick = { navController.popBackStack() },
+                                            onReviewsClick = { animeId ->
+                                                navigateToExistingOrPush("all_reviews/$animeId")
+                                            },
+                                            onAnimeClick = { animeId ->
+                                                navigateToExistingOrPush("anime_details/$animeId")
+                                            }
+                                        )
+                                    }
+                                    composable(
+                                        route = "manga_details/{mangaId}",
+                                        arguments = listOf(
+                                            navArgument("mangaId") { type = NavType.IntType }
+                                        )
+                                    ) {
+                                        val viewModel: MangaDetailsViewModel = hiltViewModel()
+                                        MangaDetailsScreen(
+                                            viewModel = viewModel,
+                                            titleLanguage = titleLanguage,
+                                            onBackClick = { navController.popBackStack() },
+                                            onMangaClick = { mangaId ->
+                                                navigateToExistingOrPush("manga_details/$mangaId")
+                                            }
+                                        )
+                                    }
+                                    composable(
+                                        route = "all_reviews/{animeId}",
+                                        arguments = listOf(
+                                            navArgument("animeId") { type = NavType.IntType }
+                                        )
+                                    ) {
+                                        val viewModel: AllReviewsViewModel = hiltViewModel()
+                                        AllReviewsScreen(
+                                            viewModel = viewModel,
+                                            onBackClick = { navController.popBackStack() }
+                                        )
+                                    }
+                                    composable(
+                                        route = "profile_route?username={username}",
+                                        arguments = listOf(
+                                            navArgument("username") { nullable = true; defaultValue = null }
+                                        )
+                                    ) { backStackEntry ->
+                                        val username = backStackEntry.arguments?.getString("username")
+                                        val profileViewModel: ProfileViewModel = hiltViewModel()
+                                ProfileScreen(
+                                    viewModel = profileViewModel,
+                                    titleLanguage = titleLanguage,
+                                    username = username,
+                                    onBack = { navController.popBackStack() },
+                                            onUserClick = { clickedUser ->
+                                                navigateToExistingOrPush("profile_route?username=$clickedUser")
+                                            },
+                                            onListClick = { listUser ->
+                                                navigateToExistingOrPush("user_list?mainTab=0&subTab=0&username=$listUser")
+                                            },
+                                            onAnimeClick = { animeId ->
+                                                navigateToExistingOrPush("anime_details/$animeId")
+                                            },
+                                            onMangaClick = { mangaId ->
+                                                navigateToExistingOrPush("manga_details/$mangaId")
+                                            },
+                                            onLogout = {
+                                                loginViewModel.logout()
+                                            }
+                                        )
+                                    }
+                                    composable("settings") {
+                                        SettingsScreen(
+                                            viewModel = hiltViewModel(),
+                                            onFeedbackClick = { navigateSingleTop("feedback") },
+                                            onBack = { navController.popBackStack() }
+                                        )
+                                    }
+                                    composable("feedback") {
+                                        FeedbackScreen(
+                                            onBack = { navController.popBackStack() }
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

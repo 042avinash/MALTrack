@@ -7,7 +7,16 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.4.3`
+- `v1.4.4`
+
+## v1.4.4 Highlights
+
+- **Startup UX Polish**:
+  - **Eliminated Login Flash**: Introduced a silent "boot gate" that handles authentication checks before showing any UI, removing the brief flash of the login screen for authenticated users.
+  - **Reliable Cold-Start Notifications**: Fixed an issue where tapping a notification while the app was closed could leave the user stranded on the login screen; the app now properly preserves and navigates to the notification target after background authentication completes.
+  - **Smarter Initial Routing**: Improved the startup flow to wait for authentication resolution before deciding between the Home, Notification, or Login screens.
+- **Release Alignment**:
+  - App version bumped to `v1.4.4` (`versionCode 29`).
 
 ## v1.4.3 Highlights
 
