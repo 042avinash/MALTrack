@@ -11,6 +11,12 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## v1.4.4 Highlights
 
+- **Profile and Airing Reliability**:
+  - Removed the signed-in profile page's Jikan dependency to prevent profile 504 failures; profile data and manga statistics now come from MyAnimeList.
+  - Replaced AniList airing lookups with authenticated AnimeSchedule data, including exact aired-episode counts, detail-page countdowns, and list-tile countdowns.
+  - Restored reliable episode-notification checks through the shared AnimeSchedule schedule path.
+- **Airing List UX**:
+  - Personal Anime List tabs now prefetch airing metadata for their initial entries and show compact next-episode countdowns alongside watched, aired, and total episode counts.
 - **Startup UX Polish**:
   - **Eliminated Login Flash**: Introduced a silent "boot gate" that handles authentication checks before showing any UI, removing the brief flash of the login screen for authenticated users.
   - **Reliable Cold-Start Notifications**: Fixed an issue where tapping a notification while the app was closed could leave the user stranded on the login screen; the app now properly preserves and navigates to the notification target after background authentication completes.
