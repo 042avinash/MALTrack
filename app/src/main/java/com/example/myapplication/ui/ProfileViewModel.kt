@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.UserProfile
+import com.example.myapplication.data.model.toProfileDisplayData
 import com.example.myapplication.data.remote.JikanFriend
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.repository.JikanProfileFetchException
@@ -89,10 +90,21 @@ class ProfileViewModel @Inject constructor(
             }
             try {
                 if (targetUsername == null) {
-                    val malProfile = withTimeoutRetry { repository.getMyUserProfile() }
+                    val rawMalProfile = withTimeoutRetry { repository.getMyUserProfile() }
+                    val malProfile = if (rawMalProfile.mangaStatistics == null) {
+                        rawMalProfile.copy(
+                            mangaStatistics = withTimeoutRetry {
+                                repository.getMyMangaStatisticsFromList()
+                            }
+                        )
+                    } else {
+                        rawMalProfile
+                    }
                     globalViewerName = malProfile.name
                     globalViewerNameTimestamp = SystemClock.elapsedRealtime()
-                    val fullProfile = withTimeoutRetry { repository.getUserFullProfile(malProfile.name) }
+                    // The official authenticated endpoint already contains everything needed
+                    // for the signed-in profile. Do not make the page depend on Jikan.
+                    val fullProfile = malProfile.toProfileDisplayData()
                     val successState = ProfileUiState.Success(
                         malUser = malProfile,
                         jikanUser = fullProfile,
@@ -105,7 +117,16 @@ class ProfileViewModel @Inject constructor(
                     globalCachedProfileTimestamps[normalizedUsername] = SystemClock.elapsedRealtime()
                     _uiState.value = successState
                 } else {
-                    val fullProfile = withTimeoutRetry { repository.getUserFullProfile(targetUsername) }
+                    // Public MAL profile details are not exposed by the official API. Keep a
+                    // browsable shell if the optional Jikan enrichment service is unavailable.
+                    val fullProfile = runCatching {
+                        withTimeoutRetry { repository.getUserFullProfile(targetUsername) }
+                    }.getOrElse {
+                        JikanFullUserProfile(
+                            username = targetUsername,
+                            url = "https://myanimelist.net/profile/$targetUsername"
+                        )
+                    }
                     val viewerIsFriendWithProfileOwner = resolveViewerFriendStatus(targetUsername)
                     val successState = ProfileUiState.Success(
                         malUser = null,

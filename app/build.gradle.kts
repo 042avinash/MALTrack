@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -22,6 +24,11 @@ android {
         
         manifestPlaceholders["authCallbackScheme"] = "myanimelist"
         manifestPlaceholders["allowBackup"] = "true"
+        val animeScheduleToken = Properties().apply {
+            val localProperties = rootProject.file("local.properties")
+            if (localProperties.exists()) localProperties.inputStream().use(::load)
+        }.getProperty("animeScheduleToken").orEmpty()
+        buildConfigField("String", "ANIME_SCHEDULE_TOKEN", "\"$animeScheduleToken\"")
     }
 
     buildTypes {

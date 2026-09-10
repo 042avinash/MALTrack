@@ -438,7 +438,6 @@ fun ProfileContent(
     var showAboutDialog by remember { mutableStateOf(false) }
     var showFriendsDialog by remember { mutableStateOf(false) }
     var showFriendsSection by remember { mutableStateOf(false) }
-    var showFavoritesSection by remember { mutableStateOf(false) }
     var selectedSignal by remember { mutableStateOf<ProfileSignalCard?>(null) }
     val signalCards = remember(jikanUser.statistics, jikanUser.joined) { buildProfileSignalCards(jikanUser.statistics, jikanUser.joined) }
 
@@ -777,51 +776,6 @@ fun ProfileContent(
             )
         }
 
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.Start
-            ) {
-                FilledTonalButton(
-                    onClick = { showFavoritesSection = !showFavoritesSection },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (showFavoritesSection) "Hide Favorite Characters & People" else "Load Favorite Characters & People")
-                }
-            }
-        }
-
-        if (showFavoritesSection) {
-            jikanUser.favorites?.let { favs ->
-            favs.characters?.takeIf { it.isNotEmpty() }?.let {
-                item {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        FavoriteCharactersSection(
-                            items = it
-                        )
-                    }
-                }
-            }
-            favs.people?.takeIf { it.isNotEmpty() }?.let {
-                item {
-                    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 28.dp, bottom = 16.dp)) {
-                        FavoritePeopleSection(
-                            items = it
-                        )
-                    }
-                }
-            }
-            favs.studios?.takeIf { it.isNotEmpty() }?.let {
-                item {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        FavoritesSection("Favorite Studios", it)
-                    }
-                }
-            }
-        }
-        }
     }
 }
 
@@ -1457,122 +1411,6 @@ fun DetailRow(label: String, value: String) {
     ) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium)
         Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-fun FavoritesSection(title: String, items: List<JikanFavoriteItem>) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(items) { item ->
-                Column(
-                    modifier = Modifier
-                        .width(100.dp)
-                        .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AsyncImage(
-                        model = item.images?.jpg?.image_url,
-                        contentDescription = item.title ?: item.name,
-                        modifier = Modifier
-                            .size(100.dp, 140.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = item.title ?: item.name ?: "Unknown",
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun FavoriteCharactersSection(
-    items: List<JikanFavoriteItem>
-) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = "Favorite Characters", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(items) { item ->
-                Column(
-                    modifier = Modifier
-                        .width(76.dp)
-                        .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AsyncImage(
-                        model = item.images?.jpg?.image_url,
-                        contentDescription = item.title ?: item.name,
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = item.title ?: item.name ?: "Unknown",
-                        style = MaterialTheme.typography.bodySmall,
-                        minLines = 2,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun FavoritePeopleSection(
-    items: List<JikanFavoriteItem>
-) {
-    val context = LocalContext.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = "Favorite People", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(items) { item ->
-                Column(
-                    modifier = Modifier
-                        .width(76.dp)
-                        .clickable { item.url?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AsyncImage(
-                        model = item.images?.jpg?.image_url,
-                        contentDescription = item.title ?: item.name,
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = item.title ?: item.name ?: "Unknown",
-                        style = MaterialTheme.typography.bodySmall,
-                        minLines = 2,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        }
     }
 }
 

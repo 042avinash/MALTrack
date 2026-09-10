@@ -1385,7 +1385,7 @@ fun UserAnimeItem(
                         )
                         
                         val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
-                        val episodesText = if (data.node.status == "currently_airing") {
+                        val episodesText = if (anilistMedia?.nextAiringEpisode != null) {
                             val aired = anilistMedia?.nextAiringEpisode?.episode?.let { maxOf(it - 1, 0).toString() } ?: "?"
                             "${data.listStatus.numEpisodesWatched} / $aired / $total"
                         } else {
@@ -1398,9 +1398,7 @@ fun UserAnimeItem(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        val nextLabel = if (data.node.status == "currently_airing") {
-                            formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds, data.node.numEpisodes)
-                        } else null
+                        val nextAiring = anilistMedia?.nextAiringEpisode
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1429,7 +1427,10 @@ fun UserAnimeItem(
                             }
                         }
 
-                        if (nextLabel != null) {
+                        if (nextAiring != null) {
+                            val countdown = formatAiringCountdown(nextAiring.airingAt - nowEpochSeconds)
+                            val nextEpisodeLabel = nextAiring.episode?.let { "Next Ep $it" } ?: "Next episode"
+                            val sourcePrefix = if (nextAiring.isEstimated) "Estimated " else ""
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
                                 modifier = Modifier
@@ -1437,13 +1438,14 @@ fun UserAnimeItem(
                                         color = MaterialTheme.colorScheme.primaryContainer,
                                         shape = RoundedCornerShape(4.dp)
                                     )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
                             ) {
                                 Text(
-                                    text = "Next: $nextLabel",
+                                    text = "$sourcePrefix$nextEpisodeLabel: $countdown",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
                                 )
                             }
                         }
@@ -1720,7 +1722,7 @@ fun UserAnimeGridItem(
                     )
                     
                     val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
-                    val episodesText = if (data.node.status == "currently_airing") {
+                    val episodesText = if (anilistMedia?.nextAiringEpisode != null) {
                         val aired = anilistMedia?.nextAiringEpisode?.episode?.let { maxOf(it - 1, 0).toString() } ?: "?"
                         "${data.listStatus.numEpisodesWatched} / $aired / $total"
                     } else {
@@ -1733,21 +1735,21 @@ fun UserAnimeGridItem(
                         style = MaterialTheme.typography.labelSmall
                     )
                     
-                    val nextLabel = if (data.node.status == "currently_airing") {
-                        formatNextEpisodeCountdown(anilistMedia, nowEpochSeconds, data.node.numEpisodes)
-                    } else null
-                    if (nextLabel != null) {
+                    val nextAiring = anilistMedia?.nextAiringEpisode
+                    if (nextAiring != null) {
+                        val countdown = formatAiringCountdown(nextAiring.airingAt - nowEpochSeconds)
+                        val nextEpisodeLabel = nextAiring.episode?.let { "Next Ep $it" } ?: "Next episode"
+                        val sourcePrefix = if (nextAiring.isEstimated) "Estimated " else ""
                         Box(
                             modifier = Modifier
-                                .padding(top = 2.dp)
                                 .background(
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = RoundedCornerShape(4.dp)
                                 )
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = "Next: $nextLabel",
+                                text = "$sourcePrefix$nextEpisodeLabel: $countdown",
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -1810,7 +1812,7 @@ private fun formatNextEpisodeCountdown(
     val timeUntil = nextAiring.airingAt - nowEpochSeconds
     if (timeUntil <= 0) {
         val total = totalEpisodes?.takeIf { it > 0 } ?: return null
-        if (nextAiring.episode >= total) return null
+        if ((nextAiring.episode ?: 0) >= total) return null
 
         val estimatedNextAiringAt = nextAiring.airingAt + 7 * 86400
         val estimatedTimeUntil = estimatedNextAiringAt - nowEpochSeconds

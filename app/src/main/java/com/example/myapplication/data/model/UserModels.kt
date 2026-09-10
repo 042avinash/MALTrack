@@ -15,6 +15,55 @@ data class UserProfile(
     @SerialName("manga_statistics") val mangaStatistics: MangaStatistics? = null
 )
 
+/**
+ * Converts the authenticated MAL API response into the profile shape used by the UI.
+ *
+ * The profile screen used to make a second request to Jikan after loading this response.
+ * Keeping this adapter local lets the signed-in profile work even when Jikan is unavailable.
+ */
+fun UserProfile.toProfileDisplayData(): JikanFullUserProfile = JikanFullUserProfile(
+    mal_id = id,
+    username = name,
+    url = "https://myanimelist.net/profile/$name",
+    images = picture?.takeIf { it.isNotBlank() }?.let { imageUrl ->
+        JikanUserImages(jpg = JikanImageFormat(image_url = imageUrl))
+    },
+    gender = gender,
+    birthday = birthday,
+    location = location,
+    statistics = JikanUserStatistics(
+        anime = animeStatistics?.let { stats ->
+            JikanAnimeStats(
+                days_watched = stats.numDaysWatched,
+                mean_score = stats.meanScore,
+                watching = stats.numWatching,
+                completed = stats.numCompleted,
+                on_hold = stats.numOnHold,
+                dropped = stats.numDropped,
+                plan_to_watch = stats.numPlanToWatch,
+                total_entries = stats.numItems,
+                episodes_watched = stats.numEpisodes,
+                rewatched = stats.numTimesRewatched
+            )
+        },
+        manga = mangaStatistics?.let { stats ->
+            JikanMangaStats(
+                days_read = stats.numDaysRead,
+                mean_score = stats.meanScore,
+                reading = stats.numReading,
+                completed = stats.numCompleted,
+                on_hold = stats.numOnHold,
+                dropped = stats.numDropped,
+                plan_to_read = stats.numPlanToRead,
+                total_entries = stats.numItems,
+                chapters_read = stats.numChapters,
+                volumes_read = stats.numVolumes,
+                reread = stats.numTimesReread
+            )
+        }
+    )
+)
+
 @Serializable
 data class AnimeStatistics(
     @SerialName("num_items_watching") val numWatching: Int = 0,

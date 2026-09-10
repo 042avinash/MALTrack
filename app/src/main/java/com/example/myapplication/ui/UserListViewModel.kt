@@ -28,6 +28,8 @@ class UserListViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val SOFT_TIMEOUT_MS = 1_500L
+        // AnimeSchedule receives these in batches of 18, so this still stays within
+        // its API limit while covering the full initially loaded list page.
         private const val INITIAL_PAGE_LIMIT = 40
         private val globalFullAnimeListCache = mutableMapOf<String, List<UserAnimeData>>()
         private val globalAnimeListCacheComplete = mutableSetOf<String>()
@@ -119,7 +121,7 @@ class UserListViewModel @Inject constructor(
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
-                    fetchMissingAiringDetails(cachedList)
+                    viewModelScope.launch { fetchMissingAiringDetails(cachedList.take(INITIAL_PAGE_LIMIT)) }
                     if (!globalAnimeListCacheComplete.contains(cacheKey)) {
                         launchFullListBackfill(
                             cacheKey = cacheKey,
@@ -151,6 +153,7 @@ class UserListViewModel @Inject constructor(
                                     val resolvedFirstPage = firstPageDeferred.await()
                                     globalFullAnimeListCache[cacheKey] = resolvedFirstPage.data
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
+                                    fetchMissingAiringDetails(resolvedFirstPage.data.take(INITIAL_PAGE_LIMIT))
                                     if (resolvedFirstPage.paging.next == null) {
                                         globalAnimeListCacheComplete.add(cacheKey)
                                     } else {
@@ -169,6 +172,11 @@ class UserListViewModel @Inject constructor(
                         }
                         globalFullAnimeListCache[cacheKey] = firstPage.data
                         _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
+                        // Begin the schedule lookup independently of list backfill so the
+                        // currently visible tiles receive their countdowns immediately.
+                        viewModelScope.launch {
+                            fetchMissingAiringDetails(firstPage.data.take(INITIAL_PAGE_LIMIT))
+                        }
                         if (firstPage.paging.next == null) {
                             globalAnimeListCacheComplete.add(cacheKey)
                         } else {
@@ -180,18 +188,6 @@ class UserListViewModel @Inject constructor(
                             )
                         }
 
-                        val malIds = firstPage.data
-                            .asSequence()
-                            .filter { it.node.status == "currently_airing" }
-                            .map { it.node.id }
-                            .filter { it !in _airingDetails.value.keys }
-                            .toList()
-                        if (malIds.isNotEmpty()) {
-                            val airingDetails = repository.getAiringAnimeDetails(malIds)
-                                .filter { it.idMal != null }
-                                .associateBy { it.idMal!! }
-                            _airingDetails.value = _airingDetails.value + airingDetails
-                        }
                     } finally {
                         _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                     }
@@ -369,9 +365,8 @@ class UserListViewModel @Inject constructor(
 
                 val missingIds = results
                     .asSequence()
-                    .filter { it.node.status == "currently_airing" }
                     .map { it.node.id }
-                    .filter { it !in _airingDetails.value.keys }
+                    .filter { _airingDetails.value[it]?.nextAiringEpisode == null }
                     .toList()
                 if (missingIds.isNotEmpty()) {
                     val airingDetails = repository.getAiringAnimeDetails(missingIds)
@@ -405,9 +400,8 @@ class UserListViewModel @Inject constructor(
     private suspend fun fetchMissingAiringDetails(entries: List<UserAnimeData>) {
         val missingIds = entries
             .asSequence()
-            .filter { it.node.status == "currently_airing" }
             .map { it.node.id }
-            .filter { it !in _airingDetails.value.keys }
+            .filter { _airingDetails.value[it]?.nextAiringEpisode == null }
             .toList()
 
         if (missingIds.isEmpty()) return

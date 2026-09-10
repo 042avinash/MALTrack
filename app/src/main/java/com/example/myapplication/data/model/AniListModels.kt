@@ -37,6 +37,8 @@ data class AniListMedia(
 @Serializable
 data class NextAiringEpisode(
     val airingAt: Long,
-    val timeUntilAiring: Long,
-    val episode: Int
+    val timeUntilAiring: Long = 0,
+    val episode: Int? = null,
+    val source: String = "anime_schedule",
+    val isEstimated: Boolean = false
 )

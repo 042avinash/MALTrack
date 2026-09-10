@@ -38,12 +38,13 @@ data class ListStatus(
 
 @Serializable
 data class MangaListStatus(
-    val status: String,
-    val score: Int,
+    val status: String = "",
+    val score: Int = 0,
     @SerialName("num_volumes_read") val numVolumesRead: Int,
     @SerialName("num_chapters_read") val numChaptersRead: Int,
-    @SerialName("is_rereading") val isRereading: Boolean,
-    @SerialName("updated_at") val updatedAt: String
+    @SerialName("is_rereading") val isRereading: Boolean = false,
+    @SerialName("updated_at") val updatedAt: String = "",
+    @SerialName("num_times_reread") val numTimesReread: Int = 0
 )
 
 @Serializable

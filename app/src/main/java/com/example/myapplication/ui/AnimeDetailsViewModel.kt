@@ -7,6 +7,8 @@ import android.os.SystemClock
 import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AlternativeTitles
 import com.example.myapplication.data.model.AnimeDetailsResponse
+import com.example.myapplication.data.model.Broadcast
+import com.example.myapplication.data.model.NextAiringEpisode
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
 import com.example.myapplication.data.remote.JikanCharacterData
@@ -27,6 +29,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withTimeoutOrNull
+import java.time.DayOfWeek
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import javax.inject.Inject
 
 @HiltViewModel
@@ -549,7 +555,8 @@ class AnimeDetailsViewModel @Inject constructor(
                 characters = enriched.characters,
                 themes = enriched.themes,
                 streaming = enriched.streaming,
-                airingMedia = enriched.airingMedia,
+                airingMedia = enriched.airingMedia?.takeIf { it.nextAiringEpisode != null }
+                    ?: estimatedAiringFromMalBroadcast(details.broadcast),
                 isSupplementaryLoaded = true
             )
             _uiState.value = updated
@@ -570,6 +577,23 @@ class AnimeDetailsViewModel @Inject constructor(
             detailsCache[animeId] = SystemClock.elapsedRealtime() to finalized
             _uiState.value = finalized
         }
+    }
+
+    private fun estimatedAiringFromMalBroadcast(broadcast: Broadcast?): AniListMedia? {
+        val day = broadcast?.dayOfTheWeek?.uppercase()?.let { runCatching { DayOfWeek.valueOf(it) }.getOrNull() } ?: return null
+        val time = broadcast.startTime?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: return null
+        val zone = ZoneId.of("Asia/Tokyo")
+        val now = ZonedDateTime.now(zone)
+        var next = now.with(day).withHour(time.hour).withMinute(time.minute).withSecond(0).withNano(0)
+        if (!next.isAfter(now)) next = next.plusWeeks(1)
+        return AniListMedia(
+            nextAiringEpisode = NextAiringEpisode(
+                airingAt = next.toEpochSecond(),
+                timeUntilAiring = java.time.Duration.between(now, next).seconds,
+                source = "mal_broadcast",
+                isEstimated = true
+            )
+        )
     }
 
     private suspend fun fetchScoreDistributionWithRetry(expectedScoringUsers: Int): ScoreDistributionFetchResult {

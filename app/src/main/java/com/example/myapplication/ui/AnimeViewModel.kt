@@ -410,14 +410,18 @@ class AnimeViewModel @Inject constructor(
                 val detailsMap = if (replaceExisting) {
                     mutableMapOf()
                 } else {
-                    _airingDetails.value.toMutableMap()
+                    _airingDetails.value
+                        .filterValues { it.nextAiringEpisode != null }
+                        .toMutableMap()
                 }
 
                 val chunkedIds = uniqueIds.chunked(50)
                 for (chunk in chunkedIds) {
                     val anilistMedia = repository.getAiringAnimeDetails(chunk)
                     for (media in anilistMedia) {
-                        media.idMal?.let { detailsMap[it] = media }
+                        media.idMal
+                            ?.takeIf { media.nextAiringEpisode != null }
+                            ?.let { detailsMap[it] = media }
                     }
                 }
                 _airingDetails.value = detailsMap
@@ -707,6 +711,12 @@ class AnimeViewModel @Inject constructor(
                         if (requestId != topDiscoveryRequestId) return@launch
                         currentSeasonalData = cached.second
                         applyCurrentTopDiscoveryFiltersAndSort()
+                        fetchAiringDetails(
+                            currentSeasonalData
+                                .filter { it.node.status.equals("currently_airing", ignoreCase = true) }
+                                .map { it.node.id },
+                            replaceExisting = true
+                        )
                         return@launch
                     }
 
@@ -716,6 +726,12 @@ class AnimeViewModel @Inject constructor(
                     if (requestId != topDiscoveryRequestId) return@launch
                     topAnimeRawCache[cacheKey] = SystemClock.elapsedRealtime() to currentSeasonalData
                     applyCurrentTopDiscoveryFiltersAndSort()
+                    fetchAiringDetails(
+                        currentSeasonalData
+                            .filter { it.node.status.equals("currently_airing", ignoreCase = true) }
+                            .map { it.node.id },
+                        replaceExisting = true
+                    )
                 } else {
                     val cacheKey = "top_manga|$rankingType"
                     val cached = topMangaRawCache[cacheKey]

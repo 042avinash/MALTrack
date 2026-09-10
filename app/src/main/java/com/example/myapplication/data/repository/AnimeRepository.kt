@@ -2,8 +2,6 @@ package com.example.myapplication.data.repository
 
 import com.example.myapplication.data.local.UserPreferencesManager
 import com.example.myapplication.data.model.AniListMedia
-import com.example.myapplication.data.model.AniListRequest
-import com.example.myapplication.data.model.AniListVariables
 import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.AnimeMyListStatusResponse
 import com.example.myapplication.data.model.AnimeResponse
@@ -11,6 +9,7 @@ import com.example.myapplication.data.model.JikanFullUserProfile
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MangaResponse
+import com.example.myapplication.data.model.MangaStatistics
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.MyMangaListStatus
 import com.example.myapplication.data.model.UserAnimeData
@@ -18,7 +17,8 @@ import com.example.myapplication.data.model.UserAnimeListResponse
 import com.example.myapplication.data.model.UserMangaData
 import com.example.myapplication.data.model.UserMangaListResponse
 import com.example.myapplication.data.model.UserProfile
-import com.example.myapplication.data.remote.AniListApiService
+import com.example.myapplication.data.remote.AnimeScheduleApiService
+import com.example.myapplication.data.remote.AnimeScheduleTimetableEntry
 import com.example.myapplication.data.remote.JikanApiService
 import com.example.myapplication.data.remote.JikanCharactersResponse
 import com.example.myapplication.data.remote.JikanFriend
@@ -34,12 +34,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withTimeoutOrNull
 import android.os.SystemClock
 import retrofit2.HttpException
 import java.net.SocketTimeoutException
 import java.io.IOException
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -72,14 +78,13 @@ class JikanProfileFetchException(
 @Singleton
 class AnimeRepository @Inject constructor(
     private val apiService: MalApiService,
-    private val anilistApiService: AniListApiService,
+    private val animeScheduleApiService: AnimeScheduleApiService,
     private val jikanApiService: JikanApiService,
     private val prefsManager: UserPreferencesManager
 ) {
     companion object {
-        private const val ANILIST_AIRING_SOFT_TIMEOUT_MS = 2_500L
-        private const val ANILIST_AIRING_BATCH_SIZE = 25
-        private const val ANILIST_AIRING_CACHE_TTL_MS = 15 * 60 * 1000L
+        private const val AIRING_SCHEDULE_BATCH_SIZE = 18
+        private const val AIRING_SCHEDULE_CACHE_TTL_MS = 15 * 60 * 1000L
         private const val JIKAN_MIN_REQUEST_INTERVAL_MS = 350L
         private const val JIKAN_INITIAL_BACKOFF_MS = 1_500L
         private const val JIKAN_MAX_BACKOFF_MS = 15_000L
@@ -88,8 +93,9 @@ class AnimeRepository @Inject constructor(
     private val clientId = "16b21f717a3e9f733f121971c122db16"
     private val seasonalAnimeCache = mutableMapOf<String, AnimeResponse>()
     private val publishingMangaCache = mutableMapOf<String, List<JikanMangaData>>()
-    private val anilistAiringCache = mutableMapOf<Int, Pair<Long, AniListMedia>>()
-    private val anilistAiringCacheLock = Any()
+    private val airingScheduleCache = mutableMapOf<Int, Pair<Long, AniListMedia>>()
+    private val airingScheduleCacheLock = Any()
+    private var timetableCache: Pair<Long, Map<String, AnimeScheduleTimetableEntry>>? = null
     private val jikanRequestMutex = Mutex()
     private var lastJikanRequestAtMs = 0L
     private var jikanBackoffUntilMs = 0L
@@ -518,6 +524,30 @@ class AnimeRepository @Inject constructor(
         return apiService.getMyUserProfile(clientId = clientId)
     }
 
+    /**
+     * MAL does not reliably return manga_statistics from /users/@me. Build the
+     * fields the profile screen can show from the authenticated user's manga list.
+     */
+    suspend fun getMyMangaStatisticsFromList(): MangaStatistics {
+        val entries = getAllUserMangaList()
+        val scoredEntries = entries.filter { it.listStatus.score > 0 }
+
+        return MangaStatistics(
+            numReading = entries.count { it.listStatus.status == "reading" },
+            numCompleted = entries.count { it.listStatus.status == "completed" },
+            numOnHold = entries.count { it.listStatus.status == "on_hold" },
+            numDropped = entries.count { it.listStatus.status == "dropped" },
+            numPlanToRead = entries.count { it.listStatus.status == "plan_to_read" },
+            numItems = entries.size,
+            numChapters = entries.sumOf { it.listStatus.numChaptersRead },
+            numVolumes = entries.sumOf { it.listStatus.numVolumesRead },
+            numTimesReread = entries.sumOf { it.listStatus.numTimesReread },
+            meanScore = if (scoredEntries.isEmpty()) 0f else {
+                scoredEntries.map { it.listStatus.score }.average().toFloat()
+            }
+        )
+    }
+
     suspend fun getUserFullProfile(username: String): JikanFullUserProfile {
         val response = withJikanThrottle { jikanApiService.getUserFullProfile(username) }
         return response.data ?: throw JikanProfileFetchException(
@@ -583,30 +613,21 @@ class AnimeRepository @Inject constructor(
     suspend fun getAiringAnimeDetails(malIds: List<Int>): List<AniListMedia> {
         if (malIds.isEmpty()) return emptyList()
 
-        val query = """
-            query(${'$'}malIds: [Int]) {
-              Page(page: 1, perPage: 50) {
-                media(idMal_in: ${'$'}malIds, type: ANIME) {
-                  idMal
-                  nextAiringEpisode {
-                    airingAt
-                    timeUntilAiring
-                    episode
-                  }
-                }
-              }
-            }
-        """.trimIndent()
-
         val nowMs = System.currentTimeMillis()
         val ids = malIds.distinct()
         val results = mutableListOf<AniListMedia>()
         val idsToFetch = mutableListOf<Int>()
 
-        synchronized(anilistAiringCacheLock) {
+        synchronized(airingScheduleCacheLock) {
             ids.forEach { id ->
-                val cached = anilistAiringCache[id]
-                if (cached != null && nowMs - cached.first < ANILIST_AIRING_CACHE_TTL_MS) {
+                val cached = airingScheduleCache[id]
+                // Do not keep a failed or incomplete lookup. Earlier app versions cached
+                // these null entries, which prevented a later authenticated timetable
+                // request from ever correcting the UI.
+                if (cached != null &&
+                    cached.second.nextAiringEpisode != null &&
+                    nowMs - cached.first < AIRING_SCHEDULE_CACHE_TTL_MS
+                ) {
                     results += cached.second
                 } else {
                     idsToFetch += id
@@ -616,37 +637,99 @@ class AnimeRepository @Inject constructor(
 
         if (idsToFetch.isEmpty()) return results
 
-        idsToFetch.chunked(ANILIST_AIRING_BATCH_SIZE).forEach { batch ->
-            val request = AniListRequest(query, AniListVariables(batch))
-            val response = withTimeoutOrNull(ANILIST_AIRING_SOFT_TIMEOUT_MS) {
-                runCatching { anilistApiService.getAnimeDetails(request) }.getOrNull()
-            }
-            val media = response?.data?.Page?.media.orEmpty()
-            if (media.isNotEmpty()) {
-                results += media
-                synchronized(anilistAiringCacheLock) {
-                    media.forEach { item ->
-                        val id = item.idMal ?: return@forEach
-                        anilistAiringCache[id] = nowMs to item
-                    }
-                }
-            }
+        // The authenticated timetable contains the authoritative latest episode
+        // number. Cache it once and use it to fill fields omitted by /anime.
+        val timetableByRoute = runCatching { getCurrentTimetable() }.getOrDefault(emptyMap())
+        idsToFetch.chunked(AIRING_SCHEDULE_BATCH_SIZE).forEach { batch ->
+            val schedules = runCatching {
+                animeScheduleApiService.getAnimeByMalIds(batch).anime
+            }.getOrDefault(emptyList())
+            val mediaById = schedules.mapNotNull { schedule ->
+                val id = schedule.websites?.mal
+                    ?.substringAfter("/anime/", "")
+                    ?.substringBefore('/')
+                    ?.toIntOrNull()
+                    ?: return@mapNotNull null
+                val nextAiring = schedule.toNextAiringEpisode(timetableByRoute[schedule.route])
+                    ?: return@mapNotNull null
+                AniListMedia(idMal = id, nextAiringEpisode = nextAiring)
+            }.associateBy { it.idMal }
 
-            // Cache misses as null-airing placeholders to avoid repeated retries for absent IDs.
-            val returnedIds = media.mapNotNull { it.idMal }.toSet()
-            val missingFromBatch = batch.filter { it !in returnedIds }
-            if (missingFromBatch.isNotEmpty()) {
-                synchronized(anilistAiringCacheLock) {
-                    missingFromBatch.forEach { missingId ->
-                        anilistAiringCache[missingId] = nowMs to AniListMedia(
-                            idMal = missingId,
-                            nextAiringEpisode = null
-                        )
+            batch.forEach { id ->
+                mediaById[id]?.let { media ->
+                    results += media
+                    synchronized(airingScheduleCacheLock) {
+                        airingScheduleCache[id] = nowMs to media
                     }
                 }
             }
         }
 
         return results
+    }
+
+    private suspend fun getCurrentTimetable(): Map<String, AnimeScheduleTimetableEntry> {
+        val nowMs = System.currentTimeMillis()
+        timetableCache?.takeIf { nowMs - it.first < AIRING_SCHEDULE_CACHE_TTL_MS }?.let { return it.second }
+        val timetable = animeScheduleApiService.getRawTimetable().associateBy { it.route }
+        timetableCache = nowMs to timetable
+        return timetable
+    }
+
+    private fun com.example.myapplication.data.remote.AnimeScheduleAnime.toNextAiringEpisode(
+        timetable: AnimeScheduleTimetableEntry?
+    ): com.example.myapplication.data.model.NextAiringEpisode? {
+        val exactEpisodeDate = (episodeDate ?: timetable?.episodeDate)?.let(::parseAnimeScheduleDateTime)
+        if (!status.equals("ongoing", ignoreCase = true) && exactEpisodeDate == null) return null
+        // Exact episodeDate is authoritative when available. jpnTime is only the
+        // recurring-time fallback for schedule records without an exact timestamp.
+        val scheduledAt = exactEpisodeDate ?: jpnTime?.let(::parseAnimeScheduleDateTime) ?: return null
+        val scheduledTime = scheduledAt.atZone(ZoneOffset.UTC)
+        val now = ZonedDateTime.now(ZoneOffset.UTC)
+        var next = now.withHour(scheduledTime.hour)
+            .withMinute(scheduledTime.minute)
+            .withSecond(scheduledTime.second)
+            .withNano(0)
+        val daysUntil = (scheduledTime.dayOfWeek.value - next.dayOfWeek.value + 7) % 7
+        next = next.plusDays(daysUntil.toLong())
+        if (!next.isAfter(now)) next = next.plusWeeks(1)
+        delayedUntil?.let { delayed ->
+            parseAnimeScheduleDateTime(delayed)?.atZone(ZoneOffset.UTC)
+                ?.takeIf { it.isAfter(next) }
+                ?.let { next = it }
+        }
+        // The authenticated /anime response contains these exact fields. The weekly
+        // timetable remains a fallback for records where they are unavailable.
+        val timetableDate = exactEpisodeDate
+        val timetableEpisode = episodeNumber ?: timetable?.episodeNumber
+        val timetableStatus = airingStatus ?: timetable?.airingStatus
+        val exactNext = timetableDate?.takeIf { it.isAfter(Instant.now()) }
+        val nextEpisode = when {
+            exactNext != null -> timetableEpisode
+            timetableEpisode != null && timetableStatus.equals("aired", ignoreCase = true) -> timetableEpisode + 1
+            // A delayed/unconfirmed entry still identifies the next numbered episode.
+            // Keeping that number lets the list show the known aired count instead of '?'.
+            timetableEpisode != null -> timetableEpisode
+            else -> null
+        }
+        val nextInstant = exactNext ?: next.toInstant()
+        return com.example.myapplication.data.model.NextAiringEpisode(
+            airingAt = nextInstant.epochSecond,
+            timeUntilAiring = ChronoUnit.SECONDS.between(now.toInstant(), nextInstant),
+            episode = nextEpisode,
+            source = "anime_schedule"
+        )
+    }
+
+    /** AnimeSchedule currently sends jpnTime as `dd-MM-yyyy HH:mm:ss`, while
+     * timetable fields use ISO-8601. Support both formats. */
+    private fun parseAnimeScheduleDateTime(value: String): Instant? {
+        return runCatching { Instant.parse(value) }.getOrNull()
+            ?: runCatching {
+                LocalDateTime.parse(
+                    value,
+                    DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss")
+                ).atZone(ZoneId.of("Asia/Tokyo")).toInstant()
+            }.getOrNull()
     }
 }

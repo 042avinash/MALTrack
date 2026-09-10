@@ -2262,17 +2262,14 @@ fun HorizontalCard(
                         )
                     }
                     
-                    // Next Ep Timer
-                    if (anime.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
-                        val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
-                        val days = timeUntil / 86400
-                        val hours = (timeUntil % 86400) / 3600
-                        val mins = (timeUntil % 3600) / 60
-                        val countdown = if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
+                    // Discovery tiles keep this deliberately compact: the countdown only.
+                    if (anilistMedia?.nextAiringEpisode != null) {
+                        val nowEpochSeconds by rememberAiringEpochSeconds()
+                        val nextAiring = anilistMedia.nextAiringEpisode
+                        val countdown = formatAiringCountdown(nextAiring.airingAt - nowEpochSeconds)
                         
                         Box(
                             modifier = Modifier
-                                .padding(top = 2.dp)
                                 .background(
                                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
                                     shape = RoundedCornerShape(4.dp)
@@ -2280,7 +2277,7 @@ fun HorizontalCard(
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = "Ep ${anilistMedia.nextAiringEpisode.episode}: $countdown",
+                                text = countdown,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -2400,25 +2397,29 @@ fun AnimeItem(
                         style = MaterialTheme.typography.bodySmall
                     )
 
-                    val nextEpisodeLine = if (anime.node.status == "currently_airing" && anilistMedia?.nextAiringEpisode != null) {
-                        val timeUntil = anilistMedia.nextAiringEpisode.timeUntilAiring
-                        val days = timeUntil / 86400
-                        val hours = (timeUntil % 86400) / 3600
-                        val mins = (timeUntil % 3600) / 60
-                        val countdown = if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
-                        "Next Ep ${anilistMedia.nextAiringEpisode.episode}: $countdown"
-                    } else {
-                        " "
+                    val nextAiring = anilistMedia?.nextAiringEpisode
+                    if (nextAiring != null) {
+                        val nowEpochSeconds by rememberAiringEpochSeconds()
+                        val countdown = formatAiringCountdown(nextAiring.airingAt - nowEpochSeconds)
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = countdown,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                    Text(
-                        text = nextEpisodeLine,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (nextEpisodeLine.isBlank()) Color.Transparent else MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),

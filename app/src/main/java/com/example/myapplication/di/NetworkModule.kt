@@ -1,7 +1,8 @@
 package com.example.myapplication.di
 
 import com.example.myapplication.data.local.TokenManager
-import com.example.myapplication.data.remote.AniListApiService
+import com.example.myapplication.data.remote.AnimeScheduleApiService
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.remote.AuthApiService
 import com.example.myapplication.data.remote.JikanApiService
 import com.example.myapplication.data.remote.MalApiService
@@ -88,20 +89,28 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAniListApiService(json: Json): AniListApiService {
+    fun provideAnimeScheduleApiService(json: Json): AnimeScheduleApiService {
         val contentType = "application/json".toMediaType()
         val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder().apply {
+                    BuildConfig.ANIME_SCHEDULE_TOKEN.takeIf { it.isNotBlank() }?.let { token ->
+                        header("Authorization", "Bearer $token")
+                    }
+                }.build()
+                chain.proceed(request)
+            }
             .addInterceptor(HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
             })
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(AniListApiService.BASE_URL)
+            .baseUrl(AnimeScheduleApiService.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
-            .create(AniListApiService::class.java)
+            .create(AnimeScheduleApiService::class.java)
     }
 
     @Provides

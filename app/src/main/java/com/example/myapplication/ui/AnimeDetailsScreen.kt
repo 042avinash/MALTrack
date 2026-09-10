@@ -519,15 +519,15 @@ fun AnimeDetailsContent(
                         
                         // Next Episode Timer
                         if (details.status == "currently_airing") {
+                            val nowEpochSeconds by rememberAiringEpochSeconds()
                             val nextAiring = airingMedia?.nextAiringEpisode
                             val nextEpisode = nextAiring?.episode
                             val airedEpisodes = nextEpisode?.minus(1)?.coerceAtLeast(0)
-                            val countdown = nextAiring?.timeUntilAiring?.let { timeUntil ->
-                                val days = timeUntil / 86400
-                                val hours = (timeUntil % 86400) / 3600
-                                val mins = (timeUntil % 3600) / 60
-                                if (days > 0) "${days}d ${hours}h" else "${hours}h ${mins}m"
+                            val countdown = nextAiring?.let {
+                                formatAiringCountdown(it.airingAt - nowEpochSeconds)
                             } ?: "Unknown"
+                            val nextEpisodeLabel = nextEpisode?.let { "Next Ep $it" } ?: "Next episode"
+                            val sourcePrefix = if (nextAiring?.isEstimated == true) "Estimated " else ""
                             
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
@@ -539,7 +539,7 @@ fun AnimeDetailsContent(
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "Aired: ${airedEpisodes ?: "?"} | Next Ep ${nextEpisode ?: "?"}: ${if (countdown == "Unknown") "?" else countdown}",
+                                    text = "Aired: ${airedEpisodes ?: "?"} | $sourcePrefix$nextEpisodeLabel: ${if (countdown == "Unknown") "?" else countdown}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold
