@@ -24,6 +24,7 @@ data class AnimeNode(
     @SerialName("media_type") val mediaType: String? = null,
     @SerialName("num_episodes") val numEpisodes: Int? = null,
     val status: String? = null,
+    val broadcast: Broadcast? = null,
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("alternative_titles") val alternativeTitles: AlternativeTitles? = null,
     @SerialName("my_list_status") val myListStatus: MyListStatus? = null

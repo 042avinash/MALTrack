@@ -1482,6 +1482,24 @@ fun AnimeDetailsContent(
                         highScoreShare < 35f &&
                         dropRate <= 8f &&
                         lowScoreShare <= 5f
+                    fun pillMetric(label: String): String = when (label) {
+                        "Trending" -> "Watching: ${watchingRate.toInt()}% · Planned: ${planRate.toInt()}%"
+                        "Beloved" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "HiddenGem" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
+                        "Polarizing" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 5–8: ${score5to8Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "High Dropoff" -> "Dropped: ${dropRate.toInt()}% · Completed: ${completionRate.toInt()}%"
+                        "Disliked" -> "Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "High Retention" -> "Completed: ${completionRate.toInt()}% · Dropped: ${dropRate.toInt()}%"
+                        "Mixed" -> "Largest score band: ${largestBucketShare.toInt()}% · Scores 5–6: ${score5to6Share.toInt()}%"
+                        "Stalled" -> "On hold: ${onHoldRate.toInt()}%"
+                        "Mid" -> "Scores 5–7: ${score5to7Share.toInt()}%"
+                        "Broad Appeal" -> "Scores 5–10: ${score5to10Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "High Interest" -> "Planned: ${planRate.toInt()}%"
+                        "Niche" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
+                        "Obscure" -> "Members: %,d".format(members)
+                        "Slowburn" -> "Runtime: ${totalRuntimeMinutes.toInt()} min · Scores 9–10: ${highScoreShare.toInt()}%"
+                        else -> ""
+                    }
                     val allMatchingCards = listOfNotNull(
                         if (showTrendingCard) {
                             StatsPillData(
@@ -1668,6 +1686,7 @@ fun AnimeDetailsContent(
                         .filterNot { card -> card.label in suppressedTitles }
                         .sortedBy { card -> priorityMap[card.label] ?: Int.MAX_VALUE }
                         .take(5)
+                        .map { card -> card.copy(infoText = "${card.infoText}\n\n${pillMetric(card.label)}") }
 
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(

@@ -2262,12 +2262,15 @@ fun HorizontalCard(
                         )
                     }
                     
-                    // Discovery tiles keep this deliberately compact: the countdown only.
-                    if (anilistMedia?.nextAiringEpisode != null) {
-                        val nowEpochSeconds by rememberAiringEpochSeconds()
-                        val nextAiring = anilistMedia.nextAiringEpisode
-                        val countdown = formatAiringCountdown(nextAiring.airingAt - nowEpochSeconds)
-                        
+                    val nowEpochSeconds by rememberAiringEpochSeconds()
+                    val airingLabel = airingTileLabel(
+                        schedule = anilistMedia?.nextAiringEpisode,
+                        malStatus = anime.node.status,
+                        broadcast = anime.node.broadcast,
+                        nowEpochSeconds = nowEpochSeconds,
+                        compactFallback = true
+                    )
+                    if (airingLabel != null) {
                         Box(
                             modifier = Modifier
                                 .background(
@@ -2277,7 +2280,7 @@ fun HorizontalCard(
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = countdown,
+                                text = airingLabel,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -2397,10 +2400,14 @@ fun AnimeItem(
                         style = MaterialTheme.typography.bodySmall
                     )
 
-                    val nextAiring = anilistMedia?.nextAiringEpisode
-                    if (nextAiring != null) {
-                        val nowEpochSeconds by rememberAiringEpochSeconds()
-                        val countdown = formatAiringCountdown(nextAiring.airingAt - nowEpochSeconds)
+                    val nowEpochSeconds by rememberAiringEpochSeconds()
+                    val airingLabel = airingTileLabel(
+                        schedule = anilistMedia?.nextAiringEpisode,
+                        malStatus = anime.node.status,
+                        broadcast = anime.node.broadcast,
+                        nowEpochSeconds = nowEpochSeconds
+                    )
+                    if (airingLabel != null) {
                         Box(
                             modifier = Modifier
                                 .background(
@@ -2410,7 +2417,7 @@ fun AnimeItem(
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
                             Text(
-                                text = countdown,
+                                text = airingLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 fontWeight = FontWeight.Bold,

@@ -296,7 +296,14 @@ class AnimeViewModel @Inject constructor(
         globalHomeCache[homeCacheKey] = SystemClock.elapsedRealtime() to successState
         _uiState.value = successState
         lastHomeLoadAtMs = SystemClock.elapsedRealtime()
-        fetchAiringDetails(payload.animeSuggestions.map { it.node.id })
+        // Continue Watching is visible immediately on Home, so include it in the
+        // first exact-schedule lookup instead of waiting for Seasonal to populate
+        // the shared schedule cache.
+        fetchAiringDetails(
+            (payload.continueWatching + payload.animeSuggestions)
+                .map { it.node.id }
+                .distinct()
+        )
         launchHomeMangaRecommendationEnrichment(homeCacheKey, payload.mangaSuggestions)
     }
 

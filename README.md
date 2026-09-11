@@ -7,7 +7,13 @@ It blends official MAL account data with Jikan and AniList signals for discovery
 
 ## Current Version
 
-- `v1.4.5`
+- `v1.4.6`
+
+## v1.4.6 Highlights
+
+- **Airing Schedule Reliability**:
+  - Resolved rate-limiting issues caused by concurrent timetable requests from the AnimeSchedule API during tab preloading.
+  - Implemented a synchronized request pattern with a 15-minute cache to ensure all list tabs reuse a single timetable fetch, improving stability for countdown timers.
 
 ## v1.4.5 Highlights
 

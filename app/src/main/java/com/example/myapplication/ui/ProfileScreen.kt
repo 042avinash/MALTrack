@@ -459,7 +459,19 @@ fun ProfileContent(
         AlertDialog(
             onDismissRequest = { selectedSignal = null },
             title = { Text(signal.title) },
-            text = { Text(signal.description) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(signal.description)
+                    if (signal.metric.isNotBlank()) {
+                        Text(
+                            text = signal.metric,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { selectedSignal = null }) { Text("Close") }
             }
@@ -783,7 +795,8 @@ data class ProfileSignalCard(
     val title: String,
     val description: String,
     val icon: ImageVector,
-    val color: Color
+    val color: Color,
+    val metric: String = ""
 )
 
 @Composable
@@ -1035,7 +1048,51 @@ private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.
         }
     }
 
-    return cards.distinctBy { it.title }
+    return cards.distinctBy { it.title }.map { card ->
+        card.copy(metric = profileSignalMetric(card.title, stats, joined))
+    }
+}
+
+private fun profileSignalMetric(
+    title: String,
+    stats: com.example.myapplication.data.model.JikanUserStatistics?,
+    joined: String?
+): String {
+    val anime = stats?.anime
+    val manga = stats?.manga
+    val animeTotal = anime?.total_entries ?: 0
+    val mangaTotal = manga?.total_entries ?: 0
+    val total = animeTotal + mangaTotal
+    if (total == 0) return ""
+
+    val animeDominant = animeTotal >= mangaTotal
+    val primaryTotal = if (animeDominant) animeTotal else mangaTotal
+    val completed = if (animeDominant) anime?.completed ?: 0 else manga?.completed ?: 0
+    val planned = if (animeDominant) anime?.plan_to_watch ?: 0 else manga?.plan_to_read ?: 0
+    val active = if (animeDominant) anime?.watching ?: 0 else manga?.reading ?: 0
+    val rewatched = if (animeDominant) anime?.rewatched ?: 0 else manga?.reread ?: 0
+    val meanScore = if (animeDominant) anime?.mean_score ?: 0f else manga?.mean_score ?: 0f
+    fun percent(value: Int, denominator: Int) = if (denominator > 0) value * 100 / denominator else 0
+
+    return when {
+        title == "Completionist" -> "Completed: ${percent(completed, primaryTotal)}% · $completed of $primaryTotal"
+        title == "Archivist" -> "Planned: ${percent(planned, primaryTotal)}% · $planned of $primaryTotal"
+        title == "Binge Watcher" -> "Active: ${percent(active, primaryTotal)}% · $active of $primaryTotal"
+        title == "Critic" || title == "Lenient" -> "Mean score: ${"%.1f".format(Locale.US, meanScore)}"
+        title == "Rewatcher" || title == "Rereader" -> "Rewatched: ${percent(rewatched, completed)}% · $rewatched of $completed completed"
+        title.endsWith("Club") -> "Titles tracked: $total"
+        title in setOf("Founding Member", "Legacy User", "Old Guard", "Veteran", "Seasoned", "Newbie") -> {
+            val years = parseJoinedDate(joined ?: "")?.let { ChronoUnit.DAYS.between(it, LocalDate.now()).coerceAtLeast(0) / 365.25f }
+            years?.let { "Time on MAL: ${"%.1f".format(Locale.US, it)} years" } ?: ""
+        }
+        title == "Explorer" -> "Anime: ${percent(animeTotal, total)}% · Manga: ${percent(mangaTotal, total)}%"
+        title == "Dedicated Reader" -> "Manga: ${percent(mangaTotal, total)}% · $mangaTotal of $total"
+        title == "Dedicated Viewer" -> "Anime: ${percent(animeTotal, total)}% · $animeTotal of $total"
+        title == "Casual Viewer" -> "Titles tracked: $total"
+        title == "Active Reader" -> "Reading: ${percent(manga?.reading ?: 0, mangaTotal)}% · ${manga?.reading ?: 0} of $mangaTotal"
+        title.endsWith("Wasted") -> "Time logged: ${"%.0f".format(Locale.US, (anime?.days_watched ?: 0f) + (manga?.days_read ?: 0f))} days"
+        else -> ""
+    }
 }
 
 private fun parseJoinedDate(joined: String): LocalDate? {

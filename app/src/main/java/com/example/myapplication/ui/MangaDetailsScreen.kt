@@ -1084,6 +1084,25 @@ fun MangaDetailsContent(
                     val showObscureCard = members < 12_000
                     val showSlowBurnCard = highScoreShare >= 25f && highScoreShare < 50f && dropRate <= 5f && lowScoreShare <= 5f && members > 15_000
 
+                    fun pillMetric(label: String): String = when (label) {
+                        "Trending" -> "Reading: ${readingRate.toInt()}% · Planned: ${planRate.toInt()}%"
+                        "Beloved" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "HiddenGem" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
+                        "Polarizing" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 5–8: ${score5to8Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "High Dropoff" -> "Dropped: ${dropRate.toInt()}% · Completed: ${completionRate.toInt()}%"
+                        "Disliked" -> "Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "High Retention" -> "Completed: ${completionRate.toInt()}% · Dropped: ${dropRate.toInt()}%"
+                        "Mixed" -> "Largest score band: ${largestBucketShare.toInt()}% · Scores 5–6: ${score5to6Share.toInt()}%"
+                        "Stalled" -> "On hold: ${onHoldRate.toInt()}%"
+                        "Mid" -> "Scores 5–7: ${score5to7Share.toInt()}%"
+                        "Broad Appeal" -> "Scores 5–10: ${score5to10Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
+                        "High Interest" -> "Planned: ${planRate.toInt()}%"
+                        "Niche" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
+                        "Obscure" -> "Members: %,d".format(members)
+                        "Slowburn" -> "Scores 9–10: ${highScoreShare.toInt()}% · Dropped: ${dropRate.toInt()}%"
+                        else -> ""
+                    }
+
                     val allMatchingCards = listOfNotNull(
                         if (showTrendingCard) MangaStatsPillData("Trending", Icons.Default.TrendingUp, Color(0xFF1E88E5), Color.White, "Trending", "This manga is seeing a lot of active attention right now, often because it is currently popular or gaining momentum within the community.") else null,
                         if (showCommunityLovedCard) MangaStatsPillData("Beloved", Icons.Default.Favorite, Color(0xFFE91E63), Color.White, "Beloved", "Readers who rate this manga tend to rate it very highly, giving it a reputation for strong emotional impact and broad fan appreciation.") else null,
@@ -1120,6 +1139,7 @@ fun MangaDetailsContent(
                         .filterNot { card -> card.label in suppressedTitles }
                         .sortedBy { card -> priorityMap[card.label] ?: Int.MAX_VALUE }
                         .take(5)
+                        .map { card -> card.copy(infoText = "${card.infoText}\n\n${pillMetric(card.label)}") }
 
                     
                         if (statPills.isNotEmpty()) {
