@@ -176,11 +176,13 @@ fun SettingsScreen(
                 )
             }
         ) { padding ->
+            val settingsScrollState = rememberScrollState()
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(settingsScrollState)
+                    .verticalScrollbar(settingsScrollState)
             ) {
                 SettingClickableItem(
                     icon = Icons.Default.Palette,
@@ -906,8 +908,11 @@ private fun HomeSectionsDialog(
         onDismissRequest = onDismiss,
         title = { Text("Home Sections") },
         text = {
+            val sectionsScrollState = rememberScrollState()
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState())
+                modifier = Modifier
+                    .verticalScroll(sectionsScrollState)
+                    .verticalScrollbar(sectionsScrollState)
             ) {
                 SettingToggleItem(
                     icon = Icons.Default.Visibility,
@@ -1021,11 +1026,13 @@ fun DefaultsScreen(
             )
         }
     ) { padding ->
+        val listSettingsScrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(listSettingsScrollState)
+                .verticalScrollbar(listSettingsScrollState)
         ) {
             SettingsSection(title = "Anime") {
                 SettingClickableItem(

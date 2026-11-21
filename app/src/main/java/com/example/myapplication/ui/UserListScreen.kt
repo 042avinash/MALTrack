@@ -29,9 +29,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.PauseCircle
@@ -94,6 +97,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -125,7 +129,9 @@ fun UserListScreen(
     onOpenSettings: () -> Unit,
     onOpenHomeSearch: (String, Boolean) -> Unit
 ) {
-    var isAnimeView by remember { mutableStateOf(initialMainTab == 0) }
+    var isAnimeView by rememberSaveable(username, initialMainTab) {
+        mutableStateOf(initialMainTab == 0)
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (isAnimeView) {
@@ -269,6 +275,54 @@ fun ListActionToolbar(
     }
 }
 
+@Composable
+private fun ListStatusCountRow(
+    status: String,
+    count: Int?,
+    isGridView: Boolean,
+    onToggleView: () -> Unit
+) {
+    val label = when (status) {
+        "all" -> "All"
+        "watching" -> "Watching"
+        "reading" -> "Reading"
+        "completed" -> "Completed"
+        "on_hold" -> "On-Hold"
+        "plan_to_watch", "plan_to_read" -> "Planned"
+        "dropped" -> "Dropped"
+        else -> status.replace("_", " ").replaceFirstChar { it.uppercase() }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$label: ${count ?: "…"}",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .clickable(role = Role.Button, onClick = onToggleView),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
+                contentDescription = if (isGridView) "Switch to list view" else "Switch to tile view",
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun UserAnimeSection(
@@ -286,6 +340,7 @@ fun UserAnimeSection(
     val searchState by viewModel.searchState.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
     val loadedLists by viewModel.loadedLists.collectAsState()
+    val completeListKeys by viewModel.completeListKeys.collectAsState()
     val loadingStatuses by viewModel.loadingStatuses.collectAsState()
 
     val statuses = listOf("all", "watching", "completed", "on_hold", "plan_to_watch", "dropped")
@@ -319,6 +374,9 @@ fun UserAnimeSection(
 
     val effectiveUsername = (if (username == "null") null else username) ?: "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
+    val currentStatusCount = loadedLists.entries.firstOrNull {
+        it.key.startsWith("$effectiveUsername|$currentStatus|") && it.key in completeListKeys
+    }?.value?.size
 
     LaunchedEffect(pullRefreshRequestToken) {
         if (pullRefreshRequestToken <= 0) return@LaunchedEffect
@@ -442,6 +500,12 @@ fun UserAnimeSection(
                         )
                     }
                 }
+                ListStatusCountRow(
+                    status = currentStatus,
+                    count = currentStatusCount,
+                    isGridView = isGridView,
+                    onToggleView = { viewModel.setGridMode(currentStatus, !isGridView) }
+                )
             }
         }
     ) { paddingValues ->
@@ -576,6 +640,7 @@ fun UserMangaSection(
     val searchState by viewModel.searchState.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
     val loadedLists by viewModel.loadedLists.collectAsState()
+    val completeListKeys by viewModel.completeListKeys.collectAsState()
     val loadingStatuses by viewModel.loadingStatuses.collectAsState()
 
     val statuses = listOf("all", "reading", "completed", "on_hold", "plan_to_read", "dropped")
@@ -609,6 +674,9 @@ fun UserMangaSection(
 
     val effectiveUsername = (if (username == "null") null else username) ?: "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
+    val currentStatusCount = loadedLists.entries.firstOrNull {
+        it.key.startsWith("$effectiveUsername|$currentStatus|") && it.key in completeListKeys
+    }?.value?.size
 
     LaunchedEffect(pullRefreshRequestToken) {
         if (pullRefreshRequestToken <= 0) return@LaunchedEffect
@@ -732,6 +800,12 @@ fun UserMangaSection(
                         )
                     }
                 }
+                ListStatusCountRow(
+                    status = currentStatus,
+                    count = currentStatusCount,
+                    isGridView = isGridView,
+                    onToggleView = { viewModel.setGridMode(currentStatus, !isGridView) }
+                )
             }
         }
     ) { paddingValues ->
@@ -879,8 +953,8 @@ fun UserAnimeList(
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             state = gridState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -948,8 +1022,8 @@ fun UserAnimeList(
     } else {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
+            modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isSearching) {
@@ -1042,8 +1116,8 @@ fun UserMangaList(
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             state = gridState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1103,8 +1177,8 @@ fun UserMangaList(
     } else {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
+            modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isSearching) {
@@ -1168,10 +1242,12 @@ private fun UserListLoadingShimmer(isGridView: Boolean) {
     val shimmerBrush = rememberShimmerBrush()
 
     if (isGridView) {
+        val gridState = rememberLazyGridState()
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1186,9 +1262,11 @@ private fun UserListLoadingShimmer(isGridView: Boolean) {
             }
         }
     } else {
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
+            state = listState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(6) {

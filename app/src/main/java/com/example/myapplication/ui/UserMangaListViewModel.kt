@@ -44,6 +44,8 @@ class UserMangaListViewModel @Inject constructor(
     val searchState: StateFlow<UserMangaSearchState> = _searchState.asStateFlow()
     private val _loadedLists = MutableStateFlow<Map<String, List<UserMangaData>>>(emptyMap())
     val loadedLists: StateFlow<Map<String, List<UserMangaData>>> = _loadedLists.asStateFlow()
+    private val _completeListKeys = MutableStateFlow<Set<String>>(emptySet())
+    val completeListKeys: StateFlow<Set<String>> = _completeListKeys.asStateFlow()
     private val _loadingStatuses = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val loadingStatuses: StateFlow<Map<String, Boolean>> = _loadingStatuses.asStateFlow()
     val recentSearches = prefsManager.recentSearchesFlow.stateIn(
@@ -61,6 +63,16 @@ class UserMangaListViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var searchJob: Job? = null
     private val backgroundFullLoadJobs = mutableMapOf<String, Job>()
+
+    private fun markListComplete(cacheKey: String) {
+        globalMangaListCacheComplete.add(cacheKey)
+        _completeListKeys.value = _completeListKeys.value + cacheKey
+    }
+
+    private fun markListIncomplete(cacheKey: String) {
+        globalMangaListCacheComplete.remove(cacheKey)
+        _completeListKeys.value = _completeListKeys.value - cacheKey
+    }
 
     init {
         preloadSavedPreferences()
@@ -102,13 +114,16 @@ class UserMangaListViewModel @Inject constructor(
                 if (forceRefresh) {
                     backgroundFullLoadJobs.remove(cacheKey)?.cancel()
                     globalFullMangaListCache.remove(cacheKey)
-                    globalMangaListCacheComplete.remove(cacheKey)
+                    markListIncomplete(cacheKey)
                     _loadedLists.value = _loadedLists.value - cacheKey
                 }
 
                 val cachedList = globalFullMangaListCache[cacheKey]
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    if (globalMangaListCacheComplete.contains(cacheKey)) {
+                        _completeListKeys.value = _completeListKeys.value + cacheKey
+                    }
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                     if (!globalMangaListCacheComplete.contains(cacheKey)) {
                         launchFullListBackfill(
@@ -142,7 +157,7 @@ class UserMangaListViewModel @Inject constructor(
                                     globalFullMangaListCache[cacheKey] = resolvedFirstPage.data
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
                                     if (resolvedFirstPage.paging.next == null) {
-                                        globalMangaListCacheComplete.add(cacheKey)
+                                        markListComplete(cacheKey)
                                     } else {
                                         val fullList = repository.getAllUserMangaList(
                                             username = effectiveUsername,
@@ -150,7 +165,7 @@ class UserMangaListViewModel @Inject constructor(
                                             sort = effectiveSort
                                         )
                                         globalFullMangaListCache[cacheKey] = fullList
-                                        globalMangaListCacheComplete.add(cacheKey)
+                                        markListComplete(cacheKey)
                                         _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                                     }
                                 }
@@ -160,7 +175,7 @@ class UserMangaListViewModel @Inject constructor(
                         globalFullMangaListCache[cacheKey] = firstPage.data
                         _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
                         if (firstPage.paging.next == null) {
-                            globalMangaListCacheComplete.add(cacheKey)
+                            markListComplete(cacheKey)
                         } else {
                             launchFullListBackfill(
                                 cacheKey = cacheKey,
@@ -201,7 +216,7 @@ class UserMangaListViewModel @Inject constructor(
                     sort = sort
                 )
                 globalFullMangaListCache[cacheKey] = fullList
-                globalMangaListCacheComplete.add(cacheKey)
+                markListComplete(cacheKey)
                 _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
             } catch (_: Exception) {
             }
@@ -292,7 +307,7 @@ class UserMangaListViewModel @Inject constructor(
             .forEach {
                 backgroundFullLoadJobs.remove(it)?.cancel()
                 globalFullMangaListCache.remove(it)
-                globalMangaListCacheComplete.remove(it)
+                markListIncomplete(it)
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
@@ -334,7 +349,7 @@ class UserMangaListViewModel @Inject constructor(
                         sort = effectiveSort
                     ).also { fetched ->
                         globalFullMangaListCache[cacheKey] = fetched
-                        globalMangaListCacheComplete.add(cacheKey)
+                        markListComplete(cacheKey)
                         _loadedLists.value = _loadedLists.value + (cacheKey to fetched)
                     }
                 }
@@ -422,6 +437,9 @@ class UserMangaListViewModel @Inject constructor(
             mangaStatuses.associateWith { isGrid }
         } else {
             _savedGridModes.value + (status to isGrid)
+        }
+        viewModelScope.launch {
+            prefsManager.saveGridMode("manga_$status", isGrid, global)
         }
     }
 }

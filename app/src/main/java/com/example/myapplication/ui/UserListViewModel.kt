@@ -51,6 +51,8 @@ class UserListViewModel @Inject constructor(
     val searchState: StateFlow<UserAnimeSearchState> = _searchState.asStateFlow()
     private val _loadedLists = MutableStateFlow<Map<String, List<UserAnimeData>>>(emptyMap())
     val loadedLists: StateFlow<Map<String, List<UserAnimeData>>> = _loadedLists.asStateFlow()
+    private val _completeListKeys = MutableStateFlow<Set<String>>(emptySet())
+    val completeListKeys: StateFlow<Set<String>> = _completeListKeys.asStateFlow()
     private val _loadingStatuses = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val loadingStatuses: StateFlow<Map<String, Boolean>> = _loadingStatuses.asStateFlow()
     val recentSearches = prefsManager.recentSearchesFlow.stateIn(
@@ -68,6 +70,16 @@ class UserListViewModel @Inject constructor(
     private var loadJob: Job? = null
     private var searchJob: Job? = null
     private val backgroundFullLoadJobs = mutableMapOf<String, Job>()
+
+    private fun markListComplete(cacheKey: String) {
+        globalAnimeListCacheComplete.add(cacheKey)
+        _completeListKeys.value = _completeListKeys.value + cacheKey
+    }
+
+    private fun markListIncomplete(cacheKey: String) {
+        globalAnimeListCacheComplete.remove(cacheKey)
+        _completeListKeys.value = _completeListKeys.value - cacheKey
+    }
 
     init {
         preloadSavedPreferences()
@@ -113,13 +125,16 @@ class UserListViewModel @Inject constructor(
                 if (forceRefresh) {
                     backgroundFullLoadJobs.remove(cacheKey)?.cancel()
                     globalFullAnimeListCache.remove(cacheKey)
-                    globalAnimeListCacheComplete.remove(cacheKey)
+                    markListIncomplete(cacheKey)
                     _loadedLists.value = _loadedLists.value - cacheKey
                 }
 
                 val cachedList = globalFullAnimeListCache[cacheKey]
                 if (cachedList != null) {
                     _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    if (globalAnimeListCacheComplete.contains(cacheKey)) {
+                        _completeListKeys.value = _completeListKeys.value + cacheKey
+                    }
                     _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
                     viewModelScope.launch { fetchMissingAiringDetails(cachedList.take(INITIAL_PAGE_LIMIT)) }
                     if (!globalAnimeListCacheComplete.contains(cacheKey)) {
@@ -155,7 +170,7 @@ class UserListViewModel @Inject constructor(
                                     _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
                                     fetchMissingAiringDetails(resolvedFirstPage.data.take(INITIAL_PAGE_LIMIT))
                                     if (resolvedFirstPage.paging.next == null) {
-                                        globalAnimeListCacheComplete.add(cacheKey)
+                                        markListComplete(cacheKey)
                                     } else {
                                         val fullList = repository.getAllUserAnimeList(
                                             username = effectiveUsername,
@@ -163,7 +178,7 @@ class UserListViewModel @Inject constructor(
                                             sort = effectiveSort
                                         )
                                         globalFullAnimeListCache[cacheKey] = fullList
-                                        globalAnimeListCacheComplete.add(cacheKey)
+                                        markListComplete(cacheKey)
                                         _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
                                     }
                                 }
@@ -178,7 +193,7 @@ class UserListViewModel @Inject constructor(
                             fetchMissingAiringDetails(firstPage.data.take(INITIAL_PAGE_LIMIT))
                         }
                         if (firstPage.paging.next == null) {
-                            globalAnimeListCacheComplete.add(cacheKey)
+                            markListComplete(cacheKey)
                         } else {
                             launchFullListBackfill(
                                 cacheKey = cacheKey,
@@ -220,7 +235,7 @@ class UserListViewModel @Inject constructor(
                     sort = sort
                 )
                 globalFullAnimeListCache[cacheKey] = fullList
-                globalAnimeListCacheComplete.add(cacheKey)
+                markListComplete(cacheKey)
                 _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
             } catch (_: Exception) {
             }
@@ -311,7 +326,7 @@ class UserListViewModel @Inject constructor(
             .forEach {
                 backgroundFullLoadJobs.remove(it)?.cancel()
                 globalFullAnimeListCache.remove(it)
-                globalAnimeListCacheComplete.remove(it)
+                markListIncomplete(it)
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
@@ -353,7 +368,7 @@ class UserListViewModel @Inject constructor(
                         sort = effectiveSort
                     ).also { fetched ->
                         globalFullAnimeListCache[cacheKey] = fetched
-                        globalAnimeListCacheComplete.add(cacheKey)
+                        markListComplete(cacheKey)
                         _loadedLists.value = _loadedLists.value + (cacheKey to fetched)
                     }
                 }
@@ -483,6 +498,9 @@ class UserListViewModel @Inject constructor(
             animeStatuses.associateWith { isGrid }
         } else {
             _savedGridModes.value + (status to isGrid)
+        }
+        viewModelScope.launch {
+            prefsManager.saveGridMode("anime_$status", isGrid, global)
         }
     }
 }

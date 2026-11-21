@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -293,6 +295,11 @@ fun MangaDetailsContent(
     var showRecommendationsPopup by remember { mutableStateOf(false) }
     var showAllCharactersPopup by remember { mutableStateOf(false) }
     var communityStatsInfo by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val detailsListState = rememberLazyListState()
+    val genresRowState = rememberLazyListState()
+    val charactersRowState = rememberLazyListState()
+    val picturesRowState = rememberLazyListState()
+    val communityBadgesRowState = rememberLazyListState()
 
     LaunchedEffect(isCharactersLoaded, isCharactersLoading) {
         if (!isCharactersLoaded && !isCharactersLoading) {
@@ -372,11 +379,14 @@ fun MangaDetailsContent(
                             Icon(Icons.Default.Close, contentDescription = "Close")
                         }
                     }
+                    val charactersGridState = rememberLazyGridState()
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
+                        state = charactersGridState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 12.dp),
+                            .padding(horizontal = 12.dp)
+                            .verticalScrollbar(charactersGridState),
                         contentPadding = PaddingValues(bottom = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -431,7 +441,8 @@ fun MangaDetailsContent(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = detailsListState,
+        modifier = Modifier.fillMaxSize().verticalScrollbar(detailsListState),
         contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item {
@@ -624,7 +635,10 @@ fun MangaDetailsContent(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        state = genresRowState,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(details.genres) { genre ->
                             SuggestionChip(
                                 onClick = { },
@@ -632,6 +646,8 @@ fun MangaDetailsContent(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(genresRowState))
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
@@ -692,7 +708,10 @@ fun MangaDetailsContent(
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     }
                     characters.isNotEmpty() -> {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        LazyRow(
+                            state = charactersRowState,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             items(characters.take(5)) { entry ->
                                 Column(
                                     modifier = Modifier
@@ -751,6 +770,8 @@ fun MangaDetailsContent(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(charactersRowState))
                     }
                     else -> {
                         MangaSectionFallbackCard(
@@ -778,6 +799,9 @@ fun MangaDetailsContent(
                 InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "Unknown")
                 Spacer(modifier = Modifier.height(8.dp))
 
+                InfoRow("Type", details.mediaType?.replace("_", " ")?.replaceFirstChar { it.uppercase(Locale.getDefault()) } ?: "Unknown")
+                InfoRow("Status", details.status?.replace("_", " ")?.replaceFirstChar { it.uppercase(Locale.getDefault()) } ?: "Unknown")
+                InfoRow("MAL Rating", details.mean?.takeIf { it > 0f }?.let { "${"%.2f".format(Locale.US, it)}/10" } ?: "Unknown")
                 InfoRow("Rank", "#${details.rank ?: "Unknown"}")
                 InfoRow("Popularity", "#${details.popularity ?: "Unknown"}")
                 InfoRow("Published", "${details.startDate ?: "Unknown"} to ${details.endDate ?: "Unknown"}")
@@ -855,7 +879,10 @@ fun MangaDetailsContent(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyRow(
+                        state = picturesRowState,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         items(details.pictures) { pic ->
                             val picUrl = pic.large ?: pic.medium
                             AsyncImage(
@@ -869,6 +896,8 @@ fun MangaDetailsContent(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(picturesRowState))
                 }
             }
         }
@@ -1053,6 +1082,7 @@ fun MangaDetailsContent(
                     val planRate = pct(planToWatch)
                     val onHoldRate = pct(onHold)
                     val members = details.statistics?.numListUsers ?: details.numListUsers ?: total
+                    val formattedMembers = String.format(Locale.US, "%,d", members)
 
                     val readingRate = watchingRate
                     val showTrendingCard = readingRate >= 25f || (readingRate >= 20f && planRate >= 20f)
@@ -1087,7 +1117,7 @@ fun MangaDetailsContent(
                     fun pillMetric(label: String): String = when (label) {
                         "Trending" -> "Reading: ${readingRate.toInt()}% · Planned: ${planRate.toInt()}%"
                         "Beloved" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
-                        "HiddenGem" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
+                        "HiddenGem" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: $formattedMembers"
                         "Polarizing" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 5–8: ${score5to8Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
                         "High Dropoff" -> "Dropped: ${dropRate.toInt()}% · Completed: ${completionRate.toInt()}%"
                         "Disliked" -> "Scores 1–4: ${lowScoreShare.toInt()}%"
@@ -1097,8 +1127,8 @@ fun MangaDetailsContent(
                         "Mid" -> "Scores 5–7: ${score5to7Share.toInt()}%"
                         "Broad Appeal" -> "Scores 5–10: ${score5to10Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
                         "High Interest" -> "Planned: ${planRate.toInt()}%"
-                        "Niche" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
-                        "Obscure" -> "Members: %,d".format(members)
+                        "Niche" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: $formattedMembers"
+                        "Obscure" -> "Members: $formattedMembers"
                         "Slowburn" -> "Scores 9–10: ${highScoreShare.toInt()}% · Dropped: ${dropRate.toInt()}%"
                         else -> ""
                     }
@@ -1144,6 +1174,7 @@ fun MangaDetailsContent(
                     
                         if (statPills.isNotEmpty()) {
                             LazyRow(
+                                state = communityBadgesRowState,
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 contentPadding = PaddingValues(end = 16.dp)
@@ -1160,6 +1191,8 @@ fun MangaDetailsContent(
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(communityBadgesRowState))
                             Spacer(modifier = Modifier.height(16.dp))
                         }
                         
@@ -1492,9 +1525,11 @@ private fun MangaDetailsGridPopup(
                         }
                     }
                     else -> {
+                        val gridState = rememberLazyGridState()
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(3),
-                            modifier = Modifier.fillMaxSize(),
+                            state = gridState,
+                            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
                             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1669,6 +1704,7 @@ fun EditMangaListStatusDialog(
     onDismiss: () -> Unit,
     onSave: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit
 ) {
+    val editStatusScrollState = rememberScrollState()
     var status by remember { mutableStateOf(currentStatus.status ?: "plan_to_read") }
     var score by remember { mutableIntStateOf(currentStatus.score) }
     var volumes by remember { mutableIntStateOf(currentStatus.numVolumesRead) }
@@ -1731,7 +1767,12 @@ fun EditMangaListStatusDialog(
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Close") }
                 }
 
-                Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(editStatusScrollState)
+                        .verticalScrollbar(editStatusScrollState)
+                ) {
                     Text("Status", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         StatusIcon(Icons.Default.Visibility, "Reading", status == "reading") {

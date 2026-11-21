@@ -6,6 +6,10 @@ import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.AnimeMyListStatusResponse
 import com.example.myapplication.data.model.AnimeResponse
 import com.example.myapplication.data.model.JikanFullUserProfile
+import com.example.myapplication.data.model.JikanFavoriteItem
+import com.example.myapplication.data.model.JikanUserFavorites
+import com.example.myapplication.data.model.JikanUserImages
+import com.example.myapplication.data.model.JikanImageFormat
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MangaResponse
@@ -20,6 +24,8 @@ import com.example.myapplication.data.model.UserProfile
 import com.example.myapplication.data.remote.AnimeScheduleApiService
 import com.example.myapplication.data.remote.AnimeScheduleTimetableEntry
 import com.example.myapplication.data.remote.JikanApiService
+import com.example.myapplication.data.remote.JikanEdgeApiService
+import com.example.myapplication.data.remote.TenraiApiService
 import com.example.myapplication.data.remote.JikanCharactersResponse
 import com.example.myapplication.data.remote.JikanFriend
 import com.example.myapplication.data.remote.JikanMangaData
@@ -80,6 +86,8 @@ class AnimeRepository @Inject constructor(
     private val apiService: MalApiService,
     private val animeScheduleApiService: AnimeScheduleApiService,
     private val jikanApiService: JikanApiService,
+    private val jikanEdgeApiService: JikanEdgeApiService,
+    private val tenraiApiService: TenraiApiService,
     private val prefsManager: UserPreferencesManager
 ) {
     companion object {
@@ -112,7 +120,7 @@ class AnimeRepository @Inject constructor(
     suspend fun getRandomAnimeId(): Int {
         return withJikanThrottle {
             retryTimeoutRequest {
-                jikanApiService.getRandomAnime().data.mal_id
+                tenraiApiService.getRandomAnime().data.mal_id
             }
         }
     }
@@ -257,7 +265,7 @@ class AnimeRepository @Inject constructor(
         while (true) {
             val response = try {
                 withJikanThrottle {
-                    jikanApiService.getTopManga(filter = "publishing", page = page)
+                    tenraiApiService.getTopManga(filter = "publishing", page = page)
                 }
             } catch (e: HttpException) {
                 if (e.code() == 429 && allItems.isNotEmpty()) break
@@ -485,39 +493,39 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getAnimeCharacters(id: Int): JikanCharactersResponse {
-        return withJikanThrottle { jikanApiService.getAnimeCharacters(id) }
+        return withJikanThrottle { tenraiApiService.getAnimeCharacters(id) }
     }
 
     suspend fun getMangaCharacters(id: Int): JikanCharactersResponse {
-        return withJikanThrottle { jikanApiService.getMangaCharacters(id) }
+        return withJikanThrottle { tenraiApiService.getMangaCharacters(id) }
     }
 
     suspend fun getAnimeStaff(id: Int): JikanStaffResponse {
-        return withJikanThrottle { jikanApiService.getAnimeStaff(id) }
+        return withJikanThrottle { tenraiApiService.getAnimeStaff(id) }
     }
 
     suspend fun getAnimeThemes(id: Int): JikanThemesResponse {
-        return withJikanThrottle { jikanApiService.getAnimeThemes(id) }
+        return withJikanThrottle { tenraiApiService.getAnimeThemes(id) }
     }
 
     suspend fun getAnimeReviews(id: Int): JikanReviewsResponse {
-        return withJikanThrottle { jikanApiService.getAnimeReviews(id, preliminary = true) }
+        return withJikanThrottle { tenraiApiService.getAnimeReviews(id, preliminary = true) }
     }
 
     suspend fun getMangaReviews(id: Int): JikanReviewsResponse {
-        return withJikanThrottle { jikanApiService.getMangaReviews(id, preliminary = true) }
+        return withJikanThrottle { tenraiApiService.getMangaReviews(id, preliminary = true) }
     }
 
     suspend fun getAnimeStreaming(id: Int): JikanStreamingResponse {
-        return withJikanThrottle { jikanApiService.getAnimeStreaming(id) }
+        return withJikanThrottle { tenraiApiService.getAnimeStreaming(id) }
     }
 
     suspend fun getAnimeStatistics(id: Int): JikanAnimeStatisticsResponse {
-        return withJikanThrottle { jikanApiService.getAnimeStatistics(id) }
+        return withJikanThrottle { tenraiApiService.getAnimeStatistics(id) }
     }
 
     suspend fun getMangaStatistics(id: Int): JikanMangaStatisticsResponse {
-        return withJikanThrottle { jikanApiService.getMangaStatistics(id) }
+        return withJikanThrottle { tenraiApiService.getMangaStatistics(id) }
     }
 
     suspend fun getMyUserProfile(): UserProfile {
@@ -560,6 +568,25 @@ class AnimeRepository @Inject constructor(
 
     suspend fun getUserFriends(username: String): List<JikanFriend> {
         return withJikanThrottle { jikanApiService.getUserFriends(username).data }
+    }
+
+    suspend fun getUserFavorites(username: String): JikanUserFavorites {
+        val data = withJikanThrottle { jikanEdgeApiService.getUserFavorites(username).data }
+        fun List<com.example.myapplication.data.remote.JikanEdgeFavoriteItem>.toProfileFavorites() = map { favorite ->
+            JikanFavoriteItem(
+                mal_id = favorite.malId,
+                name = favorite.name,
+                title = favorite.title,
+                url = favorite.url,
+                images = favorite.imageUrl?.let { imageUrl ->
+                    JikanUserImages(jpg = JikanImageFormat(image_url = imageUrl))
+                }
+            )
+        }
+        return JikanUserFavorites(
+            anime = data.anime.toProfileFavorites(),
+            manga = data.manga.toProfileFavorites()
+        )
     }
 
     suspend fun getUserAnimeList(username: String? = null, status: String? = null, sort: String = "list_score", offset: Int = 0, limit: Int = 100): UserAnimeListResponse {

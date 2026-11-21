@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -282,8 +283,10 @@ private fun UserAvatar(
 @Composable
 private fun ProfileLoadingShimmer(modifier: Modifier = Modifier) {
     val shimmerBrush = rememberProfileShimmerBrush()
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = modifier,
+        state = listState,
+        modifier = modifier.verticalScrollbar(listState),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
         item {
@@ -440,6 +443,7 @@ fun ProfileContent(
     var showFriendsSection by remember { mutableStateOf(false) }
     var selectedSignal by remember { mutableStateOf<ProfileSignalCard?>(null) }
     val signalCards = remember(jikanUser.statistics, jikanUser.joined) { buildProfileSignalCards(jikanUser.statistics, jikanUser.joined) }
+    val profileListState = rememberLazyListState()
 
     if (showAboutDialog) {
         AboutDialog(about = jikanUser.about ?: "No about information provided.", onDismiss = { showAboutDialog = false })
@@ -479,7 +483,8 @@ fun ProfileContent(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = profileListState,
+        modifier = Modifier.fillMaxSize().verticalScrollbar(profileListState),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
         item {
@@ -772,7 +777,7 @@ fun ProfileContent(
                 user = jikanUser,
                 malStats = malUser?.animeStatistics,
                 titleLanguage = titleLanguage,
-                signalCards = signalCards,
+                signalCards = signalCards.filter { it.section == null || it.section == "Anime" },
                 onSignalClick = { selectedSignal = it },
                 onAnimeClick = onAnimeClick,
                 loadFavoriteAnimeDetails = loadFavoriteAnimeDetails
@@ -782,7 +787,7 @@ fun ProfileContent(
                 user = jikanUser,
                 malStats = malUser?.mangaStatistics,
                 titleLanguage = titleLanguage,
-                signalCards = signalCards,
+                signalCards = signalCards.filter { it.section == null || it.section == "Manga" },
                 onSignalClick = { selectedSignal = it },
                 onMangaClick = onMangaClick
             )
@@ -796,7 +801,8 @@ data class ProfileSignalCard(
     val description: String,
     val icon: ImageVector,
     val color: Color,
-    val metric: String = ""
+    val metric: String = "",
+    val section: String? = null
 )
 
 @Composable
@@ -880,7 +886,6 @@ private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.
         val mangaPlanRate = if (mangaTotal > 0) (mangaPlanned * 100f) / mangaTotal else 0f
         val mangaActiveRatio = if (mangaTotal > 0) (mangaReading * 100f) / mangaTotal else 0f
         val mangaRewatchRate = if (mangaCompleted > 0) (mangaReread * 100f) / mangaCompleted else 0f
-        val animeDominant = animeShare >= mangaShare
         val joinedDate = joined?.let { parseJoinedDate(it) }
         val yearsOnMAL = joinedDate?.let { parsedDate ->
             val today = LocalDate.now()
@@ -888,75 +893,75 @@ private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.
             daysOnMAL / 365.25f
         }
 
-        if (animeDominant) {
+        if (anime != null) {
             if (animeCompletionRate >= 65f && animeTotal >= 150) {
-                cards += ProfileSignalCard("Completionist", "Finishing what they start seems to be a consistent habit here, with plenty of anime titles carried through to completion.", Icons.Default.TaskAlt, Color(0xFF2E7D32))
+                cards += ProfileSignalCard("Completionist", "Finishing what they start seems to be a consistent habit here, with plenty of anime titles carried through to completion.", Icons.Default.TaskAlt, Color(0xFF2E7D32), section = "Anime")
             }
             if (animePlanRate >= 55f && animeTotal >= 100) {
-                cards += ProfileSignalCard("Archivist", "A growing anime backlog seems to build faster than titles are completed, giving the profile a very collector-like feel.", Icons.Default.Inventory2, Color(0xFF546E7A))
+                cards += ProfileSignalCard("Archivist", "A growing anime backlog seems to build faster than titles are completed, giving the profile a very collector-like feel.", Icons.Default.Inventory2, Color(0xFF546E7A), section = "Anime")
             }
             if (animeActiveRatio <= 2f && animeCompleted >= 100) {
-                cards += ProfileSignalCard("Binge Watcher", "Anime titles seem to get consumed in bigger bursts rather than slowly followed over time, giving the profile a more finish-first rhythm.", Icons.Default.Bolt, Color(0xFF1E88E5))
+                cards += ProfileSignalCard("Binge Watcher", "Anime tends to be watched in focused bursts, with many titles completed and few left actively in progress.", Icons.Default.Bolt, Color(0xFF1E88E5), section = "Anime")
             }
             if (animeMeanScore <= 6f) {
-                cards += ProfileSignalCard("Critic", "Anime scores tend to land lower than average here, giving the profile a more critical and skeptical rating style.", Icons.Default.Gavel, Color(0xFFE53935))
+                cards += ProfileSignalCard("Critic", "Anime scores tend to land lower than average here, giving the profile a more critical and skeptical rating style.", Icons.Default.Gavel, Color(0xFFE53935), section = "Anime")
             }
             if (animeMeanScore >= 8f) {
-                cards += ProfileSignalCard("Lenient", "Anime scores tend to land high here, suggesting a softer and more generous rating style overall.", Icons.Default.SentimentSatisfiedAlt, Color(0xFFFFC107))
+                cards += ProfileSignalCard("Lenient", "Anime scores tend to land high here, suggesting a softer and more generous rating style overall.", Icons.Default.SentimentSatisfiedAlt, Color(0xFFFFC107), section = "Anime")
             }
             if (animeRewatchRate >= 10f && animeCompleted >= 100) {
-                cards += ProfileSignalCard("Rewatcher", "Anime favorites seem worth revisiting here, with enough repeat watching to suggest a strong attachment to familiar series.", Icons.Default.Replay, Color(0xFF00897B))
+                cards += ProfileSignalCard("Rewatcher", "Anime favorites seem worth revisiting here, with enough repeat watching to suggest a strong attachment to familiar series.", Icons.Default.Replay, Color(0xFF00897B), section = "Anime")
             }
-        } else {
+        }
+        if (manga != null) {
             if (mangaCompletionRate >= 65f && mangaTotal >= 150) {
-                cards += ProfileSignalCard("Completionist", "Finishing what they start seems to be a consistent habit here, with plenty of manga titles carried through to completion.", Icons.Default.TaskAlt, Color(0xFF2E7D32))
+                cards += ProfileSignalCard("Completionist", "Finishing what they start seems to be a consistent habit here, with plenty of manga titles carried through to completion.", Icons.Default.TaskAlt, Color(0xFF2E7D32), section = "Manga")
             }
             if (mangaPlanRate >= 55f && mangaTotal >= 100) {
-                cards += ProfileSignalCard("Archivist", "A growing manga backlog seems to build faster than titles are completed, giving the profile a very collector-like feel.", Icons.Default.Inventory2, Color(0xFF546E7A))
+                cards += ProfileSignalCard("Archivist", "A growing manga backlog seems to build faster than titles are completed, giving the profile a very collector-like feel.", Icons.Default.Inventory2, Color(0xFF546E7A), section = "Manga")
             }
             if (mangaActiveRatio <= 2f && mangaCompleted >= 100) {
-                cards += ProfileSignalCard("Binge Watcher", "Manga titles seem to get consumed in bigger bursts rather than slowly followed over time, giving the profile a more finish-first rhythm.", Icons.Default.Bolt, Color(0xFF1E88E5))
+                cards += ProfileSignalCard("Binge Reader", "Manga tends to be read in focused bursts, with many titles completed and few left actively in progress.", Icons.Default.Bolt, Color(0xFF1E88E5), section = "Manga")
             }
             if (mangaMeanScore <= 6f) {
-                cards += ProfileSignalCard("Critic", "Manga scores tend to land lower than average here, giving the profile a more critical and skeptical rating style.", Icons.Default.Gavel, Color(0xFFE53935))
+                cards += ProfileSignalCard("Critic", "Manga scores tend to land lower than average here, giving the profile a more critical and skeptical rating style.", Icons.Default.Gavel, Color(0xFFE53935), section = "Manga")
             }
             if (mangaMeanScore >= 8f) {
-                cards += ProfileSignalCard("Lenient", "Manga scores tend to land high here, suggesting a softer and more generous rating style overall.", Icons.Default.SentimentSatisfiedAlt, Color(0xFFFFC107))
+                cards += ProfileSignalCard("Lenient", "Manga scores tend to land high here, suggesting a softer and more generous rating style overall.", Icons.Default.SentimentSatisfiedAlt, Color(0xFFFFC107), section = "Manga")
             }
             if (mangaRewatchRate >= 10f && mangaCompleted >= 100) {
-                cards += ProfileSignalCard("Rereader", "Manga favorites seem worth revisiting here, with enough repeat reading to suggest a strong attachment to familiar series.", Icons.Default.AutoStories, Color(0xFF00897B))
+                cards += ProfileSignalCard("Rereader", "Manga favorites seem worth revisiting here, with enough repeat reading to suggest a strong attachment to familiar series.", Icons.Default.AutoStories, Color(0xFF00897B), section = "Manga")
             }
         }
-        val volumeCard = when {
-            total >= 5000 -> ProfileSignalCard(
-                "5K Club",
-                "This profile has crossed a massive combined catalog milestone, putting it in rare long-haul territory.",
+        fun volumeCard(completedCount: Int, section: String): ProfileSignalCard? {
+            val medium = section.lowercase(Locale.US)
+            val tier = when {
+                completedCount >= 5000 -> "5K"
+                completedCount >= 2500 -> "2.5K"
+                completedCount >= 2000 -> "2K"
+                completedCount >= 1500 -> "1.5K"
+                completedCount >= 1000 -> "1K"
+                completedCount >= 500 -> "500"
+                else -> return null
+            }
+            val milestone = when (tier) {
+                "5K" -> "five thousand"
+                "2.5K" -> "2,500"
+                "2K" -> "two thousand"
+                "1.5K" -> "1,500"
+                "1K" -> "one thousand"
+                else -> "five hundred"
+            }
+            return ProfileSignalCard(
+                "$tier Club",
+                "This profile has completed at least $milestone $medium titles.",
                 Icons.Default.EmojiEvents,
-                Color(0xFF5E35B1)
+                Color(0xFF5E35B1),
+                section = section
             )
-            total >= 2500 -> ProfileSignalCard(
-                "2.5K Club",
-                "This profile has built a very large tracked library, with thousands of titles already logged.",
-                Icons.Default.EmojiEvents,
-                Color(0xFF5E35B1)
-            )
-            total >= 1000 -> ProfileSignalCard(
-                "1K Club",
-                "This profile has crossed the thousand-title mark, showing a clearly substantial tracking history.",
-                Icons.Default.EmojiEvents,
-                Color(0xFF5E35B1)
-            )
-            total >= 500 -> ProfileSignalCard(
-                "500 Club",
-                "This profile has reached a solid combined library size, marking a clearly committed tracking habit.",
-                Icons.Default.EmojiEvents,
-                Color(0xFF5E35B1)
-            )
-            else -> null
         }
-        if (volumeCard != null) {
-            cards += volumeCard
-        }
+        anime?.let { volumeCard(it.completed, "Anime")?.let(cards::add) }
+        manga?.let { volumeCard(it.completed, "Manga")?.let(cards::add) }
         val tenureCard = when {
             joinedDate != null && joinedDate.year <= 2006 -> ProfileSignalCard(
                 "Founding Member",
@@ -1000,10 +1005,10 @@ private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.
             cards += ProfileSignalCard("Explorer", "Activity stays fairly balanced across anime and manga, suggesting broad curiosity rather than sticking to one lane.", Icons.Default.TravelExplore, Color(0xFF26A69A))
         }
         if (mangaShare >= 75f && mangaTotal >= 100) {
-            cards += ProfileSignalCard("Dedicated Reader", "Most of the activity leans heavily toward manga, with enough consistency to suggest a deep and long-term reading habit.", Icons.Default.MenuBook, Color(0xFF7E57C2))
+            cards += ProfileSignalCard("Dedicated Reader", "Most of the activity leans heavily toward manga, with enough consistency to suggest a deep and long-term reading habit.", Icons.Default.MenuBook, Color(0xFF7E57C2), section = "Manga")
         }
         if (total <= 15 && completionRate <= 35f) {
-            cards += ProfileSignalCard("Casual Viewer", "The smaller overall footprint gives the profile a lighter and more relaxed approach to tracking media.", Icons.Default.Chair, Color(0xFF90A4AE))
+            cards += ProfileSignalCard("Casual Tracker", "The smaller combined anime and manga list suggests a relaxed approach to tracking both kinds of titles.", Icons.Default.Chair, Color(0xFF90A4AE))
         }
         val timeWastedCard = when {
             daysTotal >= 365f -> {
@@ -1032,40 +1037,47 @@ private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.
             cards += timeWastedCard
         }
         if (animeShare >= 75f) {
-            cards += ProfileSignalCard("Dedicated Viewer", "Most tracked activity revolves around anime rather than manga, giving the profile a strong viewer-first identity.", Icons.Default.LiveTv, Color(0xFF42A5F5))
+            cards += ProfileSignalCard("Dedicated Viewer", "Most tracked activity revolves around anime rather than manga, giving the profile a strong viewer-first identity.", Icons.Default.LiveTv, Color(0xFF42A5F5), section = "Anime")
         }
     }
 
     anime?.let {
-        val completionRate = if (it.total_entries > 0) (it.completed * 100f) / it.total_entries else 0f
-        val dropRate = if (it.total_entries > 0) (it.dropped * 100f) / it.total_entries else 0f
+        val watchingRate = if (it.total_entries > 0) (it.watching * 100f) / it.total_entries else 0f
+        if (watchingRate >= 35f) {
+            cards += ProfileSignalCard("Active Viewer", "A noticeable share of the anime list is currently being watched, suggesting several series are in progress at once.", Icons.Default.LiveTv, Color(0xFF42A5F5), section = "Anime")
+        }
     }
 
     manga?.let {
         val readingRate = if (it.total_entries > 0) (it.reading * 100f) / it.total_entries else 0f
         if (readingRate >= 35f) {
-            cards += ProfileSignalCard("Active Reader", "A noticeable amount of manga stays active at once, suggesting an ongoing and fairly consistent reading habit.", Icons.Default.ImportContacts, Color(0xFFFF7043))
+            cards += ProfileSignalCard("Active Reader", "A noticeable amount of manga stays active at once, suggesting an ongoing and fairly consistent reading habit.", Icons.Default.ImportContacts, Color(0xFFFF7043), section = "Manga")
         }
     }
 
-    return cards.distinctBy { it.title }.map { card ->
-        card.copy(metric = profileSignalMetric(card.title, stats, joined))
+    return cards.distinctBy { it.title to it.section }.map { card ->
+        card.copy(metric = profileSignalMetric(card, stats, joined))
     }
 }
 
 private fun profileSignalMetric(
-    title: String,
+    card: ProfileSignalCard,
     stats: com.example.myapplication.data.model.JikanUserStatistics?,
     joined: String?
 ): String {
+    val title = card.title
     val anime = stats?.anime
     val manga = stats?.manga
     val animeTotal = anime?.total_entries ?: 0
     val mangaTotal = manga?.total_entries ?: 0
     val total = animeTotal + mangaTotal
+    val completedTotal = (anime?.completed ?: 0) + (manga?.completed ?: 0)
     if (total == 0) return ""
 
-    val animeDominant = animeTotal >= mangaTotal
+    val animeDominant = card.section?.let { it == "Anime" } ?: (animeTotal >= mangaTotal)
+    val primaryMedium = if (animeDominant) "Anime" else "Manga"
+    val activeVerb = if (animeDominant) "Watching" else "Reading"
+    val repeatVerb = if (animeDominant) "Rewatched" else "Reread"
     val primaryTotal = if (animeDominant) animeTotal else mangaTotal
     val completed = if (animeDominant) anime?.completed ?: 0 else manga?.completed ?: 0
     val planned = if (animeDominant) anime?.plan_to_watch ?: 0 else manga?.plan_to_read ?: 0
@@ -1075,21 +1087,26 @@ private fun profileSignalMetric(
     fun percent(value: Int, denominator: Int) = if (denominator > 0) value * 100 / denominator else 0
 
     return when {
-        title == "Completionist" -> "Completed: ${percent(completed, primaryTotal)}% · $completed of $primaryTotal"
-        title == "Archivist" -> "Planned: ${percent(planned, primaryTotal)}% · $planned of $primaryTotal"
-        title == "Binge Watcher" -> "Active: ${percent(active, primaryTotal)}% · $active of $primaryTotal"
-        title == "Critic" || title == "Lenient" -> "Mean score: ${"%.1f".format(Locale.US, meanScore)}"
-        title == "Rewatcher" || title == "Rereader" -> "Rewatched: ${percent(rewatched, completed)}% · $rewatched of $completed completed"
-        title.endsWith("Club") -> "Titles tracked: $total"
+        title == "Completionist" -> "$primaryMedium completed: ${percent(completed, primaryTotal)}% · $completed of $primaryTotal entries"
+        title == "Archivist" -> "$primaryMedium planned: ${percent(planned, primaryTotal)}% · $planned of $primaryTotal entries"
+        title == "Binge Watcher" || title == "Binge Reader" -> "$activeVerb: ${percent(active, primaryTotal)}% · $active of $primaryTotal entries"
+        title == "Critic" || title == "Lenient" -> "$primaryMedium mean score: ${"%.1f".format(Locale.US, meanScore)}"
+        title == "Rewatcher" || title == "Rereader" -> "$repeatVerb: ${percent(rewatched, completed)}% · $rewatched of $completed completed"
+        title.endsWith("Club") -> when (card.section) {
+            "Anime" -> "Completed anime titles: ${anime?.completed ?: 0}"
+            "Manga" -> "Completed manga titles: ${manga?.completed ?: 0}"
+            else -> "Completed titles: $completedTotal · Anime: ${anime?.completed ?: 0} · Manga: ${manga?.completed ?: 0}"
+        }
         title in setOf("Founding Member", "Legacy User", "Old Guard", "Veteran", "Seasoned", "Newbie") -> {
             val years = parseJoinedDate(joined ?: "")?.let { ChronoUnit.DAYS.between(it, LocalDate.now()).coerceAtLeast(0) / 365.25f }
             years?.let { "Time on MAL: ${"%.1f".format(Locale.US, it)} years" } ?: ""
         }
         title == "Explorer" -> "Anime: ${percent(animeTotal, total)}% · Manga: ${percent(mangaTotal, total)}%"
-        title == "Dedicated Reader" -> "Manga: ${percent(mangaTotal, total)}% · $mangaTotal of $total"
-        title == "Dedicated Viewer" -> "Anime: ${percent(animeTotal, total)}% · $animeTotal of $total"
-        title == "Casual Viewer" -> "Titles tracked: $total"
-        title == "Active Reader" -> "Reading: ${percent(manga?.reading ?: 0, mangaTotal)}% · ${manga?.reading ?: 0} of $mangaTotal"
+        title == "Dedicated Reader" -> "Manga entries: ${percent(mangaTotal, total)}% · $mangaTotal of $total combined"
+        title == "Dedicated Viewer" -> "Anime entries: ${percent(animeTotal, total)}% · $animeTotal of $total combined"
+        title == "Casual Tracker" -> "Combined entries: $total · Anime: $animeTotal · Manga: $mangaTotal"
+        title == "Active Reader" -> "Reading: ${percent(manga?.reading ?: 0, mangaTotal)}% · ${manga?.reading ?: 0} of $mangaTotal manga entries"
+        title == "Active Viewer" -> "Watching: ${percent(anime?.watching ?: 0, animeTotal)}% · ${anime?.watching ?: 0} of $animeTotal anime entries"
         title.endsWith("Wasted") -> "Time logged: ${"%.0f".format(Locale.US, (anime?.days_watched ?: 0f) + (manga?.days_read ?: 0f))} days"
         else -> ""
     }
@@ -1150,7 +1167,10 @@ private fun FriendsDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
+                val friendsListState = rememberLazyListState()
                 LazyColumn(
+                    state = friendsListState,
+                    modifier = Modifier.verticalScrollbar(friendsListState),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
@@ -1234,24 +1254,28 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
     onAnimeClick: (Int) -> Unit,
     loadFavoriteAnimeDetails: suspend (Int) -> AnimeDetailsResponse?
 ) {
-    val stats = user.statistics?.anime ?: return
+    val stats = user.statistics?.anime
     
-    item {
-        Column(modifier = Modifier.padding(16.dp)) {
-            val items = listOf(
-                StatPiece(malStats?.numWatching ?: stats.watching, Color(0xFF2196F3), "Watching"),
-                StatPiece(malStats?.numCompleted ?: stats.completed, Color(0xFF4CAF50), "Completed"),
-                StatPiece(malStats?.numOnHold ?: stats.on_hold, Color(0xFFFFC107), "On Hold"),
-                StatPiece(malStats?.numDropped ?: stats.dropped, Color(0xFFF44336), "Dropped"),
-                StatPiece(malStats?.numPlanToWatch ?: stats.plan_to_watch, Color(0xFF9E9E9E), "Planned")
-            )
-            StatsDonutChart(title = "Anime Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
+    if (stats != null) {
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                val items = listOf(
+                    StatPiece(malStats?.numWatching ?: stats.watching, Color(0xFF2196F3), "Watching"),
+                    StatPiece(malStats?.numCompleted ?: stats.completed, Color(0xFF4CAF50), "Completed"),
+                    StatPiece(malStats?.numOnHold ?: stats.on_hold, Color(0xFFFFC107), "On Hold"),
+                    StatPiece(malStats?.numDropped ?: stats.dropped, Color(0xFFF44336), "Dropped"),
+                    StatPiece(malStats?.numPlanToWatch ?: stats.plan_to_watch, Color(0xFF9E9E9E), "Planned")
+                )
+                StatsDonutChart(title = "Anime Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
+            }
         }
     }
     if (signalCards.isNotEmpty()) {
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                val badgesRowState = rememberLazyListState()
                 LazyRow(
+                    state = badgesRowState,
                     contentPadding = PaddingValues(end = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -1266,35 +1290,46 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(badgesRowState))
             }
         }
     }
     item { Spacer(modifier = Modifier.height(10.dp)) }
 
-    item {
-        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                DetailRow("Days Watched", "%.1f".format(malStats?.numDaysWatched ?: stats.days_watched))
-                DetailRow("Mean Score", (malStats?.meanScore ?: stats.mean_score).toString())
-                DetailRow("Episodes", "%,d".format(malStats?.numEpisodes ?: stats.episodes_watched))
-                DetailRow("Rewatched", "%,d".format(malStats?.numTimesRewatched ?: stats.rewatched))
-                DetailRow("Total Entries", "%,d".format(malStats?.numItems ?: stats.total_entries))
+    if (stats != null) {
+        item {
+            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    DetailRow("Days Watched", "%.1f".format(malStats?.numDaysWatched ?: stats.days_watched))
+                    DetailRow("Mean Score", (malStats?.meanScore ?: stats.mean_score).toString())
+                    DetailRow("Episodes", "%,d".format(malStats?.numEpisodes ?: stats.episodes_watched))
+                    DetailRow("Rewatched", "%,d".format(malStats?.numTimesRewatched ?: stats.rewatched))
+                    DetailRow("Total Entries", "%,d".format(malStats?.numItems ?: stats.total_entries))
+                }
             }
         }
     }
 
-    user.favorites?.let { favs ->
-        favs.anime?.takeIf { it.isNotEmpty() }?.let {
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                        FavoriteMediaSection(
-                            title = "Favorite Anime",
-                            items = it,
-                            titleLanguage = titleLanguage,
-                            loadFullAnimeDetails = loadFavoriteAnimeDetails,
-                            onItemClick = onAnimeClick
-                        )
-                    }
+    item {
+        Column(modifier = Modifier.padding(16.dp)) {
+            val favorites = user.favorites?.anime.orEmpty()
+            if (favorites.isNotEmpty()) {
+                FavoriteMediaSection(
+                    title = "Favorite Anime",
+                    items = favorites,
+                    titleLanguage = titleLanguage,
+                    loadFullAnimeDetails = loadFavoriteAnimeDetails,
+                    onItemClick = onAnimeClick
+                )
+            } else {
+                Text("Favorite Anime", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Favorite anime aren't available for this profile.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -1308,24 +1343,28 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
     onSignalClick: (ProfileSignalCard) -> Unit,
     onMangaClick: (Int) -> Unit
 ) {
-    val stats = user.statistics?.manga ?: return
+    val stats = user.statistics?.manga
 
-    item {
-        Column(modifier = Modifier.padding(16.dp)) {
-            val items = listOf(
-                StatPiece(malStats?.numReading ?: stats.reading, Color(0xFF2196F3), "Reading"),
-                StatPiece(malStats?.numCompleted ?: stats.completed, Color(0xFF4CAF50), "Completed"),
-                StatPiece(malStats?.numOnHold ?: stats.on_hold, Color(0xFFFFC107), "On Hold"),
-                StatPiece(malStats?.numDropped ?: stats.dropped, Color(0xFFF44336), "Dropped"),
-                StatPiece(malStats?.numPlanToRead ?: stats.plan_to_read, Color(0xFF9E9E9E), "Planned")
-            )
-            StatsDonutChart(title = "Manga Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
+    if (stats != null) {
+        item {
+            Column(modifier = Modifier.padding(16.dp)) {
+                val items = listOf(
+                    StatPiece(malStats?.numReading ?: stats.reading, Color(0xFF2196F3), "Reading"),
+                    StatPiece(malStats?.numCompleted ?: stats.completed, Color(0xFF4CAF50), "Completed"),
+                    StatPiece(malStats?.numOnHold ?: stats.on_hold, Color(0xFFFFC107), "On Hold"),
+                    StatPiece(malStats?.numDropped ?: stats.dropped, Color(0xFFF44336), "Dropped"),
+                    StatPiece(malStats?.numPlanToRead ?: stats.plan_to_read, Color(0xFF9E9E9E), "Planned")
+                )
+                StatsDonutChart(title = "Manga Stats", total = malStats?.numItems ?: stats.total_entries, pieces = items)
+            }
         }
     }
     if (signalCards.isNotEmpty()) {
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                val badgesRowState = rememberLazyListState()
                 LazyRow(
+                    state = badgesRowState,
                     contentPadding = PaddingValues(end = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -1340,33 +1379,46 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
                         )
                     }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(badgesRowState))
             }
         }
     }
     item { Spacer(modifier = Modifier.height(10.dp)) }
 
-    item {
-        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                DetailRow("Days Read", "%.1f".format(malStats?.numDaysRead ?: stats.days_read))
-                DetailRow("Mean Score", (malStats?.meanScore ?: stats.mean_score).toString())
-                DetailRow("Chapters", "%,d".format(malStats?.numChapters ?: stats.chapters_read))
-                DetailRow("Volumes", "%,d".format(malStats?.numVolumes ?: stats.volumes_read))
-                DetailRow("Reread", "%,d".format(malStats?.numTimesReread ?: stats.reread))
-                DetailRow("Total Entries", "%,d".format(malStats?.numItems ?: stats.total_entries))
+    if (stats != null) {
+        item {
+            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    DetailRow("Days Read", "%.1f".format(malStats?.numDaysRead ?: stats.days_read))
+                    DetailRow("Mean Score", (malStats?.meanScore ?: stats.mean_score).toString())
+                    DetailRow("Chapters", "%,d".format(malStats?.numChapters ?: stats.chapters_read))
+                    DetailRow("Volumes", "%,d".format(malStats?.numVolumes ?: stats.volumes_read))
+                    DetailRow("Reread", "%,d".format(malStats?.numTimesReread ?: stats.reread))
+                    DetailRow("Total Entries", "%,d".format(malStats?.numItems ?: stats.total_entries))
+                }
             }
         }
     }
 
-    user.favorites?.manga?.takeIf { it.isNotEmpty() }?.let {
-        item {
-            Column(modifier = Modifier.padding(16.dp)) {
+    item {
+        Column(modifier = Modifier.padding(16.dp)) {
+            val favorites = user.favorites?.manga.orEmpty()
+            if (favorites.isNotEmpty()) {
                 FavoriteMediaSection(
                     title = "Favorite Manga",
-                    items = it,
+                    items = favorites,
                     titleLanguage = titleLanguage,
                     loadFullAnimeDetails = null,
                     onItemClick = onMangaClick
+                )
+            } else {
+                Text("Favorite Manga", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Favorite manga aren't available for this profile.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -1479,10 +1531,14 @@ fun FavoriteMediaSection(
     loadFullAnimeDetails: (suspend (Int) -> AnimeDetailsResponse?)? = null,
     onItemClick: (Int) -> Unit
 ) {
+    val favoritesRowState = rememberLazyListState()
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyRow(
+            state = favoritesRowState,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             items(items) { item ->
                 val fallbackTitle = when (titleLanguage) {
                     TitleLanguage.ENGLISH -> item.name?.takeIf { it.isNotBlank() }
@@ -1547,6 +1603,8 @@ fun FavoriteMediaSection(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(favoritesRowState))
     }
 }
 
@@ -1563,7 +1621,13 @@ fun AboutDialog(about: String, onDismiss: () -> Unit) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("About Me", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(16.dp))
-                Box(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                val aboutScrollState = rememberScrollState()
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(aboutScrollState)
+                        .verticalScrollbar(aboutScrollState)
+                ) {
                     Text(text = parseBBCode(about), style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(modifier = Modifier.height(16.dp))

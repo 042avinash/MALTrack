@@ -22,10 +22,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -446,10 +448,12 @@ fun AnimeListScreen(
                     }
                 }
                 is AnimeUiState.HomeSuccess -> {
+                    val homeListState = rememberLazyListState()
                     Box(modifier = Modifier.fillMaxSize()) {
                         HomeBackgroundBlobs()
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            state = homeListState,
+                            modifier = Modifier.fillMaxSize().verticalScrollbar(homeListState),
                             contentPadding = PaddingValues(bottom = 16.dp)
                         ) {
                             if (homeContinueWatchingEnabled && state.continueWatching.isNotEmpty()) {
@@ -1013,11 +1017,13 @@ private fun HomeBackgroundBlobs() {
 @Composable
 private fun HomeLoadingShimmer(modifier: Modifier = Modifier) {
     val shimmerBrush = rememberHomeShimmerBrush()
+    val listState = rememberLazyListState()
 
     Box(modifier = modifier) {
         HomeBackgroundBlobs()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
             items(4) {
@@ -1057,9 +1063,11 @@ private fun DiscoveryLoadingShimmer(
 ) {
     val shimmerBrush = rememberHomeShimmerBrush()
     if (isGridView) {
+        val gridState = rememberLazyGridState()
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = modifier,
+            state = gridState,
+            modifier = modifier.verticalScrollbar(gridState),
             contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1075,8 +1083,10 @@ private fun DiscoveryLoadingShimmer(
             }
         }
     } else {
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = modifier,
+            state = listState,
+            modifier = modifier.verticalScrollbar(listState),
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -1319,9 +1329,11 @@ fun TopDiscoveryView(
     onItemEditStatus: (Int, String) -> Unit
 ) {
     if (isGridView) {
+        val gridState = rememberLazyGridState()
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
             contentPadding = PaddingValues(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1338,8 +1350,10 @@ fun TopDiscoveryView(
             }
         }
     } else {
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -2000,9 +2014,11 @@ fun SeasonalDetailsView(
     val collapsedSections = remember { mutableStateMapOf<String, Boolean>() }
 
     if (isGridView) {
+        val gridState = rememberLazyGridState()
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxSize(),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + extraBottomPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -2044,8 +2060,10 @@ fun SeasonalDetailsView(
             }
         }
     } else {
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + extraBottomPadding),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {

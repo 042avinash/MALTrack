@@ -21,8 +21,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -254,6 +256,7 @@ fun AnimeDetailsScreen(
                             staff = state.staff,
                             recommendations = state.recommendations,
                             themes = state.themes,
+                            isThemesLoaded = state.isThemesLoaded,
                             reviews = state.reviews,
                             allReviewsCount = state.allReviewsCount,
                             isRecommendationsLoaded = state.isRecommendationsLoaded,
@@ -302,6 +305,7 @@ fun AnimeDetailsContent(
     staff: List<JikanStaffData>,
     recommendations: List<Recommendation>,
     themes: JikanThemesData?,
+    isThemesLoaded: Boolean,
     reviews: List<JikanReviewData>,
     allReviewsCount: Int,
     isRecommendationsLoaded: Boolean,
@@ -341,6 +345,16 @@ fun AnimeDetailsContent(
     var showStorageSettingsPrompt by remember { mutableStateOf(false) }
     var showAllCast by remember { mutableStateOf(false) }
     var showAllPeople by remember { mutableStateOf(false) }
+    val detailsListState = rememberLazyListState()
+    val castListState = rememberLazyListState()
+    val peopleListState = rememberLazyListState()
+    val genresRowState = rememberLazyListState()
+    val charactersRowState = rememberLazyListState()
+    val voiceActorsRowState = rememberLazyListState()
+    val staffRowState = rememberLazyListState()
+    val streamingRowState = rememberLazyListState()
+    val picturesRowState = rememberLazyListState()
+    val communityBadgesRowState = rememberLazyListState()
     var isStaffCreditsExpanded by rememberSaveable { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -449,7 +463,8 @@ fun AnimeDetailsContent(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = detailsListState,
+        modifier = Modifier.fillMaxSize().verticalScrollbar(detailsListState),
         contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item {
@@ -474,12 +489,22 @@ fun AnimeDetailsContent(
                         .padding(16.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
+                    val headerPosterUrl = details.mainPicture?.large ?: details.mainPicture?.medium
                     AsyncImage(
-                        model = details.mainPicture?.medium,
-                        contentDescription = null,
+                        model = headerPosterUrl,
+                        contentDescription = "Download anime poster",
                         modifier = Modifier
                             .size(120.dp, 180.dp)
-                            .clip(RoundedCornerShape(8.dp)),
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = headerPosterUrl != null) {
+                                if (headerPosterUrl != null) {
+                                    if (hasDownloadPermission(context)) {
+                                        downloadImage(context, headerPosterUrl, details.getPreferredTitle(titleLanguage))
+                                    } else {
+                                        showStorageSettingsPrompt = true
+                                    }
+                                }
+                            },
                         contentScale = ContentScale.Crop
                     )
                     Spacer(modifier = Modifier.width(16.dp))
@@ -666,7 +691,10 @@ fun AnimeDetailsContent(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        state = genresRowState,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(details.genres) { genre ->
                             SuggestionChip(
                                 onClick = { },
@@ -674,6 +702,8 @@ fun AnimeDetailsContent(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(genresRowState))
                 }
             }
         }
@@ -741,6 +771,7 @@ fun AnimeDetailsContent(
                 Spacer(modifier = Modifier.height(8.dp))
                 if (characters.isNotEmpty()) {
                     LazyRow(
+                        state = charactersRowState,
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -806,6 +837,8 @@ fun AnimeDetailsContent(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(10.dp).horizontalScrollbar(charactersRowState))
                 } else {
                     DetailsInfoMessageCard(
                         title = "Characters Unavailable",
@@ -834,6 +867,7 @@ fun AnimeDetailsContent(
                 Spacer(modifier = Modifier.height(8.dp))
                 if (displayVAs.isNotEmpty()) {
                     LazyRow(
+                        state = voiceActorsRowState,
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -899,6 +933,8 @@ fun AnimeDetailsContent(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(10.dp).horizontalScrollbar(voiceActorsRowState))
                 } else {
                     val voiceActorReason = when {
                         isCharactersRefreshing -> "Loading voice actor credits..."
@@ -1002,6 +1038,7 @@ fun AnimeDetailsContent(
                     }
                 } else if (isStaffCreditsExpanded) {
                     LazyRow(
+                        state = staffRowState,
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -1069,6 +1106,8 @@ fun AnimeDetailsContent(
                             }
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(10.dp).horizontalScrollbar(staffRowState))
                 }
             }
         }
@@ -1089,6 +1128,9 @@ fun AnimeDetailsContent(
                 InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "N/A")
                 Spacer(modifier = Modifier.height(8.dp))
 
+                InfoRow("Type", details.mediaType?.let { type -> if (type.equals("tv", ignoreCase = true)) "TV" else type.replaceFirstChar { it.uppercase(Locale.getDefault()) } } ?: "N/A")
+                InfoRow("Status", details.status?.replace("_", " ")?.replaceFirstChar { it.uppercase(Locale.getDefault()) } ?: "N/A")
+                InfoRow("MAL Rating", details.mean?.takeIf { it > 0f }?.let { "${"%.2f".format(Locale.US, it)}/10" } ?: "N/A")
                 InfoRow("Rank", "#${details.rank ?: "N/A"}")
                 InfoRow("Popularity", "#${details.popularity ?: "N/A"}")
                 InfoRow("Source", details.source?.replace("_", " ")?.capitalize() ?: "N/A")
@@ -1105,6 +1147,52 @@ fun AnimeDetailsContent(
                 InfoRow("Aired", "${details.startDate ?: "?"} to ${details.endDate ?: "?"}")
                 InfoRow("Studios", details.studios?.joinToString { it.name } ?: "N/A")
                 InfoRow("Rating", formatMalRating(details.rating))
+            }
+        }
+
+        // Themes
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = "Opening & Ending Themes",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val openings = themes?.openings.orEmpty()
+                val endings = themes?.endings.orEmpty()
+                if (openings.isEmpty() && endings.isEmpty()) {
+                    Text(
+                        text = if (isThemesLoaded) "Theme data is unavailable right now." else {
+                            "Loading opening and ending themes…"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    if (openings.isNotEmpty()) {
+                        Text("Openings:", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 4.dp))
+                        openings.forEach { theme ->
+                            ThemeLink(theme) {
+                                val url = "https://www.youtube.com/results?search_query=${Uri.encode(theme)}"
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }
+                        }
+                    }
+
+                    if (endings.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Endings:", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 4.dp))
+                        endings.forEach { theme ->
+                            ThemeLink(theme) {
+                                val url = "https://www.youtube.com/results?search_query=${Uri.encode(theme)}"
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
 
@@ -1140,7 +1228,10 @@ fun AnimeDetailsContent(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 if (streaming.isNotEmpty()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        state = streamingRowState,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(streaming) { stream ->
                             AssistChip(
                                 onClick = {
@@ -1150,6 +1241,8 @@ fun AnimeDetailsContent(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(streamingRowState))
                 } else {
                     val availabilityReason = when {
                         details.status.equals("not_yet_aired", ignoreCase = true) ->
@@ -1255,7 +1348,10 @@ fun AnimeDetailsContent(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyRow(
+                        state = picturesRowState,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         items(details.pictures) { pic ->
                             val picUrl = pic.large ?: pic.medium
                             AsyncImage(
@@ -1269,6 +1365,8 @@ fun AnimeDetailsContent(
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(picturesRowState))
                 }
             }
         }
@@ -1383,42 +1481,6 @@ fun AnimeDetailsContent(
             }
         }
 
-        // Themes
-        if (themes != null && (themes.openings.isNotEmpty() || themes.endings.isNotEmpty())) {
-            item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    Text(
-                        text = "Opening & Ending Themes",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (themes.openings.isNotEmpty()) {
-                        Text("Openings:", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 4.dp))
-                        themes.openings.forEach { theme ->
-                            ThemeLink(theme) {
-                                val url = "https://www.youtube.com/results?search_query=${Uri.encode(theme)}"
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }
-                        }
-                    }
-
-                    if (themes.endings.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Endings:", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(vertical = 4.dp))
-                        themes.endings.forEach { theme ->
-                            ThemeLink(theme) {
-                                val url = "https://www.youtube.com/results?search_query=${Uri.encode(theme)}"
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-            }
-        }
-
         // Stats Donut Chart
         if (details.statistics?.status != null || scoreDistribution.isNotEmpty() || (details.numScoringUsers ?: 0) > 0) {
             item {
@@ -1434,6 +1496,7 @@ fun AnimeDetailsContent(
                 val hasScoreDistribution = scoreDistribution.any { it.votes > 0 || it.percentage > 0.0 }
                 if (total > 0 || hasScoreDistribution || scoringUsers > 0) {
                     val members = details.statistics?.numListUsers ?: details.numListUsers ?: total
+                    val formattedMembers = String.format(Locale.US, "%,d", members)
                     fun pct(value: Int): Float = if (total > 0) (value * 100f / total) else 0f
                     val completionRate = pct(completed)
                     val dropRate = pct(dropped)
@@ -1485,7 +1548,7 @@ fun AnimeDetailsContent(
                     fun pillMetric(label: String): String = when (label) {
                         "Trending" -> "Watching: ${watchingRate.toInt()}% · Planned: ${planRate.toInt()}%"
                         "Beloved" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
-                        "HiddenGem" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
+                        "HiddenGem" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: $formattedMembers"
                         "Polarizing" -> "Scores 9–10: ${highScoreShare.toInt()}% · Scores 5–8: ${score5to8Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
                         "High Dropoff" -> "Dropped: ${dropRate.toInt()}% · Completed: ${completionRate.toInt()}%"
                         "Disliked" -> "Scores 1–4: ${lowScoreShare.toInt()}%"
@@ -1495,8 +1558,8 @@ fun AnimeDetailsContent(
                         "Mid" -> "Scores 5–7: ${score5to7Share.toInt()}%"
                         "Broad Appeal" -> "Scores 5–10: ${score5to10Share.toInt()}% · Scores 1–4: ${lowScoreShare.toInt()}%"
                         "High Interest" -> "Planned: ${planRate.toInt()}%"
-                        "Niche" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: %,d".format(members)
-                        "Obscure" -> "Members: %,d".format(members)
+                        "Niche" -> "Scores 9–10: ${highScoreShare.toInt()}% · Members: $formattedMembers"
+                        "Obscure" -> "Members: $formattedMembers"
                         "Slowburn" -> "Runtime: ${totalRuntimeMinutes.toInt()} min · Scores 9–10: ${highScoreShare.toInt()}%"
                         else -> ""
                     }
@@ -1718,6 +1781,7 @@ fun AnimeDetailsContent(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         LazyRow(
+                            state = communityBadgesRowState,
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(end = 16.dp)
@@ -1734,6 +1798,8 @@ fun AnimeDetailsContent(
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(communityBadgesRowState))
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2017,7 +2083,8 @@ fun AnimeDetailsContent(
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     LazyColumn(
-                        modifier = Modifier.weight(1f),
+                        state = castListState,
+                        modifier = Modifier.weight(1f).verticalScrollbar(castListState),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
                         items(characters) { charData ->
@@ -2115,7 +2182,8 @@ fun AnimeDetailsContent(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     LazyColumn(
-                        modifier = Modifier.weight(1f),
+                        state = peopleListState,
+                        modifier = Modifier.weight(1f).verticalScrollbar(peopleListState),
                         contentPadding = PaddingValues(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -2239,9 +2307,11 @@ private fun DetailsGridPopup(
                         }
                     }
                     else -> {
+                        val relatedGridState = rememberLazyGridState()
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(3),
-                            modifier = Modifier.fillMaxSize(),
+                            state = relatedGridState,
+                            modifier = Modifier.fillMaxSize().verticalScrollbar(relatedGridState),
                             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2434,6 +2504,7 @@ fun EditListStatusDialog(
     onDismiss: () -> Unit,
     onSave: (String?, Boolean?, Int?, Int?, Int?, Int?, Int?, String?, String?, String?, String?) -> Unit
 ) {
+    val editStatusScrollState = rememberScrollState()
     var status by remember { mutableStateOf(currentStatus.status ?: "plan_to_watch") }
     var score by remember { mutableIntStateOf(currentStatus.score) }
     var episodes by remember { mutableIntStateOf(currentStatus.numEpisodesWatched) }
@@ -2526,7 +2597,8 @@ fun EditListStatusDialog(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(editStatusScrollState)
+                        .verticalScrollbar(editStatusScrollState)
                 ) {
                     // Status Icons
                     Text("Status", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(vertical = 8.dp))

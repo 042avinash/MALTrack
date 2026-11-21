@@ -11,7 +11,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -402,10 +406,13 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxSize(),
                             bottomBar = {
                                 if (showBottomBar) {
-                                    NavigationBar {
+                                    NavigationBar(
+                                        modifier = Modifier.navigationBarsPadding().height(56.dp),
+                                        windowInsets = WindowInsets(0, 0, 0, 0)
+                                    ) {
                                         NavigationBarItem(
-                                            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                                            label = { Text("Home") },
+                                            icon = { Icon(Icons.Filled.Home, contentDescription = "Home", modifier = Modifier.size(20.dp)) },
+                                            label = { Text("Home", style = MaterialTheme.typography.labelSmall) },
                                             selected = currentDestination?.hierarchy?.any { it.route?.startsWith("anime_list") == true } == true,
                                             onClick = {
                                                 navigateToBottomDestination(
@@ -415,8 +422,8 @@ class MainActivity : ComponentActivity() {
                                             }
                                         )
                                         NavigationBarItem(
-                                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "User List") },
-                                            label = { Text("My List") },
+                                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "User List", modifier = Modifier.size(20.dp)) },
+                                            label = { Text("My List", style = MaterialTheme.typography.labelSmall) },
                                             selected = currentDestination?.hierarchy?.any { it.route?.startsWith("user_list") == true } == true,
                                             onClick = {
                                                 val subTab = getStatusIndex(defaultAnimeStatus, true)
@@ -429,19 +436,19 @@ class MainActivity : ComponentActivity() {
                                         NavigationBarItem(
                                             icon = {
                                                 if (userPfp.isNullOrBlank()) {
-                                                    Icon(Icons.Filled.Person, contentDescription = "Profile")
+                                                    Icon(Icons.Filled.Person, contentDescription = "Profile", modifier = Modifier.size(20.dp))
                                                 } else {
                                                     AsyncImage(
                                                         model = userPfp,
                                                         contentDescription = "Profile",
                                                         modifier = Modifier
-                                                            .size(24.dp)
+                                                            .size(20.dp)
                                                             .clip(CircleShape),
                                                         contentScale = ContentScale.Crop
                                                     )
                                                 }
                                             },
-                                            label = { Text("Profile") },
+                                            label = { Text("Profile", style = MaterialTheme.typography.labelSmall) },
                                             selected = currentDestination?.hierarchy?.any { it.route?.startsWith("profile_route") == true && currentDestination?.route?.contains("username=null") == true } == true,
                                             onClick = {
                                                 navigateToBottomDestination(
@@ -454,7 +461,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         ) { innerPadding ->
-                            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding)
+                                    .consumeWindowInsets(innerPadding)
+                            ) {
                                 NavHost(
                                     navController = navController,
                                     startDestination = startRoute,

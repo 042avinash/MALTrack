@@ -102,9 +102,11 @@ class ProfileViewModel @Inject constructor(
                     }
                     globalViewerName = malProfile.name
                     globalViewerNameTimestamp = SystemClock.elapsedRealtime()
-                    // The official authenticated endpoint already contains everything needed
-                    // for the signed-in profile. Do not make the page depend on Jikan.
-                    val fullProfile = malProfile.toProfileDisplayData()
+                    // MAL provides the signed-in profile and statistics; the public
+                    // favorites endpoint fills the anime and manga sections separately.
+                    val fullProfile = malProfile.toProfileDisplayData().copy(
+                        favorites = fetchProfileFavorites(malProfile.name)
+                    )
                     val successState = ProfileUiState.Success(
                         malUser = malProfile,
                         jikanUser = fullProfile,
@@ -127,10 +129,13 @@ class ProfileViewModel @Inject constructor(
                             url = "https://myanimelist.net/profile/$targetUsername"
                         )
                     }
+                    val profileWithFavorites = fullProfile.copy(
+                        favorites = fetchProfileFavorites(targetUsername) ?: fullProfile.favorites
+                    )
                     val viewerIsFriendWithProfileOwner = resolveViewerFriendStatus(targetUsername)
                     val successState = ProfileUiState.Success(
                         malUser = null,
-                        jikanUser = fullProfile,
+                        jikanUser = profileWithFavorites,
                         friends = cachedState?.friends.orEmpty(),
                         isOwnProfile = false,
                         viewerIsFriendWithProfileOwner = viewerIsFriendWithProfileOwner,
@@ -151,6 +156,16 @@ class ProfileViewModel @Inject constructor(
                     details = diagnosticErrorSummary(e)
                 )
             }
+        }
+    }
+
+    private suspend fun fetchProfileFavorites(username: String): com.example.myapplication.data.model.JikanUserFavorites? {
+        return try {
+            withTimeoutRetry { repository.getUserFavorites(username) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
         }
     }
 

@@ -11,6 +11,7 @@ data class UserProfile(
     val gender: String? = null,
     val birthday: String? = null,
     val location: String? = null,
+    @SerialName("joined_at") val joinedAt: String? = null,
     @SerialName("anime_statistics") val animeStatistics: AnimeStatistics? = null,
     @SerialName("manga_statistics") val mangaStatistics: MangaStatistics? = null
 )
@@ -31,6 +32,7 @@ fun UserProfile.toProfileDisplayData(): JikanFullUserProfile = JikanFullUserProf
     gender = gender,
     birthday = birthday,
     location = location,
+    joined = joinedAt,
     statistics = JikanUserStatistics(
         anime = animeStatistics?.let { stats ->
             JikanAnimeStats(

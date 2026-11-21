@@ -190,7 +190,7 @@ interface MalApiService {
     @GET("users/@me")
     suspend fun getMyUserProfile(
         @Header("X-MAL-CLIENT-ID") clientId: String,
-        @Query("fields") fields: String = "id,name,picture,gender,birthday,location,anime_statistics,manga_statistics"
+        @Query("fields") fields: String = "id,name,picture,gender,birthday,location,joined_at,anime_statistics,manga_statistics"
     ): UserProfile
 
     @GET("users/{username}/animelist")

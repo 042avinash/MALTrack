@@ -504,6 +504,8 @@ class AnimeDetailsViewModel @Inject constructor(
 
     private fun launchSupplementaryRefresh(details: AnimeDetailsResponse) {
         supplementaryJob?.cancel()
+        launchAiringRefresh(details)
+        launchThemesRefresh(details)
         supplementaryJob = viewModelScope.launch {
             val before = _uiState.value as? AnimeDetailsUiState.Success
             if (before != null && before.details.id == details.id) {
@@ -517,21 +519,12 @@ class AnimeDetailsViewModel @Inject constructor(
                     val charactersDeferred = async {
                         runCatching { repository.getAnimeCharacters(animeId).data }.getOrDefault(emptyList())
                     }
-                    val themesDeferred = async {
-                        runCatching { repository.getAnimeThemes(animeId).data }.getOrNull()
-                    }
                     val streamingDeferred = async {
                         runCatching { repository.getAnimeStreaming(animeId).data }.getOrDefault(emptyList())
                     }
-                    val airingDeferred = async {
-                        runCatching { repository.getAiringAnimeDetails(listOf(animeId)).firstOrNull() }.getOrNull()
-                    }
-
                     SupplementaryAnimeData(
                         characters = charactersDeferred.await(),
-                        themes = themesDeferred.await(),
-                        streaming = streamingDeferred.await(),
-                        airingMedia = airingDeferred.await()
+                        streaming = streamingDeferred.await()
                     )
                 }
             }.getOrNull()
@@ -553,10 +546,7 @@ class AnimeDetailsViewModel @Inject constructor(
 
             val updated = current.copy(
                 characters = enriched.characters,
-                themes = enriched.themes,
                 streaming = enriched.streaming,
-                airingMedia = enriched.airingMedia?.takeIf { it.nextAiringEpisode != null }
-                    ?: estimatedAiringFromMalBroadcast(details.broadcast),
                 isSupplementaryLoaded = true
             )
             _uiState.value = updated
@@ -576,6 +566,34 @@ class AnimeDetailsViewModel @Inject constructor(
             )
             detailsCache[animeId] = SystemClock.elapsedRealtime() to finalized
             _uiState.value = finalized
+        }
+    }
+
+    private fun launchThemesRefresh(details: AnimeDetailsResponse) {
+        viewModelScope.launch {
+            val themes = runCatching { repository.getAnimeThemes(animeId).data }.getOrNull()
+            val current = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (current.details.id != details.id || (current.themes == themes && current.isThemesLoaded)) return@launch
+
+            val updated = current.copy(themes = themes, isThemesLoaded = true)
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
+        }
+    }
+
+    private fun launchAiringRefresh(details: AnimeDetailsResponse) {
+        viewModelScope.launch {
+            val airingMedia = runCatching {
+                repository.getAiringAnimeDetails(listOf(animeId)).firstOrNull()
+            }.getOrNull()?.takeIf { it.nextAiringEpisode != null }
+                ?: estimatedAiringFromMalBroadcast(details.broadcast)
+
+            val current = _uiState.value as? AnimeDetailsUiState.Success ?: return@launch
+            if (current.details.id != details.id || current.airingMedia == airingMedia) return@launch
+
+            val updated = current.copy(airingMedia = airingMedia)
+            detailsCache[animeId] = SystemClock.elapsedRealtime() to updated
+            _uiState.value = updated
         }
     }
 
@@ -650,6 +668,7 @@ sealed interface AnimeDetailsUiState {
         val airingMedia: AniListMedia?,
         val recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
         val isSupplementaryLoaded: Boolean = false,
+        val isThemesLoaded: Boolean = false,
         val isReviewsLoaded: Boolean = false,
         val isReviewsLoading: Boolean = false,
         val isRecommendationsLoaded: Boolean = false,
@@ -678,9 +697,7 @@ data class RecommendationCardMeta(
 
 private data class SupplementaryAnimeData(
     val characters: List<JikanCharacterData>,
-    val themes: JikanThemesData?,
-    val streaming: List<JikanStreamingData>,
-    val airingMedia: AniListMedia?
+    val streaming: List<JikanStreamingData>
 )
 
 private data class ScoreDistributionFetchResult(
