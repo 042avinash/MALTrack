@@ -8,12 +8,15 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GridView
@@ -21,38 +24,47 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
+import com.example.myapplication.data.local.ThemePalette
 import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.notifications.AiringNotificationScheduler
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onFeedbackClick: () -> Unit,
+    onLogout: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     val theme by viewModel.themePreference.collectAsState()
+    val themePalette by viewModel.themePalette.collectAsState()
     val titleLang by viewModel.titleLanguage.collectAsState()
     val defaultSection by viewModel.defaultSection.collectAsState()
     val defaultAnimeStatus by viewModel.defaultAnimeStatus.collectAsState()
@@ -61,10 +73,7 @@ fun SettingsScreen(
     val defaultMangaSort by viewModel.defaultMangaSort.collectAsState()
     val defaultAnimeDiscoverySort by viewModel.defaultAnimeDiscoverySort.collectAsState()
     val defaultMangaDiscoverySort by viewModel.defaultMangaDiscoverySort.collectAsState()
-    val defaultAnimeListStyleIsGrid by viewModel.defaultAnimeListStyleIsGrid.collectAsState()
-    val defaultMangaListStyleIsGrid by viewModel.defaultMangaListStyleIsGrid.collectAsState()
-    val defaultAnimeDiscoveryStyleIsGrid by viewModel.defaultAnimeDiscoveryStyleIsGrid.collectAsState()
-    val defaultMangaDiscoveryStyleIsGrid by viewModel.defaultMangaDiscoveryStyleIsGrid.collectAsState()
+    val listStyleIsGrid by viewModel.listStyleIsGrid.collectAsState()
     val episodeNotificationsEnabled by viewModel.episodeNotificationsEnabled.collectAsState()
     val homeContinueWatchingEnabled by viewModel.homeContinueWatchingEnabled.collectAsState()
     val homeContinueReadingEnabled by viewModel.homeContinueReadingEnabled.collectAsState()
@@ -74,9 +83,11 @@ fun SettingsScreen(
     val homeMangaPicksEnabled by viewModel.homeMangaPicksEnabled.collectAsState()
     val homeDefaultSearchAnime by viewModel.homeDefaultSearchAnime.collectAsState()
     val nsfwEnabled by viewModel.nsfwEnabled.collectAsState()
+    val showNsfwCount by viewModel.showNsfwCount.collectAsState()
     val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as? PowerManager
     var pendingBatteryOptimizationPrompt by remember { mutableStateOf(false) }
     var showBatteryOptimizationWarning by remember { mutableStateOf(false) }
+    var pendingTestNotification by remember { mutableStateOf(false) }
     val batteryOptimizationIgnoredNow = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
@@ -108,68 +119,57 @@ fun SettingsScreen(
         if (granted) {
             viewModel.setEpisodeNotificationsEnabled(true)
             AiringNotificationScheduler.schedule(context)
-            AiringNotificationScheduler.triggerNow(context)
+            if (pendingTestNotification) {
+                AiringNotificationScheduler.triggerTest(context)
+                pendingTestNotification = false
+                coroutineScope.launch { snackbarHostState.showSnackbar("Test notification queued") }
+            } else {
+                AiringNotificationScheduler.triggerNow(context)
+            }
             maybePromptBatteryOptimization()
         } else {
+            if (pendingTestNotification) {
+                pendingTestNotification = false
+                coroutineScope.launch { snackbarHostState.showSnackbar("Notification permission denied") }
+            }
             viewModel.setEpisodeNotificationsEnabled(false)
             pendingBatteryOptimizationPrompt = false
             showBatteryOptimizationWarning = false
         }
     }
 
-    var showThemeDialog by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }
     var showSectionDialog by remember { mutableStateOf(false) }
-    var showAnimeStatusDialog by remember { mutableStateOf(false) }
-    var showMangaStatusDialog by remember { mutableStateOf(false) }
-    var showAnimeSortDialog by remember { mutableStateOf(false) }
-    var showMangaSortDialog by remember { mutableStateOf(false) }
-    var showAnimeDiscoverySortDialog by remember { mutableStateOf(false) }
-    var showMangaDiscoverySortDialog by remember { mutableStateOf(false) }
-    var showAnimeListStyleDialog by remember { mutableStateOf(false) }
-    var showMangaListStyleDialog by remember { mutableStateOf(false) }
-    var showAnimeDiscoveryStyleDialog by remember { mutableStateOf(false) }
-    var showMangaDiscoveryStyleDialog by remember { mutableStateOf(false) }
+    var showListSectionDialog by remember { mutableStateOf(false) }
+    var showListSortingDialog by remember { mutableStateOf(false) }
+    var showDiscoverySortingDialog by remember { mutableStateOf(false) }
+    var showListStyleDialog by remember { mutableStateOf(false) }
     var showHomeSectionsDialog by remember { mutableStateOf(false) }
     var showHomeSearchDefaultDialog by remember { mutableStateOf(false) }
-    var showAppInfoDialog by remember { mutableStateOf(false) }
-    var showDefaultsPage by remember { mutableStateOf(false) }
+    var showLogoutConfirmation by remember { mutableStateOf(false) }
+    var showResetConfirmation by remember { mutableStateOf(false) }
+    var selectedSettingsPage by remember { mutableStateOf<String?>(null) }
     var startupParentSelection by remember { mutableStateOf<StartupParentOption?>(null) }
     var pendingStartupSection by remember { mutableStateOf<DefaultSection?>(null) }
     var pendingNsfwEnabled by remember { mutableStateOf<Boolean?>(null) }
     var pendingHomeSectionsConfig by remember { mutableStateOf<HomeSectionsConfig?>(null) }
+    val navigateUp = {
+        when {
+            selectedSettingsPage != null -> selectedSettingsPage = null
+            else -> onBack()
+        }
+    }
+    BackHandler(enabled = selectedSettingsPage != null) {
+        navigateUp()
+    }
 
-    if (showDefaultsPage) {
-        DefaultsScreen(
-            defaultAnimeStatus = defaultAnimeStatus,
-            defaultMangaStatus = defaultMangaStatus,
-            defaultAnimeSort = defaultAnimeSort,
-            defaultMangaSort = defaultMangaSort,
-            defaultAnimeDiscoverySort = defaultAnimeDiscoverySort,
-            defaultMangaDiscoverySort = defaultMangaDiscoverySort,
-            defaultAnimeListStyleIsGrid = defaultAnimeListStyleIsGrid,
-            defaultMangaListStyleIsGrid = defaultMangaListStyleIsGrid,
-            defaultAnimeDiscoveryStyleIsGrid = defaultAnimeDiscoveryStyleIsGrid,
-            defaultMangaDiscoveryStyleIsGrid = defaultMangaDiscoveryStyleIsGrid,
-            onBack = { showDefaultsPage = false },
-            onDefaultAnimeStatusClick = { showAnimeStatusDialog = true },
-            onDefaultMangaStatusClick = { showMangaStatusDialog = true },
-            onDefaultAnimeListStyleClick = { showAnimeListStyleDialog = true },
-            onDefaultMangaListStyleClick = { showMangaListStyleDialog = true },
-            onDefaultAnimeDiscoveryStyleClick = { showAnimeDiscoveryStyleDialog = true },
-            onDefaultMangaDiscoveryStyleClick = { showMangaDiscoveryStyleDialog = true },
-            onDefaultAnimeSortClick = { showAnimeSortDialog = true },
-            onDefaultMangaSortClick = { showMangaSortDialog = true },
-            onDefaultAnimeDiscoverySortClick = { showAnimeDiscoverySortDialog = true },
-            onDefaultMangaDiscoverySortClick = { showMangaDiscoverySortDialog = true }
-        )
-    } else {
-        Scaffold(
+    Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
-                    title = { Text("Settings") },
+                    title = { Text(selectedSettingsPage ?: "Settings") },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = navigateUp) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     }
@@ -184,48 +184,217 @@ fun SettingsScreen(
                     .verticalScroll(settingsScrollState)
                     .verticalScrollbar(settingsScrollState)
             ) {
-                SettingClickableItem(
-                    icon = Icons.Default.Palette,
-                    title = "Theme",
-                    subtitle = theme.name.lowercase().replaceFirstChar { it.uppercase() },
-                    onClick = { showThemeDialog = true }
+                if (selectedSettingsPage == null) {
+                    SettingsSection(title = "Preferences") {
+                    listOf("Appearance", "Startup & Browsing", "Notifications", "Content").forEachIndexed { index, page ->
+                        SettingClickableItem(
+                            icon = when (page) {
+                                "Appearance" -> Icons.Default.Palette
+                                "Startup & Browsing" -> Icons.Default.Home
+                                "Notifications" -> Icons.Default.Notifications
+                                "Content" -> Icons.Default.Visibility
+                                else -> Icons.Default.Info
+                            },
+                            title = page,
+                            subtitle = when (page) {
+                                "Appearance" -> "${themeModeLabel(theme)} · ${themePaletteLabel(themePalette)}"
+                                "Startup & Browsing" -> "${startupPageLabel(defaultSection)} · ${if (homeDefaultSearchAnime) "Anime" else "Manga"} search"
+                                "Notifications" -> if (episodeNotificationsEnabled) "Episode alerts on" else "Episode alerts off"
+                                else -> "${titleLang.name.lowercase().replaceFirstChar { it.uppercase() }} titles · 18+ ${if (nsfwEnabled) "on" else "off"} · NSFW count ${if (showNsfwCount) "shown" else "hidden"}"
+                            },
+                            onClick = { selectedSettingsPage = page }
+                        )
+                        if (index < 3) HorizontalDivider()
+                    }
+                    }
+
+                    SettingsSection(title = "Account") {
+                        SettingClickableItem(
+                            icon = Icons.Default.Logout,
+                            title = "Log Out",
+                            subtitle = "Sign out of your MyAnimeList account",
+                            onClick = { showLogoutConfirmation = true }
+                        )
+                    }
+
+                    SettingsSection(title = "Support & About") {
+                        SettingClickableItem(
+                            icon = Icons.Default.List,
+                            title = "Send Feedback",
+                            subtitle = "Report issues or suggest new features",
+                            onClick = onFeedbackClick
+                        )
+                        HorizontalDivider()
+                        SettingClickableItem(
+                            icon = Icons.Default.Info,
+                            title = "API Credits & Docs",
+                            subtitle = "See the services MALTrack uses",
+                            onClick = { selectedSettingsPage = "API Credits & Docs" }
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.maltrack_logo),
+                            contentDescription = "MALTrack logo",
+                            modifier = Modifier.size(104.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.labelMedium)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = "Download latest version",
+                            textAlign = TextAlign.End,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.clickable {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://github.com/042avinash/MALTrack/releases/latest/download/app-release.apk")
+                                    )
+                                )
+                            }.padding(vertical = 8.dp)
+                        )
+                    }
+                }
+
+                if (selectedSettingsPage == "Appearance") {
+                Text(
+                    text = "Color Mode",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(start = 16.dp, top = 16.dp)
+                )
+                val modeOptions = listOf(
+                    ThemePreference.SYSTEM to "System",
+                    ThemePreference.LIGHT to "Light",
+                    ThemePreference.DARK to "Dark",
+                    ThemePreference.AMOLED to "AMOLED"
+                )
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    modeOptions.forEachIndexed { index, (mode, label) ->
+                        SegmentedButton(
+                            selected = theme == mode,
+                            onClick = { viewModel.setThemePreference(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = modeOptions.size),
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                Text(
+                    text = when (theme) {
+                        ThemePreference.SYSTEM -> "Follows your device appearance"
+                        ThemePreference.LIGHT -> "Always use light colors"
+                        ThemePreference.DARK -> "Always use dark colors"
+                        ThemePreference.AMOLED -> "Dark mode with pure black backgrounds"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
 
-                SettingClickableItem(
-                    icon = Icons.Default.Language,
-                    title = "Title Language",
-                    subtitle = titleLang.name.lowercase().replaceFirstChar { it.uppercase() },
-                    onClick = { showLangDialog = true }
+                Text(
+                    text = "Color Palette",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp)
                 )
-
-                SettingClickableItem(
-                    icon = Icons.Default.Home,
-                    title = "Startup Page",
-                    subtitle = startupPageLabel(defaultSection),
-                    onClick = { showSectionDialog = true }
+                Text(
+                    text = "Choose a palette to change the app's colors.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
+                listOf(
+                    ThemePalette.SYSTEM,
+                    ThemePalette.ANIME_NIGHT,
+                    ThemePalette.MANGA_PAPER,
+                    ThemePalette.MAL_INSPIRED,
+                    ThemePalette.SOFT_PASTEL
+                ).forEach { palette ->
+                    ThemePaletteCard(
+                        palette = palette,
+                        selected = themePalette == palette,
+                        onClick = { viewModel.setThemePalette(palette) }
+                    )
+                }
+                }
 
-                SettingClickableItem(
-                    icon = Icons.Default.Tune,
-                    title = "Defaults",
-                    subtitle = "List section, style, and anime/manga sorting",
-                    onClick = { showDefaultsPage = true }
-                )
+                if (selectedSettingsPage == "Startup & Browsing") {
+                SettingsSection(title = "Startup") {
+                    SettingClickableItem(
+                        icon = Icons.Default.Home,
+                        title = "Startup Page",
+                        subtitle = "${startupPageLabel(defaultSection)} · Restart required",
+                        onClick = { showSectionDialog = true }
+                    )
+                }
 
-                SettingClickableItem(
-                    icon = Icons.Default.Home,
-                    title = "Home Sections",
-                    subtitle = "Customize which home tabs are visible",
-                    onClick = { showHomeSectionsDialog = true }
-                )
+                SettingsSection(title = "Home Browsing") {
+                    SettingClickableItem(
+                        icon = Icons.Default.Home,
+                        title = "Home Sections",
+                        subtitle = "${listOf(homeContinueWatchingEnabled, homeContinueReadingEnabled, homeDiscoveryButtonsEnabled, homeRandomAnimeEnabled, homeAnimePicksEnabled, homeMangaPicksEnabled).count { it }} of 6 enabled · Restart required",
+                        onClick = { showHomeSectionsDialog = true }
+                    )
+                    HorizontalDivider()
+                    SettingClickableItem(
+                        icon = Icons.Default.Movie,
+                        title = "Default Home Search",
+                        subtitle = if (homeDefaultSearchAnime) "Anime" else "Manga",
+                        onClick = { showHomeSearchDefaultDialog = true }
+                    )
+                }
 
-                SettingClickableItem(
-                    icon = Icons.Default.Movie,
-                    title = "Default Home Search",
-                    subtitle = if (homeDefaultSearchAnime) "Anime" else "Manga",
-                    onClick = { showHomeSearchDefaultDialog = true }
-                )
+                SettingsSection(title = "Page Styling") {
+                    SettingClickableItem(
+                        icon = Icons.Default.GridView,
+                        title = "Page Style",
+                        subtitle = if (listStyleIsGrid) "Grid · Applied everywhere" else "List · Applied everywhere",
+                        onClick = { showListStyleDialog = true }
+                    )
+                }
 
+                SettingsSection(title = "List Defaults") {
+                    SettingClickableItem(
+                        icon = Icons.Default.List,
+                        title = "List Section",
+                        subtitle = "Anime: ${listSectionLabel(defaultAnimeStatus)} · Manga: ${listSectionLabel(defaultMangaStatus)}",
+                        onClick = { showListSectionDialog = true }
+                    )
+                    HorizontalDivider()
+                    SettingClickableItem(
+                        icon = Icons.Default.Sort,
+                        title = "List Sorting",
+                        subtitle = "Anime: ${sortLabel(defaultAnimeSort)} · Manga: ${sortLabel(defaultMangaSort)}",
+                        onClick = { showListSortingDialog = true }
+                    )
+                }
+
+                SettingsSection(title = "Discovery Sorting") {
+                    SettingClickableItem(
+                        icon = Icons.Default.Sort,
+                        title = "Discovery Sorting",
+                        subtitle = "Anime: ${discoverySortLabel(defaultAnimeDiscoverySort)} · Manga: ${discoverySortLabel(defaultMangaDiscoverySort)}",
+                        onClick = { showDiscoverySortingDialog = true }
+                    )
+                }
+
+                SettingsSection(title = "Reset") {
+                    SettingClickableItem(
+                        icon = Icons.Default.Refresh,
+                        title = "Reset Defaults",
+                        subtitle = "Restore original anime and manga list settings",
+                        onClick = { showResetConfirmation = true }
+                    )
+                }
+                }
+
+                if (selectedSettingsPage == "Notifications") {
                 SettingsSection(title = "Notifications") {
                     Row(
                         modifier = Modifier
@@ -260,7 +429,7 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
-                                    text = "For anime in your watching list",
+                                text = if (episodeNotificationsEnabled) "On · For anime in your watching list" else "Off · For anime in your watching list",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -288,12 +457,17 @@ fun SettingsScreen(
                         title = "Test Notification",
                         subtitle = "Send a sample notification to verify alerts are working",
                         onClick = {
+                            pendingTestNotification = true
                             toggleEpisodeNotifications(
                                 enabled = true,
                                 viewModel = viewModel,
                                 context = context,
                                 permissionLauncher = notificationPermissionLauncher,
-                                onEnabled = { AiringNotificationScheduler.triggerTest(context) }
+                                onEnabled = {
+                                    pendingTestNotification = false
+                                    AiringNotificationScheduler.triggerTest(context)
+                                    coroutineScope.launch { snackbarHostState.showSnackbar("Test notification queued") }
+                                }
                             )
                         }
                     )
@@ -332,6 +506,16 @@ fun SettingsScreen(
                         }
                     )
                 }
+                }
+
+                if (selectedSettingsPage == "Content") {
+                SettingClickableItem(
+                    icon = Icons.Default.Language,
+                    title = "Title Language",
+                    subtitle = titleLang.name.lowercase().replaceFirstChar { it.uppercase() },
+                    onClick = { showLangDialog = true }
+                )
+                HorizontalDivider()
 
                 Row(
                     modifier = Modifier
@@ -367,33 +551,96 @@ fun SettingsScreen(
                 }
 
                 HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.List,
-                    title = "Send Feedback",
-                    subtitle = "Report issues or suggest new features",
-                    onClick = onFeedbackClick
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.setShowNsfwCount(!showNsfwCount) }
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 16.dp)
+                        )
+                        Column {
+                            Text(text = "Show NSFW Count", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = "Show NSFW details beside Anime and Manga list counts",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = showNsfwCount,
+                        onCheckedChange = viewModel::setShowNsfwCount
+                    )
+                }
 
                 HorizontalDivider()
+                }
 
-                SettingClickableItem(
-                    icon = Icons.Default.Info,
-                    title = "App Info",
-                    subtitle = "View logo, version and creator",
-                    onClick = { showAppInfoDialog = true }
-                )
+                if (selectedSettingsPage == "API Credits & Docs") {
+                SettingsSection(title = "Data Providers") {
+                    SettingClickableItem(
+                        icon = Icons.Default.Info,
+                        title = "MyAnimeList API v2",
+                        subtitle = "Account, anime and manga lists · Open documentation",
+                        onClick = { openApiDocumentation(context, "https://myanimelist.net/apiconfig/references/api/v2") }
+                    )
+                    HorizontalDivider()
+                    SettingClickableItem(
+                        icon = Icons.Default.Info,
+                        title = "Jikan",
+                        subtitle = "Public MyAnimeList profile data · Open documentation",
+                        onClick = { openApiDocumentation(context, "https://docs.jikan.moe/") }
+                    )
+                    HorizontalDivider()
+                    SettingClickableItem(
+                        icon = Icons.Default.Info,
+                        title = "Tenrai",
+                        subtitle = "Anime and manga details · Open documentation",
+                        onClick = { openApiDocumentation(context, "https://api.tenrai.org/documentation") }
+                    )
+                    HorizontalDivider()
+                    SettingClickableItem(
+                        icon = Icons.Default.Info,
+                        title = "AnimeSchedule",
+                        subtitle = "Airing schedule data · Open documentation",
+                        onClick = { openApiDocumentation(context, "https://animeschedule.net/api/v3/documentation") }
+                    )
+                    HorizontalDivider()
+                    SettingClickableItem(
+                        icon = Icons.Default.Info,
+                        title = "jikan-edge",
+                        subtitle = "Public user favorites · Open documentation",
+                        onClick = { openApiDocumentation(context, "https://jikan.lucashdo.com/docs") }
+                    )
+                }
+                }
             }
         }
-    }
 
-    if (showThemeDialog) {
-        ThemeDialog(
-            currentValue = theme,
-            onDismiss = { showThemeDialog = false },
-            onSelect = { 
-                viewModel.setThemePreference(it)
-                showThemeDialog = false 
+    if (showResetConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmation = false },
+            title = { Text("Reset Defaults?") },
+            text = { Text("Restore the original anime and manga list sections, styles, and sorting options?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.resetListDefaults()
+                    showResetConfirmation = false
+                }) { Text("Reset") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmation = false }) { Text("Cancel") }
             }
         )
     }
@@ -436,8 +683,21 @@ fun SettingsScreen(
         )
     }
 
-    if (showAppInfoDialog) {
-        AppInfoDialog(onDismiss = { showAppInfoDialog = false })
+    if (showLogoutConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirmation = false },
+            title = { Text("Log out?") },
+            text = { Text("You can sign back in to your MyAnimeList account at any time.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLogoutConfirmation = false
+                    onLogout()
+                }) { Text("Log Out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirmation = false }) { Text("Cancel") }
+            }
+        )
     }
 
     startupParentSelection?.let { parent ->
@@ -531,176 +791,65 @@ fun SettingsScreen(
         )
     }
 
-    if (showAnimeStatusDialog) {
-        StatusDialog(
-            title = "Default Anime List Section",
-            options = listOf("all", "watching", "completed", "on_hold", "plan_to_watch", "dropped"),
-            currentValue = defaultAnimeStatus,
-            onDismiss = { showAnimeStatusDialog = false },
-            onSelect = { 
-                viewModel.setDefaultAnimeStatus(it)
-                showAnimeStatusDialog = false 
-            }
-        )
-    }
-
-    if (showMangaStatusDialog) {
-        StatusDialog(
-            title = "Default Manga List Section",
-            options = listOf("all", "reading", "completed", "on_hold", "plan_to_read", "dropped"),
-            currentValue = defaultMangaStatus,
-            onDismiss = { showMangaStatusDialog = false },
-            onSelect = {
-                viewModel.setDefaultMangaStatus(it)
-                showMangaStatusDialog = false
-            }
-        )
-    }
-
-    if (showAnimeListStyleDialog) {
+    if (showListStyleDialog) {
         ListStyleDialog(
-            title = "Default Anime List Style",
-            currentIsGrid = defaultAnimeListStyleIsGrid,
-            onDismiss = { showAnimeListStyleDialog = false },
+            title = "Page Style",
+            currentIsGrid = listStyleIsGrid,
+            onDismiss = { showListStyleDialog = false },
             onSelect = {
-                viewModel.setDefaultAnimeListStyle(it)
-                showAnimeListStyleDialog = false
+                viewModel.setListStyle(it)
+                showListStyleDialog = false
             }
         )
     }
 
-    if (showMangaListStyleDialog) {
-        ListStyleDialog(
-            title = "Default Manga List Style",
-            currentIsGrid = defaultMangaListStyleIsGrid,
-            onDismiss = { showMangaListStyleDialog = false },
-            onSelect = {
-                viewModel.setDefaultMangaListStyle(it)
-                showMangaListStyleDialog = false
+    if (showListSectionDialog) {
+        ListSectionDefaultsDialog(
+            animeStatus = defaultAnimeStatus,
+            mangaStatus = defaultMangaStatus,
+            onDismiss = { showListSectionDialog = false },
+            onSave = { scope, section ->
+                if (scope != SettingsMediaScope.MANGA) {
+                    viewModel.setDefaultAnimeStatus(sectionForMedia(section, isAnime = true))
+                }
+                if (scope != SettingsMediaScope.ANIME) {
+                    viewModel.setDefaultMangaStatus(sectionForMedia(section, isAnime = false))
+                }
+                showListSectionDialog = false
             }
         )
     }
 
-    if (showAnimeDiscoveryStyleDialog) {
-        ListStyleDialog(
-            title = "Default Anime Discovery Style",
-            currentIsGrid = defaultAnimeDiscoveryStyleIsGrid,
-            onDismiss = { showAnimeDiscoveryStyleDialog = false },
-            onSelect = {
-                viewModel.setDefaultAnimeDiscoveryStyle(it)
-                showAnimeDiscoveryStyleDialog = false
+    if (showListSortingDialog) {
+        ListSortingDefaultsDialog(
+            animeSort = defaultAnimeSort,
+            mangaSort = defaultMangaSort,
+            onDismiss = { showListSortingDialog = false },
+            onSave = { scope, sort ->
+                if (scope != SettingsMediaScope.MANGA) {
+                    viewModel.setDefaultAnimeSort(sortForMedia(sort, isAnime = true))
+                }
+                if (scope != SettingsMediaScope.ANIME) {
+                    viewModel.setDefaultMangaSort(sortForMedia(sort, isAnime = false))
+                }
+                showListSortingDialog = false
             }
         )
     }
 
-    if (showMangaDiscoveryStyleDialog) {
-        ListStyleDialog(
-            title = "Default Manga Discovery Style",
-            currentIsGrid = defaultMangaDiscoveryStyleIsGrid,
-            onDismiss = { showMangaDiscoveryStyleDialog = false },
-            onSelect = {
-                viewModel.setDefaultMangaDiscoveryStyle(it)
-                showMangaDiscoveryStyleDialog = false
+    if (showDiscoverySortingDialog) {
+        DiscoverySortingDefaultsDialog(
+            animeSort = defaultAnimeDiscoverySort,
+            mangaSort = defaultMangaDiscoverySort,
+            onDismiss = { showDiscoverySortingDialog = false },
+            onSave = { scope, sort ->
+                if (scope != SettingsMediaScope.MANGA) viewModel.setDefaultAnimeDiscoverySort(sort)
+                if (scope != SettingsMediaScope.ANIME) viewModel.setDefaultMangaDiscoverySort(sort)
+                showDiscoverySortingDialog = false
             }
         )
     }
 
-    if (showAnimeSortDialog) {
-        SortDialog(
-            title = "Default List Sorting (Anime)",
-            currentValue = defaultAnimeSort,
-            onDismiss = { showAnimeSortDialog = false },
-            onSelect = {
-                viewModel.setDefaultAnimeSort(
-                    when (it) {
-                        "title" -> "anime_title"
-                        "start_date" -> "anime_start_date"
-                        else -> it
-                    }
-                )
-                showAnimeSortDialog = false
-            }
-        )
-    }
-
-    if (showMangaSortDialog) {
-        SortDialog(
-            title = "Default List Sorting (Manga)",
-            currentValue = defaultMangaSort,
-            onDismiss = { showMangaSortDialog = false },
-            onSelect = {
-                viewModel.setDefaultMangaSort(
-                    when (it) {
-                        "title" -> "manga_title"
-                        "start_date" -> "manga_start_date"
-                        else -> it
-                    }
-                )
-                showMangaSortDialog = false
-            }
-        )
-    }
-
-    if (showAnimeDiscoverySortDialog) {
-        DiscoverySortDialog(
-            title = "Default Anime Discovery Sorting",
-            currentValue = defaultAnimeDiscoverySort,
-            onDismiss = { showAnimeDiscoverySortDialog = false },
-            onSelect = {
-                viewModel.setDefaultAnimeDiscoverySort(it)
-                showAnimeDiscoverySortDialog = false
-            }
-        )
-    }
-
-    if (showMangaDiscoverySortDialog) {
-        DiscoverySortDialog(
-            title = "Default Manga Discovery Sorting",
-            currentValue = defaultMangaDiscoverySort,
-            onDismiss = { showMangaDiscoverySortDialog = false },
-            onSelect = {
-                viewModel.setDefaultMangaDiscoverySort(it)
-                showMangaDiscoverySortDialog = false
-            }
-        )
-    }
-
-}
-
-@Composable
-private fun AppInfoDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        },
-        title = { Text("App Info") },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.maltrack_logo),
-                    contentDescription = "MALTrack Logo",
-                    modifier = Modifier
-                        .height(56.dp)
-                        .padding(bottom = 10.dp)
-                )
-                Text(
-                    text = "MALTrack v${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Text(
-                    text = "Created by - Avinash Singh",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    )
 }
 
 private fun openNotificationSettings(context: android.content.Context) {
@@ -715,6 +864,12 @@ private fun openNotificationSettings(context: android.content.Context) {
         )
     }
     context.startActivity(intent)
+}
+
+private fun openApiDocumentation(context: android.content.Context, url: String) {
+    runCatching {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
 }
 
 private fun launchBatteryOptimizationRequest(
@@ -989,168 +1144,69 @@ private fun HomeSectionsDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DefaultsScreen(
-    defaultAnimeStatus: String,
-    defaultMangaStatus: String,
-    defaultAnimeSort: String,
-    defaultMangaSort: String,
-    defaultAnimeDiscoverySort: String,
-    defaultMangaDiscoverySort: String,
-    defaultAnimeListStyleIsGrid: Boolean,
-    defaultMangaListStyleIsGrid: Boolean,
-    defaultAnimeDiscoveryStyleIsGrid: Boolean,
-    defaultMangaDiscoveryStyleIsGrid: Boolean,
-    onBack: () -> Unit,
-    onDefaultAnimeStatusClick: () -> Unit,
-    onDefaultMangaStatusClick: () -> Unit,
-    onDefaultAnimeListStyleClick: () -> Unit,
-    onDefaultMangaListStyleClick: () -> Unit,
-    onDefaultAnimeDiscoveryStyleClick: () -> Unit,
-    onDefaultMangaDiscoveryStyleClick: () -> Unit,
-    onDefaultAnimeSortClick: () -> Unit,
-    onDefaultMangaSortClick: () -> Unit,
-    onDefaultAnimeDiscoverySortClick: () -> Unit,
-    onDefaultMangaDiscoverySortClick: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Defaults") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        val listSettingsScrollState = rememberScrollState()
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(listSettingsScrollState)
-                .verticalScrollbar(listSettingsScrollState)
-        ) {
-            SettingsSection(title = "Anime") {
-                SettingClickableItem(
-                    icon = Icons.Default.List,
-                    title = "Default List Section",
-                    subtitle = defaultAnimeStatus.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
-                    onClick = onDefaultAnimeStatusClick
-                )
+private fun themeModeLabel(mode: ThemePreference): String = when (mode) {
+    ThemePreference.SYSTEM -> "System"
+    ThemePreference.LIGHT -> "Light"
+    ThemePreference.DARK -> "Dark"
+    ThemePreference.AMOLED -> "AMOLED"
+}
 
-                HorizontalDivider()
+private fun themePaletteLabel(palette: ThemePalette): String = when (palette) {
+    ThemePalette.SYSTEM -> "System colors"
+    ThemePalette.ANIME_NIGHT -> "Anime Night"
+    ThemePalette.MANGA_PAPER -> "Manga Paper"
+    ThemePalette.MAL_INSPIRED -> "MAL Inspired"
+    ThemePalette.SOFT_PASTEL -> "Soft Pastel"
+}
 
-                SettingClickableItem(
-                    icon = Icons.Default.GridView,
-                    title = "Default List Style",
-                    subtitle = if (defaultAnimeListStyleIsGrid) "Grid" else "List",
-                    onClick = onDefaultAnimeListStyleClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.GridView,
-                    title = "Default Discovery List Style",
-                    subtitle = if (defaultAnimeDiscoveryStyleIsGrid) "Grid" else "List",
-                    onClick = onDefaultAnimeDiscoveryStyleClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.Sort,
-                    title = "Default List Sorting",
-                    subtitle = sortLabel(defaultAnimeSort),
-                    onClick = onDefaultAnimeSortClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.Sort,
-                    title = "Default Discovery Sorting",
-                    subtitle = discoverySortLabel(defaultAnimeDiscoverySort),
-                    onClick = onDefaultAnimeDiscoverySortClick
-                )
-            }
-
-            SettingsSection(title = "Manga") {
-                SettingClickableItem(
-                    icon = Icons.Default.List,
-                    title = "Default List Section",
-                    subtitle = defaultMangaStatus.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
-                    onClick = onDefaultMangaStatusClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.GridView,
-                    title = "Default List Style",
-                    subtitle = if (defaultMangaListStyleIsGrid) "Grid" else "List",
-                    onClick = onDefaultMangaListStyleClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.GridView,
-                    title = "Default Discovery List Style",
-                    subtitle = if (defaultMangaDiscoveryStyleIsGrid) "Grid" else "List",
-                    onClick = onDefaultMangaDiscoveryStyleClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.Sort,
-                    title = "Default List Sorting",
-                    subtitle = sortLabel(defaultMangaSort),
-                    onClick = onDefaultMangaSortClick
-                )
-
-                HorizontalDivider()
-
-                SettingClickableItem(
-                    icon = Icons.Default.Sort,
-                    title = "Default Discovery Sorting",
-                    subtitle = discoverySortLabel(defaultMangaDiscoverySort),
-                    onClick = onDefaultMangaDiscoverySortClick
-                )
-            }
-        }
-    }
+private fun themePaletteDescription(palette: ThemePalette): String = when (palette) {
+    ThemePalette.SYSTEM -> "Use colors from your device"
+    ThemePalette.ANIME_NIGHT -> "Navy, violet, and coral"
+    ThemePalette.MANGA_PAPER -> "Warm paper, ink, and vermilion"
+    ThemePalette.MAL_INSPIRED -> "Deep blue and cyan"
+    ThemePalette.SOFT_PASTEL -> "Lavender, teal, and rose"
 }
 
 @Composable
-fun ThemeDialog(currentValue: ThemePreference, onDismiss: () -> Unit, onSelect: (ThemePreference) -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Theme") },
-        text = {
-            Column {
-                listOf(ThemePreference.SYSTEM, ThemePreference.LIGHT, ThemePreference.DARK).forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(option) }
-                            .padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = currentValue == option, onClick = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(option.name.lowercase().replaceFirstChar { it.uppercase() })
-                    }
-                }
+private fun ThemePaletteCard(
+    palette: ThemePalette,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val swatches = when (palette) {
+        ThemePalette.SYSTEM -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.secondary
+        ThemePalette.ANIME_NIGHT -> Color(0xFF59428C) to Color(0xFFB64E42)
+        ThemePalette.MANGA_PAPER -> Color(0xFF854331) to Color(0xFF715B3D)
+        ThemePalette.MAL_INSPIRED -> Color(0xFF145B96) to Color(0xFF006970)
+        ThemePalette.SOFT_PASTEL -> Color(0xFF705586) to Color(0xFF35695B)
+    }
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(themePaletteLabel(palette), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    themePaletteDescription(palette),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+            Box(Modifier.size(22.dp).background(swatches.first, CircleShape))
+            Spacer(Modifier.width(7.dp))
+            Box(Modifier.size(22.dp).background(swatches.second, CircleShape))
+            Spacer(Modifier.width(10.dp))
+            RadioButton(selected = selected, onClick = null)
+        }
+    }
 }
 
 @Composable
@@ -1176,6 +1232,203 @@ fun LanguageDialog(currentValue: TitleLanguage, onDismiss: () -> Unit, onSelect:
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+private enum class SettingsMediaScope { ANIME, MANGA, BOTH }
+
+private fun listSectionLabel(section: String): String = when (section) {
+    "all" -> "All"
+    "watching" -> "Watching"
+    "reading" -> "Reading"
+    "completed" -> "Completed"
+    "on_hold" -> "On Hold"
+    "plan_to_watch" -> "Plan to Watch"
+    "plan_to_read" -> "Plan to Read"
+    "dropped" -> "Dropped"
+    else -> section.replace("_", " ").replaceFirstChar { it.uppercase() }
+}
+
+private fun canonicalListSection(section: String): String = when (section) {
+    "watching", "reading" -> "active"
+    "plan_to_watch", "plan_to_read" -> "planned"
+    else -> section
+}
+
+private fun sectionForMedia(section: String, isAnime: Boolean): String = when (section) {
+    "active" -> if (isAnime) "watching" else "reading"
+    "planned" -> if (isAnime) "plan_to_watch" else "plan_to_read"
+    else -> section
+}
+
+private fun sortForMedia(sort: String, isAnime: Boolean): String = when (sort) {
+    "title" -> if (isAnime) "anime_title" else "manga_title"
+    "start_date" -> if (isAnime) "anime_start_date" else "manga_start_date"
+    else -> sort
+}
+
+private fun canonicalSort(sort: String): String = when (sort) {
+    "anime_title", "manga_title" -> "title"
+    "anime_start_date", "manga_start_date" -> "start_date"
+    else -> sort
+}
+
+@Composable
+private fun MediaScopeSelector(scope: SettingsMediaScope, onSelect: (SettingsMediaScope) -> Unit) {
+    val options = listOf(
+        SettingsMediaScope.ANIME to "Anime",
+        SettingsMediaScope.MANGA to "Manga",
+        SettingsMediaScope.BOTH to "Both"
+    )
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (option, label) ->
+            SegmentedButton(
+                selected = scope == option,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                label = { Text(label) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListSectionDefaultsDialog(
+    animeStatus: String,
+    mangaStatus: String,
+    onDismiss: () -> Unit,
+    onSave: (SettingsMediaScope, String) -> Unit
+) {
+    var scope by remember { mutableStateOf(SettingsMediaScope.ANIME) }
+    var selectedSection by remember(animeStatus, mangaStatus) {
+        mutableStateOf(canonicalListSection(animeStatus))
+    }
+    val options = when (scope) {
+        SettingsMediaScope.ANIME -> listOf(
+            "all" to "All", "watching" to "Watching", "completed" to "Completed",
+            "on_hold" to "On Hold", "plan_to_watch" to "Plan to Watch", "dropped" to "Dropped"
+        )
+        SettingsMediaScope.MANGA -> listOf(
+            "all" to "All", "reading" to "Reading", "completed" to "Completed",
+            "on_hold" to "On Hold", "plan_to_read" to "Plan to Read", "dropped" to "Dropped"
+        )
+        SettingsMediaScope.BOTH -> listOf(
+            "all" to "All", "active" to "Watching / Reading", "completed" to "Completed",
+            "on_hold" to "On Hold", "planned" to "Plan to Watch / Read", "dropped" to "Dropped"
+        )
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("List Section") },
+        text = {
+            Column {
+                Text("Apply to", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
+                MediaScopeSelector(scope = scope, onSelect = {
+                    scope = it
+                    selectedSection = canonicalListSection(if (it == SettingsMediaScope.MANGA) mangaStatus else animeStatus)
+                })
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                options.forEach { (value, label) ->
+                    val canonicalValue = canonicalListSection(value)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { selectedSection = canonicalValue }.padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedSection == canonicalValue,
+                            onClick = { selectedSection = canonicalValue }
+                        )
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(scope, selectedSection) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun ListSortingDefaultsDialog(
+    animeSort: String,
+    mangaSort: String,
+    onDismiss: () -> Unit,
+    onSave: (SettingsMediaScope, String) -> Unit
+) {
+    var scope by remember { mutableStateOf(SettingsMediaScope.ANIME) }
+    var selectedSort by remember(animeSort, mangaSort) { mutableStateOf(canonicalSort(animeSort)) }
+    val options = listOf(
+        "list_score" to "Score",
+        "list_updated_at" to "Last Updated",
+        "title" to "Title",
+        "start_date" to "Start Date"
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("List Sorting") },
+        text = {
+            Column {
+                Text("Apply to", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
+                MediaScopeSelector(scope = scope, onSelect = {
+                    scope = it
+                    selectedSort = canonicalSort(if (it == SettingsMediaScope.MANGA) mangaSort else animeSort)
+                })
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                options.forEach { (value, label) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { selectedSort = value }.padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = selectedSort == value, onClick = { selectedSort = value })
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(scope, selectedSort) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun DiscoverySortingDefaultsDialog(
+    animeSort: String,
+    mangaSort: String,
+    onDismiss: () -> Unit,
+    onSave: (SettingsMediaScope, String) -> Unit
+) {
+    var scope by remember { mutableStateOf(SettingsMediaScope.ANIME) }
+    var selectedSort by remember(animeSort, mangaSort) {
+        mutableStateOf(if (animeSort in listOf("members", "score")) animeSort else "members")
+    }
+    val options = listOf("members" to "Popularity", "score" to "Score")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Discovery Sorting") },
+        text = {
+            Column {
+                Text("Apply to", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
+                MediaScopeSelector(scope = scope, onSelect = {
+                    scope = it
+                    selectedSort = if (it == SettingsMediaScope.MANGA) mangaSort else animeSort
+                })
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                options.forEach { (value, label) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { selectedSort = value }.padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = selectedSort == value, onClick = { selectedSort = value })
+                        Text(label)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(scope, selectedSort) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 

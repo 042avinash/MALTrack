@@ -716,6 +716,7 @@ fun MangaDetailsContent(
                                 Column(
                                     modifier = Modifier
                                         .width(92.dp)
+                                        .heightIn(min = 136.dp)
                                         .clickable {
                                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.character.url)))
                                         },
@@ -733,6 +734,7 @@ fun MangaDetailsContent(
                                     Text(
                                         text = entry.character.name,
                                         style = MaterialTheme.typography.labelSmall,
+                                        minLines = 2,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                         textAlign = TextAlign.Center
@@ -740,7 +742,9 @@ fun MangaDetailsContent(
                                     Text(
                                         text = entry.role.ifBlank { "Unknown" },
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -749,7 +753,7 @@ fun MangaDetailsContent(
                                     Box(
                                         modifier = Modifier
                                             .width(92.dp)
-                                            .height(120.dp)
+                                            .heightIn(min = 136.dp)
                                             .clickable { showAllCharactersPopup = true },
                                         contentAlignment = Alignment.Center
                                     ) {

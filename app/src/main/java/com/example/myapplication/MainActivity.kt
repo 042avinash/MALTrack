@@ -42,6 +42,7 @@ import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
+import com.example.myapplication.data.local.ThemePalette
 import com.example.myapplication.notifications.EXTRA_OPEN_ANIME_ID
 import com.example.myapplication.ui.*
 import com.example.myapplication.ui.theme.MALTrackTheme
@@ -63,16 +64,22 @@ class MainActivity : ComponentActivity() {
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val animeViewModel: AnimeViewModel = hiltViewModel()
             val themePref by settingsViewModel.themePreference.collectAsState()
+            val themePalette by settingsViewModel.themePalette.collectAsState()
             val titleLanguage by settingsViewModel.titleLanguage.collectAsState()
             val userPfp by animeViewModel.userPfp.collectAsState()
             
             val isDarkTheme = when (themePref) {
                 ThemePreference.LIGHT -> false
                 ThemePreference.DARK -> true
+                ThemePreference.AMOLED -> true
                 ThemePreference.SYSTEM -> isSystemInDarkTheme()
             }
 
-            MALTrackTheme(darkTheme = isDarkTheme) {
+            MALTrackTheme(
+                darkTheme = isDarkTheme,
+                palette = themePalette,
+                amoled = themePref == ThemePreference.AMOLED
+            ) {
                 loginViewModel = hiltViewModel()
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -630,6 +637,7 @@ class MainActivity : ComponentActivity() {
                                         SettingsScreen(
                                             viewModel = hiltViewModel(),
                                             onFeedbackClick = { navigateSingleTop("feedback") },
+                                            onLogout = { loginViewModel.logout() },
                                             onBack = { navController.popBackStack() }
                                         )
                                     }

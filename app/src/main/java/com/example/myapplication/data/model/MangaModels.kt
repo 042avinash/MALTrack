@@ -19,6 +19,7 @@ data class MangaNode(
     val title: String,
     @SerialName("main_picture") val mainPicture: MainPicture? = null,
     val synopsis: String? = null,
+    val nsfw: String? = null,
     @SerialName("mean") val meanScore: Float? = null,
     @SerialName("num_list_users") val numListUsers: Int? = null,
     @SerialName("media_type") val mediaType: String? = null,

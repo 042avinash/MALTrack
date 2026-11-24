@@ -2,9 +2,6 @@ package com.example.myapplication.ui
 
 import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,18 +15,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun FeedbackScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var email by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var screenshotUri by remember { mutableStateOf<Uri?>(null) }
-
-    val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri ->
-            if (uri != null) {
-                screenshotUri = uri
-            }
-        }
-    )
 
     Scaffold(
         topBar = {
@@ -51,16 +37,14 @@ fun FeedbackScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "We'd love to hear your feedback or any issues you've encountered!",
+                text = "Share feedback or report a problem. Your draft will open as a GitHub issue for you to review and submit.",
                 style = MaterialTheme.typography.bodyLarge
             )
 
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Your Email (Optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+            Text(
+                text = "GitHub issues are public. Sign in to GitHub to submit, and avoid including private information. You can attach screenshots directly on the GitHub page.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             OutlinedTextField(
@@ -72,46 +56,25 @@ fun FeedbackScreen(onBack: () -> Unit) {
                     .weight(1f),
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        photoPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    }
-                ) {
-                    Text(if (screenshotUri == null) "Attach Screenshot" else "Screenshot Attached ✓")
-                }
-                
-                if (screenshotUri != null) {
-                    TextButton(onClick = { screenshotUri = null }) {
-                        Text("Remove")
-                    }
-                }
-            }
-
             Button(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "message/rfc822"
-                        putExtra(Intent.EXTRA_EMAIL, arrayOf("042avinash@gmail.com"))
-                        putExtra(Intent.EXTRA_SUBJECT, "MALTrack Feedback")
-                        val bodyText = if (email.isNotBlank()) "User Email: ${email}\n\nIssue Description:\n${description}" else "Issue Description:\n${description}"
-                        putExtra(Intent.EXTRA_TEXT, bodyText)
-                        screenshotUri?.let { uri ->
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                    }
-                    context.startActivity(Intent.createChooser(intent, "Send Feedback via..."))
+                    val body = """### Feedback or issue
+$description
+
+### App version
+${com.example.myapplication.BuildConfig.VERSION_NAME}
+""".trimIndent()
+                    val issueUri = Uri.parse("https://github.com/042avinash/MALTrack/issues/new")
+                        .buildUpon()
+                        .appendQueryParameter("title", "Feedback from MALTrack Android app")
+                        .appendQueryParameter("body", body)
+                        .build()
+                    context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = description.isNotBlank()
             ) {
-                Text("Send via Email Client")
+                Text("Continue on GitHub")
             }
         }
     }

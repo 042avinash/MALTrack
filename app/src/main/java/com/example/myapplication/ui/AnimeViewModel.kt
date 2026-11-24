@@ -1020,16 +1020,11 @@ class AnimeViewModel @Inject constructor(
         }
     }
 
-    fun getDiscoveryGridModeFlow(isAnime: Boolean) = if (isAnime) {
-        prefsManager.defaultAnimeDiscoveryStyleFlow
-    } else {
-        prefsManager.defaultMangaDiscoveryStyleFlow
-    }
+    fun getDiscoveryGridModeFlow() = prefsManager.listStyleFlow
 
-    fun setDiscoveryGridMode(isAnime: Boolean, isGrid: Boolean) {
+    fun setDiscoveryGridMode(isGrid: Boolean) {
         viewModelScope.launch {
-            if (isAnime) prefsManager.saveDefaultAnimeDiscoveryStyle(isGrid)
-            else prefsManager.saveDefaultMangaDiscoveryStyle(isGrid)
+            prefsManager.saveListStyle(isGrid)
         }
     }
 

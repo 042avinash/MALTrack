@@ -17,7 +17,8 @@ import javax.inject.Singleton
 
 private val Context.userPrefsDataStore by preferencesDataStore(name = "user_settings_prefs")
 
-enum class ThemePreference { SYSTEM, LIGHT, DARK }
+enum class ThemePreference { SYSTEM, LIGHT, DARK, AMOLED }
+enum class ThemePalette { SYSTEM, ANIME_NIGHT, MANGA_PAPER, MAL_INSPIRED, SOFT_PASTEL }
 enum class TitleLanguage { ROMAJI, ENGLISH, JAPANESE }
 enum class DefaultSection { 
     HOME_ANIME, 
@@ -33,6 +34,7 @@ class UserPreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val themeKey = stringPreferencesKey("theme_preference")
+    private val themePaletteKey = stringPreferencesKey("theme_palette")
     private val titleLangKey = stringPreferencesKey("title_language")
     private val defaultSectionKey = stringPreferencesKey("default_section")
     private val defaultAnimeStatusKey = stringPreferencesKey("default_anime_status")
@@ -45,6 +47,7 @@ class UserPreferencesManager @Inject constructor(
     private val defaultMangaListStyleKey = booleanPreferencesKey("default_manga_list_style_grid")
     private val defaultAnimeDiscoveryStyleKey = booleanPreferencesKey("default_anime_discovery_style_grid")
     private val defaultMangaDiscoveryStyleKey = booleanPreferencesKey("default_manga_discovery_style_grid")
+    private val listStyleKey = booleanPreferencesKey("default_list_style_grid")
     private val homeContinueWatchingEnabledKey = booleanPreferencesKey("home_continue_watching_enabled")
     private val homeContinueReadingEnabledKey = booleanPreferencesKey("home_continue_reading_enabled")
     private val homeDiscoveryButtonsEnabledKey = booleanPreferencesKey("home_discovery_buttons_enabled")
@@ -57,10 +60,16 @@ class UserPreferencesManager @Inject constructor(
     private val recentSearchesKey = stringPreferencesKey("recent_searches")
     private val lastUsedSectionKey = stringPreferencesKey("last_used_section")
     private val nsfwToggleKey = booleanPreferencesKey("nsfw_toggle")
+    private val showNsfwCountKey = booleanPreferencesKey("show_nsfw_count")
     private val json = Json { ignoreUnknownKeys = true }
     
     val themeFlow: Flow<ThemePreference> = context.userPrefsDataStore.data.map { prefs ->
         ThemePreference.valueOf(prefs[themeKey] ?: ThemePreference.SYSTEM.name)
+    }
+
+    val themePaletteFlow: Flow<ThemePalette> = context.userPrefsDataStore.data.map { prefs ->
+        runCatching { ThemePalette.valueOf(prefs[themePaletteKey] ?: ThemePalette.SYSTEM.name) }
+            .getOrDefault(ThemePalette.SYSTEM)
     }
 
     val titleLanguageFlow: Flow<TitleLanguage> = context.userPrefsDataStore.data.map { prefs ->
@@ -118,20 +127,18 @@ class UserPreferencesManager @Inject constructor(
         prefs[nsfwToggleKey] ?: false
     }
 
-    val defaultAnimeListStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
-        prefs[defaultAnimeListStyleKey] ?: false
+    val showNsfwCountFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[showNsfwCountKey] ?: true
     }
 
-    val defaultMangaListStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
-        prefs[defaultMangaListStyleKey] ?: false
-    }
-
-    val defaultAnimeDiscoveryStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
-        prefs[defaultAnimeDiscoveryStyleKey] ?: false
-    }
-
-    val defaultMangaDiscoveryStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
-        prefs[defaultMangaDiscoveryStyleKey] ?: false
+    val listStyleFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[listStyleKey]
+            ?: prefs[defaultAnimeListStyleKey]
+            ?: prefs[defaultMangaListStyleKey]
+            ?: prefs[defaultAnimeDiscoveryStyleKey]
+            ?: prefs[defaultMangaDiscoveryStyleKey]
+            ?: prefs[booleanPreferencesKey("grid_mode_seasonal_chart")]
+            ?: false
     }
 
     val homeContinueWatchingEnabledFlow: Flow<Boolean> = context.userPrefsDataStore.data.map { prefs ->
@@ -184,6 +191,10 @@ class UserPreferencesManager @Inject constructor(
 
     suspend fun saveTheme(theme: ThemePreference) {
         context.userPrefsDataStore.edit { prefs -> prefs[themeKey] = theme.name }
+    }
+
+    suspend fun saveThemePalette(palette: ThemePalette) {
+        context.userPrefsDataStore.edit { prefs -> prefs[themePaletteKey] = palette.name }
     }
 
     suspend fun saveTitleLanguage(language: TitleLanguage) {
@@ -240,27 +251,25 @@ class UserPreferencesManager @Inject constructor(
         context.userPrefsDataStore.edit { prefs -> prefs[nsfwToggleKey] = enabled }
     }
 
-    suspend fun saveDefaultAnimeListStyle(isGrid: Boolean) {
+    suspend fun saveShowNsfwCount(enabled: Boolean) {
+        context.userPrefsDataStore.edit { prefs -> prefs[showNsfwCountKey] = enabled }
+    }
+
+    suspend fun saveListStyle(isGrid: Boolean) {
         context.userPrefsDataStore.edit { prefs ->
-            prefs[defaultAnimeListStyleKey] = isGrid
+            prefs[listStyleKey] = isGrid
         }
     }
 
-    suspend fun saveDefaultMangaListStyle(isGrid: Boolean) {
+    suspend fun resetListDefaults() {
         context.userPrefsDataStore.edit { prefs ->
-            prefs[defaultMangaListStyleKey] = isGrid
-        }
-    }
-
-    suspend fun saveDefaultAnimeDiscoveryStyle(isGrid: Boolean) {
-        context.userPrefsDataStore.edit { prefs ->
-            prefs[defaultAnimeDiscoveryStyleKey] = isGrid
-        }
-    }
-
-    suspend fun saveDefaultMangaDiscoveryStyle(isGrid: Boolean) {
-        context.userPrefsDataStore.edit { prefs ->
-            prefs[defaultMangaDiscoveryStyleKey] = isGrid
+            prefs[defaultAnimeStatusKey] = "all"
+            prefs[defaultMangaStatusKey] = "all"
+            prefs[defaultAnimeSortKey] = "list_score"
+            prefs[defaultMangaSortKey] = "list_score"
+            prefs[defaultAnimeDiscoverySortKey] = "members"
+            prefs[defaultMangaDiscoverySortKey] = "members"
+            prefs[listStyleKey] = false
         }
     }
 
@@ -356,24 +365,13 @@ class UserPreferencesManager @Inject constructor(
         }
     }
     
-    fun getGridModeFlow(listKey: String): Flow<Boolean> {
-        return context.userPrefsDataStore.data.map { prefs ->
-            when {
-                listKey.startsWith("anime_") -> prefs[defaultAnimeListStyleKey] ?: false
-                listKey.startsWith("manga_") -> prefs[defaultMangaListStyleKey] ?: false
-                listKey == "seasonal_chart" -> prefs[booleanPreferencesKey("grid_mode_$listKey")] ?: false
-                else -> false
-            }
-        }
+    fun getGridModeFlow(): Flow<Boolean> {
+        return listStyleFlow
     }
 
-    suspend fun saveGridMode(listKey: String, isGrid: Boolean, global: Boolean = false) {
+    suspend fun saveGridMode(isGrid: Boolean) {
         context.userPrefsDataStore.edit { prefs ->
-            when {
-                listKey.startsWith("anime_") -> prefs[defaultAnimeListStyleKey] = isGrid
-                listKey.startsWith("manga_") -> prefs[defaultMangaListStyleKey] = isGrid
-                else -> prefs[booleanPreferencesKey("grid_mode_$listKey")] = isGrid
-            }
+            prefs[listStyleKey] = isGrid
         }
     }
 

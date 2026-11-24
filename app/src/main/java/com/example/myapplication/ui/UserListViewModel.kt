@@ -67,6 +67,12 @@ class UserListViewModel @Inject constructor(
         initialValue = false
     )
 
+    val showNsfwCount = prefsManager.showNsfwCountFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
     private var loadJob: Job? = null
     private var searchJob: Job? = null
     private val backgroundFullLoadJobs = mutableMapOf<String, Job>()
@@ -90,7 +96,7 @@ class UserListViewModel @Inject constructor(
             viewModelScope.launch {
                 val listKey = "anime_$status"
                 val sort = prefsManager.getSortModeFlow(listKey).first()
-                val grid = prefsManager.getGridModeFlow(listKey).first()
+                val grid = prefsManager.getGridModeFlow().first()
 
                 _savedSorts.value = _savedSorts.value + (status to sort)
                 _savedGridModes.value = _savedGridModes.value + (status to grid)
@@ -107,7 +113,8 @@ class UserListViewModel @Inject constructor(
             try {
                 val savedSort = prefsManager.getSortModeFlow("anime_$statusKey").first()
                 val effectiveSort = sort ?: savedSort
-                val cacheKey = listOf(effectiveUsername ?: "@me", statusKey, effectiveSort).joinToString("|")
+                val includeNsfw = prefsManager.nsfwFlow.first()
+                val cacheKey = listOf(effectiveUsername ?: "@me", statusKey, effectiveSort, includeNsfw).joinToString("|")
                 val statusLoadingKey = listOf(effectiveUsername ?: "@me", statusKey).joinToString("|")
 
                 _savedSorts.value = _savedSorts.value + (statusKey to effectiveSort)
@@ -142,7 +149,8 @@ class UserListViewModel @Inject constructor(
                             cacheKey = cacheKey,
                             statusKey = statusKey,
                             username = effectiveUsername,
-                            sort = effectiveSort
+                            sort = effectiveSort,
+                            includeNsfw = includeNsfw
                         )
                     }
                 } else {
@@ -153,7 +161,8 @@ class UserListViewModel @Inject constructor(
                                 username = effectiveUsername,
                                 status = if (statusKey == "all") null else statusKey,
                                 sort = effectiveSort,
-                                limit = INITIAL_PAGE_LIMIT
+                                limit = INITIAL_PAGE_LIMIT,
+                                includeNsfw = includeNsfw
                             )
                         }
                         val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
@@ -175,7 +184,8 @@ class UserListViewModel @Inject constructor(
                                         val fullList = repository.getAllUserAnimeList(
                                             username = effectiveUsername,
                                             status = if (statusKey == "all") null else statusKey,
-                                            sort = effectiveSort
+                                            sort = effectiveSort,
+                                            includeNsfw = includeNsfw
                                         )
                                         globalFullAnimeListCache[cacheKey] = fullList
                                         markListComplete(cacheKey)
@@ -199,7 +209,8 @@ class UserListViewModel @Inject constructor(
                                 cacheKey = cacheKey,
                                 statusKey = statusKey,
                                 username = effectiveUsername,
-                                sort = effectiveSort
+                                sort = effectiveSort,
+                                includeNsfw = includeNsfw
                             )
                         }
 
@@ -223,7 +234,8 @@ class UserListViewModel @Inject constructor(
         cacheKey: String,
         statusKey: String,
         username: String?,
-        sort: String
+        sort: String,
+        includeNsfw: Boolean
     ) {
         if (globalAnimeListCacheComplete.contains(cacheKey)) return
         backgroundFullLoadJobs[cacheKey]?.cancel()
@@ -232,7 +244,8 @@ class UserListViewModel @Inject constructor(
                 val fullList = repository.getAllUserAnimeList(
                     username = username,
                     status = if (statusKey == "all") null else statusKey,
-                    sort = sort
+                    sort = sort,
+                    includeNsfw = includeNsfw
                 )
                 globalFullAnimeListCache[cacheKey] = fullList
                 markListComplete(cacheKey)
@@ -300,7 +313,7 @@ class UserListViewModel @Inject constructor(
         }
     }
 
-    fun getGridModeFlow(status: String) = prefsManager.getGridModeFlow("anime_$status")
+    fun getGridModeFlow() = prefsManager.getGridModeFlow()
 
     fun getSavedGridMode(status: String): Boolean = _savedGridModes.value[status] ?: false
 
@@ -346,11 +359,11 @@ class UserListViewModel @Inject constructor(
 
         val effectiveUsername = if (username == "null") null else username
         val effectiveSort = sort ?: _savedSorts.value[status] ?: userListState.value.sort
-        val cacheKey = listOf(effectiveUsername ?: "@me", status, effectiveSort).joinToString("|")
-
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             try {
+                val includeNsfw = prefsManager.nsfwFlow.first()
+                val cacheKey = listOf(effectiveUsername ?: "@me", status, effectiveSort, includeNsfw).joinToString("|")
                 _searchState.value = _searchState.value.copy(
                     query = normalizedQuery,
                     isLoading = true
@@ -365,7 +378,8 @@ class UserListViewModel @Inject constructor(
                     repository.getAllUserAnimeList(
                         username = effectiveUsername,
                         status = if (status == "all") null else status,
-                        sort = effectiveSort
+                        sort = effectiveSort,
+                        includeNsfw = includeNsfw
                     ).also { fetched ->
                         globalFullAnimeListCache[cacheKey] = fetched
                         markListComplete(cacheKey)
@@ -493,14 +507,10 @@ class UserListViewModel @Inject constructor(
             .replace(Regex("[\\p{Punct}\\s]+"), "")
     }
 
-    fun setGridMode(status: String, isGrid: Boolean, global: Boolean = false) {
-        _savedGridModes.value = if (global) {
-            animeStatuses.associateWith { isGrid }
-        } else {
-            _savedGridModes.value + (status to isGrid)
-        }
+    fun setGridMode(isGrid: Boolean) {
+        _savedGridModes.value = animeStatuses.associateWith { isGrid }
         viewModelScope.launch {
-            prefsManager.saveGridMode("anime_$status", isGrid, global)
+            prefsManager.saveGridMode(isGrid)
         }
     }
 }

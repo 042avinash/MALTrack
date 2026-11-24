@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.coroutineScope
@@ -166,21 +167,45 @@ private fun Modifier.scrollbarPointerInput(
     val currentOnSeek = rememberUpdatedState(onSeek)
     return pointerInput(key, isInteracting) {
         val laneWidth = 24.dp.toPx()
+        val touchSlop = viewConfiguration.touchSlop
         coroutineScope {
             val seekScope = this
             awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
+                val down = awaitFirstDown(
+                    requireUnconsumed = false,
+                    pass = PointerEventPass.Initial
+                )
                 if (down.position.x < size.width - laneWidth) return@awaitEachGesture
+
+                var change = down
+                var verticalDragStarted = false
+                while (change.pressed) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    val movement = change.position - down.position
+                    if (kotlin.math.abs(movement.x) > touchSlop &&
+                        kotlin.math.abs(movement.x) > kotlin.math.abs(movement.y)
+                    ) {
+                        return@awaitEachGesture
+                    }
+                    if (kotlin.math.abs(movement.y) > touchSlop &&
+                        kotlin.math.abs(movement.y) > kotlin.math.abs(movement.x)
+                    ) {
+                        change.consume()
+                        verticalDragStarted = true
+                        break
+                    }
+                }
+                if (!verticalDragStarted) return@awaitEachGesture
 
                 isInteracting.value = true
                 try {
-                    down.consume()
                     seekScope.launch {
-                        currentOnSeek.value((down.position.y / size.height.coerceAtLeast(1)).coerceIn(0f, 1f))
+                        currentOnSeek.value((change.position.y / size.height.coerceAtLeast(1)).coerceIn(0f, 1f))
                     }
                     do {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.first()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (change.position != change.previousPosition) {
                             change.consume()
                             val progress = (change.position.y / size.height.coerceAtLeast(1)).coerceIn(0f, 1f)
@@ -204,21 +229,51 @@ private fun Modifier.horizontalScrollbarPointerInput(
     val currentOnSeek = rememberUpdatedState(onSeek)
     return pointerInput(key, isInteracting) {
         val laneHeight = 24.dp.toPx()
+        val edgeGestureWidth = 24.dp.toPx()
+        val touchSlop = viewConfiguration.touchSlop
         coroutineScope {
             val seekScope = this
             awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                if (down.position.y < size.height - laneHeight) return@awaitEachGesture
+                val down = awaitFirstDown(
+                    requireUnconsumed = false,
+                    pass = PointerEventPass.Initial
+                )
+                if (down.position.y < size.height - laneHeight ||
+                    down.position.x < edgeGestureWidth ||
+                    down.position.x > size.width - edgeGestureWidth
+                ) {
+                    return@awaitEachGesture
+                }
+
+                var change = down
+                var horizontalDragStarted = false
+                while (change.pressed) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    val movement = change.position - down.position
+                    if (kotlin.math.abs(movement.y) > touchSlop &&
+                        kotlin.math.abs(movement.y) > kotlin.math.abs(movement.x)
+                    ) {
+                        return@awaitEachGesture
+                    }
+                    if (kotlin.math.abs(movement.x) > touchSlop &&
+                        kotlin.math.abs(movement.x) > kotlin.math.abs(movement.y)
+                    ) {
+                        change.consume()
+                        horizontalDragStarted = true
+                        break
+                    }
+                }
+                if (!horizontalDragStarted) return@awaitEachGesture
 
                 isInteracting.value = true
                 try {
-                    down.consume()
                     seekScope.launch {
-                        currentOnSeek.value((down.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f))
+                        currentOnSeek.value((change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f))
                     }
                     do {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.first()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (change.position != change.previousPosition) {
                             change.consume()
                             val progress = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)

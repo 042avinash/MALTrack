@@ -202,7 +202,7 @@ interface MalApiService {
         @Query("limit") limit: Int = 1000,
         @Query("offset") offset: Int = 0,
         @Query("nsfw") nsfw: Boolean = false,
-        @Query("fields") fields: String = "list_status,main_picture,num_episodes,status,broadcast,start_date,mean,alternative_titles,num_list_users,media_type"
+        @Query("fields") fields: String = "list_status,main_picture,num_episodes,status,broadcast,start_date,mean,alternative_titles,num_list_users,media_type,nsfw"
     ): UserAnimeListResponse
 
     @GET("users/{username}/mangalist")
@@ -214,7 +214,7 @@ interface MalApiService {
         @Query("limit") limit: Int = 1000,
         @Query("offset") offset: Int = 0,
         @Query("nsfw") nsfw: Boolean = false,
-        @Query("fields") fields: String = "list_status{status,score,num_volumes_read,num_chapters_read,num_times_reread},main_picture,num_volumes,num_chapters,status,start_date,mean,alternative_titles,num_list_users,media_type"
+        @Query("fields") fields: String = "list_status{status,score,num_volumes_read,num_chapters_read,num_times_reread},main_picture,num_volumes,num_chapters,status,start_date,mean,alternative_titles,num_list_users,media_type,nsfw"
     ): UserMangaListResponse
 
     @GET("anime/ranking")

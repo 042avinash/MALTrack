@@ -1,13 +1,28 @@
 # MALTrack
 
-MALTrack is a Kotlin + Jetpack Compose Android app for tracking anime and manga with MyAnimeList.
-It blends official MAL account data with Tenrai, Jikan, and AniList signals for discovery, list management, profile browsing, and airing tracking.
+MALTrack is a Kotlin and Jetpack Compose Android app for tracking anime and manga with MyAnimeList.
+It combines MyAnimeList account and catalogue data with community metadata from Tenrai and Jikan, plus AnimeSchedule airing data.
 
 ![MALTrack Cover](assets/cover.png)
 
 ## Current Version
 
-- `v1.4.7`
+- `v1.4.8`
+
+## v1.4.8 Highlights
+
+- **Settings Improvements**:
+  - Organized preferences into dedicated Appearance, Startup & Browsing, Notifications, and Content pages, with account and support actions on the Settings landing page.
+  - Added selectable color palettes, a system/light/dark/AMOLED mode selector, live settings summaries, and a compact app release link.
+  - Added API credits and documentation links, GitHub issue feedback, and a persisted option to show NSFW list-count details.
+- **List Count Clarity**:
+  - Added the NSFW entry count when 18+ content is enabled, or a hidden-content note when it is disabled; this detail can be hidden in Content settings.
+  - Separated cached Anime and Manga lists by the NSFW setting so counts and entries follow the selected filter.
+- **Scrolling and Layout**:
+  - Updated vertical and horizontal scrollbar gestures to wait for directional intent, reducing accidental activation during back swipes and cross-axis scrolling.
+  - Stabilized Anime Characters, Voice Actors, and Manga Characters carousel card heights with consistent name and role truncation.
+- **Release Alignment**:
+  - App version bumped to `v1.4.8` (`versionCode 33`).
 
 ## v1.4.7 Highlights
 
@@ -82,38 +97,46 @@ It blends official MAL account data with Tenrai, Jikan, and AniList signals for 
 
 ## Core Features
 
-- MyAnimeList OAuth login
-- Personalized Home experience:
-  - Continue Watching / Continue Reading
-  - Discovery quick links (Seasonal / Top 100)
-  - Random Anime
-  - Personalized anime and manga picks
-- Refreshable recommendation sections
-- Seasonal chart and Top 100 discovery pages
-- Full Anime Details and Manga Details flows
-- User List and User Manga List:
-  - Status tabs
-  - Search
-  - Recent submitted search history (dropdown)
-  - Grid/List layouts
-  - Manual refresh
-  - Countdown support for airing entries
-- Profile screen:
-  - Stats
-  - Favorites
-  - Friends
-  - MAL profile linking
-- Episode notifications for watching list
-- Settings for:
-  - Theme
-  - Startup/default page behavior
-  - Title language
-  - NSFW toggle
-  - Home section visibility
-- Image download from details pages
-- On-demand Details extras loading:
-  - Reviews load only when requested
-  - Recommendations load only when requested
+- **MyAnimeList account and lists**:
+  - OAuth sign-in, profile statistics, and editable personal anime and manga lists.
+  - Status tabs, search with recent queries, sorting, shared list/grid page style, pull-to-refresh, and progress updates.
+  - Configurable default list section and sorting, with Anime, Manga, or both as the target.
+- **Home and discovery**:
+  - Configurable startup destination, Home sections, and default Home search type.
+  - Seasonal Anime, Top Anime and Manga, random Anime, personalized picks, and recommendations.
+  - Independent Anime and Manga discovery sorting defaults.
+- **Anime and Manga details**:
+  - Catalogue information, related titles, recommendations, characters, staff, reviews, themes, streaming information, and community statistics.
+  - Reviews and recommendations load on demand; images can be saved from details pages.
+  - Airing episode countdowns on details and list entries.
+- **Profiles and notifications**:
+  - Profile stats, friends, favorites, and profile links.
+  - Optional episode alerts for titles on the Watching list, with a test notification and notification status in Settings.
+- **Settings and accessibility**:
+  - System, Light, Dark, and AMOLED modes, plus selectable color palettes.
+  - Content options for title language and 18+ results; optionally show NSFW totals or the hidden-content note beside list counts.
+  - Account logout, GitHub feedback, app release download, and API credits/documentation links.
+  - Scrollbars support directional drag gestures and yield to cross-axis and edge-back gestures.
+
+## Data Sources and API Credits
+
+MALTrack uses these services for the features listed below. Their documentation is also available under **Settings → Support & About → API Credits & Docs**.
+
+| Service | MALTrack usage | Documentation |
+| --- | --- | --- |
+| [MyAnimeList API v2](https://myanimelist.net/apiconfig/references/api/v2) | OAuth account access, anime and manga catalogues, personal lists, search, rankings, suggestions, and list updates. | [API v2 reference](https://myanimelist.net/apiconfig/references/api/v2) |
+| [Jikan](https://jikan.moe/) | Public user profile and friend data. | [Jikan documentation](https://docs.jikan.moe/) |
+| [Tenrai](https://tenrai.org/) | Jikan-compatible anime and manga details, characters, staff, reviews, themes, streaming and statistics, plus random Anime and publishing Manga discovery. | [API documentation](https://api.tenrai.org/documentation) |
+| [AnimeSchedule](https://animeschedule.net/) | Airing schedules and next-episode countdown data used by details, lists, and episode alerts. | [API v3 documentation](https://animeschedule.net/api/v3/documentation) |
+| [jikan-edge](https://jikan.lucashdo.com/) | Public Anime and Manga favorites shown on profiles. | [API documentation](https://jikan.lucashdo.com/docs) |
+
+AnimeSchedule schedule data is cached briefly to limit repeated requests. Jikan-backed requests are throttled and may be temporarily unavailable if the upstream service is rate-limited.
+
+## Feedback and Releases
+
+- [Download the latest Android release](https://github.com/042avinash/MALTrack/releases/latest).
+- [Browse the MALTrack repository](https://github.com/042avinash/MALTrack).
+- Send feedback from the app’s Settings page to open a prefilled GitHub issue. GitHub issues are public and require a GitHub account to submit.
 
 ## v1.1.0 Highlights
 

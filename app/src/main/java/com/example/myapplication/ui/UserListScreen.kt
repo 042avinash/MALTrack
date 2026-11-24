@@ -279,6 +279,9 @@ fun ListActionToolbar(
 private fun ListStatusCountRow(
     status: String,
     count: Int?,
+    showNsfwCount: Boolean,
+    nsfwEnabled: Boolean,
+    nsfwCount: Int?,
     isGridView: Boolean,
     onToggleView: () -> Unit
 ) {
@@ -301,12 +304,18 @@ private fun ListStatusCountRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "$label: ${count ?: "…"}",
+            text = if (showNsfwCount) {
+                "$label: ${count ?: "…"} · ${if (nsfwEnabled) "NSFW: ${nsfwCount ?: "…"}" else "NSFW titles are hidden"}"
+            } else {
+                "$label: ${count ?: "…"}"
+            },
+            modifier = Modifier.weight(1f),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
-        Spacer(modifier = Modifier.weight(1f))
         Box(
             modifier = Modifier
                 .size(36.dp)
@@ -342,6 +351,8 @@ fun UserAnimeSection(
     val loadedLists by viewModel.loadedLists.collectAsState()
     val completeListKeys by viewModel.completeListKeys.collectAsState()
     val loadingStatuses by viewModel.loadingStatuses.collectAsState()
+    val nsfwEnabled by viewModel.nsfwEnabled.collectAsState()
+    val showNsfwCount by viewModel.showNsfwCount.collectAsState()
 
     val statuses = listOf("all", "watching", "completed", "on_hold", "plan_to_watch", "dropped")
     val statusIcons = listOf(
@@ -369,14 +380,21 @@ fun UserAnimeSection(
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
-    val isGridView by viewModel.getGridModeFlow(currentStatus)
+    val isGridView by viewModel.getGridModeFlow()
         .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
 
     val effectiveUsername = (if (username == "null") null else username) ?: "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
-    val currentStatusCount = loadedLists.entries.firstOrNull {
-        it.key.startsWith("$effectiveUsername|$currentStatus|") && it.key in completeListKeys
-    }?.value?.size
+    val currentStatusLoadKey = "$currentStatus|$nsfwEnabled"
+    val currentStatusItems = loadedLists.entries.firstOrNull {
+        it.key.startsWith("$effectiveUsername|$currentStatus|") &&
+            it.key.endsWith("|$nsfwEnabled") &&
+            it.key in completeListKeys
+    }?.value
+    val currentStatusCount = currentStatusItems?.size
+    val currentStatusNsfwCount = currentStatusItems?.count { item ->
+        item.node.nsfw?.lowercase() in setOf("gray", "black")
+    }
 
     LaunchedEffect(pullRefreshRequestToken) {
         if (pullRefreshRequestToken <= 0) return@LaunchedEffect
@@ -390,8 +408,8 @@ fun UserAnimeSection(
         }
     }
 
-    LaunchedEffect(settledPage, username) {
-        if (currentStatus !in loadedStatuses) {
+    LaunchedEffect(settledPage, username, nsfwEnabled) {
+        if (currentStatusLoadKey !in loadedStatuses) {
             isTabTransitionLoading = true
             viewModel.loadUserList(currentStatus, username = username, forceRefresh = false)
         } else {
@@ -503,8 +521,11 @@ fun UserAnimeSection(
                 ListStatusCountRow(
                     status = currentStatus,
                     count = currentStatusCount,
+                    showNsfwCount = showNsfwCount,
+                    nsfwEnabled = nsfwEnabled,
+                    nsfwCount = currentStatusNsfwCount,
                     isGridView = isGridView,
-                    onToggleView = { viewModel.setGridMode(currentStatus, !isGridView) }
+                    onToggleView = { viewModel.setGridMode(!isGridView) }
                 )
             }
         }
@@ -522,7 +543,7 @@ fun UserAnimeSection(
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userListState.status) userListState.sort else null
-                val pageIsGridView by viewModel.getGridModeFlow(pageStatus)
+                val pageIsGridView by viewModel.getGridModeFlow()
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
                 val pageListState = rememberSaveable(
                     key = "anime_list_${username ?: "@me"}_$pageStatus",
@@ -532,14 +553,14 @@ fun UserAnimeSection(
                     key = "anime_grid_${username ?: "@me"}_$pageStatus",
                     saver = LazyGridState.Saver
                 ) { LazyGridState() }
-                val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
+                val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus), nsfwEnabled).joinToString("|")
                 val pageItems = loadedLists[pageCacheKey]
                     ?: loadedLists.entries.firstOrNull {
-                        it.key.startsWith("$effectiveUsername|$pageStatus|")
+                        it.key.startsWith("$effectiveUsername|$pageStatus|") && it.key.endsWith("|$nsfwEnabled")
                     }?.value
                     ?: emptyList()
                 val pageHasLoadedData = loadedLists.containsKey(pageCacheKey) || loadedLists.keys.any {
-                    it.startsWith("$effectiveUsername|$pageStatus|")
+                    it.startsWith("$effectiveUsername|$pageStatus|") && it.endsWith("|$nsfwEnabled")
                 }
                 val pageIsLoading = loadingStatuses[listOf(effectiveUsername, pageStatus).joinToString("|")] == true
 
@@ -547,7 +568,7 @@ fun UserAnimeSection(
                     LaunchedEffect(pageIsLoading, pageHasLoadedData, settledPage, userListState.status) {
                         if (userListState.status == currentStatus) {
                             if (pageHasLoadedData) {
-                                loadedStatuses = loadedStatuses + currentStatus
+                                loadedStatuses = loadedStatuses + currentStatusLoadKey
                             }
                             isTabTransitionLoading = false
                         }
@@ -642,6 +663,8 @@ fun UserMangaSection(
     val loadedLists by viewModel.loadedLists.collectAsState()
     val completeListKeys by viewModel.completeListKeys.collectAsState()
     val loadingStatuses by viewModel.loadingStatuses.collectAsState()
+    val nsfwEnabled by viewModel.nsfwEnabled.collectAsState()
+    val showNsfwCount by viewModel.showNsfwCount.collectAsState()
 
     val statuses = listOf("all", "reading", "completed", "on_hold", "plan_to_read", "dropped")
     val statusIcons = listOf(
@@ -669,14 +692,21 @@ fun UserMangaSection(
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
-    val isGridView by viewModel.getGridModeFlow(currentStatus)
+    val isGridView by viewModel.getGridModeFlow()
         .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
 
     val effectiveUsername = (if (username == "null") null else username) ?: "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
-    val currentStatusCount = loadedLists.entries.firstOrNull {
-        it.key.startsWith("$effectiveUsername|$currentStatus|") && it.key in completeListKeys
-    }?.value?.size
+    val currentStatusLoadKey = "$currentStatus|$nsfwEnabled"
+    val currentStatusItems = loadedLists.entries.firstOrNull {
+        it.key.startsWith("$effectiveUsername|$currentStatus|") &&
+            it.key.endsWith("|$nsfwEnabled") &&
+            it.key in completeListKeys
+    }?.value
+    val currentStatusCount = currentStatusItems?.size
+    val currentStatusNsfwCount = currentStatusItems?.count { item ->
+        item.node.nsfw?.lowercase() in setOf("gray", "black")
+    }
 
     LaunchedEffect(pullRefreshRequestToken) {
         if (pullRefreshRequestToken <= 0) return@LaunchedEffect
@@ -690,8 +720,8 @@ fun UserMangaSection(
         }
     }
 
-    LaunchedEffect(settledPage, username) {
-        if (currentStatus !in loadedStatuses) {
+    LaunchedEffect(settledPage, username, nsfwEnabled) {
+        if (currentStatusLoadKey !in loadedStatuses) {
             isTabTransitionLoading = true
             viewModel.loadUserMangaList(currentStatus, username = username, forceRefresh = false)
         } else {
@@ -803,8 +833,11 @@ fun UserMangaSection(
                 ListStatusCountRow(
                     status = currentStatus,
                     count = currentStatusCount,
+                    showNsfwCount = showNsfwCount,
+                    nsfwEnabled = nsfwEnabled,
+                    nsfwCount = currentStatusNsfwCount,
                     isGridView = isGridView,
-                    onToggleView = { viewModel.setGridMode(currentStatus, !isGridView) }
+                    onToggleView = { viewModel.setGridMode(!isGridView) }
                 )
             }
         }
@@ -822,7 +855,7 @@ fun UserMangaSection(
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userMangaListState.status) userMangaListState.sort else null
-                val pageIsGridView by viewModel.getGridModeFlow(pageStatus)
+                val pageIsGridView by viewModel.getGridModeFlow()
                     .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
                 val pageListState = rememberSaveable(
                     key = "manga_list_${username ?: "@me"}_$pageStatus",
@@ -832,14 +865,14 @@ fun UserMangaSection(
                     key = "manga_grid_${username ?: "@me"}_$pageStatus",
                     saver = LazyGridState.Saver
                 ) { LazyGridState() }
-                val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus)).joinToString("|")
+                val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus), nsfwEnabled).joinToString("|")
                 val pageItems = loadedLists[pageCacheKey]
                     ?: loadedLists.entries.firstOrNull {
-                        it.key.startsWith("$effectiveUsername|$pageStatus|")
+                        it.key.startsWith("$effectiveUsername|$pageStatus|") && it.key.endsWith("|$nsfwEnabled")
                     }?.value
                     ?: emptyList()
                 val pageHasLoadedData = loadedLists.containsKey(pageCacheKey) || loadedLists.keys.any {
-                    it.startsWith("$effectiveUsername|$pageStatus|")
+                    it.startsWith("$effectiveUsername|$pageStatus|") && it.endsWith("|$nsfwEnabled")
                 }
                 val pageIsLoading = loadingStatuses[listOf(effectiveUsername, pageStatus).joinToString("|")] == true
 
@@ -847,7 +880,7 @@ fun UserMangaSection(
                     LaunchedEffect(pageIsLoading, pageHasLoadedData, settledPage, userMangaListState.status) {
                         if (userMangaListState.status == currentStatus) {
                             if (pageHasLoadedData) {
-                                loadedStatuses = loadedStatuses + currentStatus
+                                loadedStatuses = loadedStatuses + currentStatusLoadKey
                             }
                             isTabTransitionLoading = false
                         }

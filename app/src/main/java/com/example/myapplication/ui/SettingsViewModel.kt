@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
+import com.example.myapplication.data.local.ThemePalette
 import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.data.local.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,6 +22,12 @@ class SettingsViewModel @Inject constructor(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = ThemePreference.SYSTEM
+    )
+
+    val themePalette = prefsManager.themePaletteFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ThemePalette.SYSTEM
     )
 
     val titleLanguage = prefsManager.titleLanguageFlow.stateIn(
@@ -83,25 +90,13 @@ class SettingsViewModel @Inject constructor(
         initialValue = false
     )
 
-    val defaultAnimeListStyleIsGrid = prefsManager.defaultAnimeListStyleFlow.stateIn(
+    val showNsfwCount = prefsManager.showNsfwCountFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = false
+        initialValue = true
     )
 
-    val defaultMangaListStyleIsGrid = prefsManager.defaultMangaListStyleFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = false
-    )
-
-    val defaultAnimeDiscoveryStyleIsGrid = prefsManager.defaultAnimeDiscoveryStyleFlow.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = false
-    )
-
-    val defaultMangaDiscoveryStyleIsGrid = prefsManager.defaultMangaDiscoveryStyleFlow.stateIn(
+    val listStyleIsGrid = prefsManager.listStyleFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = false
@@ -159,6 +154,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefsManager.saveTheme(preference) }
     }
 
+    fun setThemePalette(palette: ThemePalette) {
+        viewModelScope.launch { prefsManager.saveThemePalette(palette) }
+    }
+
     fun setTitleLanguage(language: TitleLanguage) {
         viewModelScope.launch { prefsManager.saveTitleLanguage(language) }
     }
@@ -206,6 +205,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { prefsManager.saveNsfwToggle(enabled) }
     }
 
+    fun setShowNsfwCount(enabled: Boolean) {
+        viewModelScope.launch { prefsManager.saveShowNsfwCount(enabled) }
+    }
+
     fun setNsfwEnabledAndThen(enabled: Boolean, onSaved: () -> Unit) {
         viewModelScope.launch {
             prefsManager.saveNsfwToggle(enabled)
@@ -213,20 +216,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setDefaultAnimeListStyle(isGrid: Boolean) {
-        viewModelScope.launch { prefsManager.saveDefaultAnimeListStyle(isGrid) }
+    fun setListStyle(isGrid: Boolean) {
+        viewModelScope.launch { prefsManager.saveListStyle(isGrid) }
     }
 
-    fun setDefaultMangaListStyle(isGrid: Boolean) {
-        viewModelScope.launch { prefsManager.saveDefaultMangaListStyle(isGrid) }
-    }
-
-    fun setDefaultAnimeDiscoveryStyle(isGrid: Boolean) {
-        viewModelScope.launch { prefsManager.saveDefaultAnimeDiscoveryStyle(isGrid) }
-    }
-
-    fun setDefaultMangaDiscoveryStyle(isGrid: Boolean) {
-        viewModelScope.launch { prefsManager.saveDefaultMangaDiscoveryStyle(isGrid) }
+    fun resetListDefaults() {
+        viewModelScope.launch { prefsManager.resetListDefaults() }
     }
 
     fun setEpisodeNotificationsEnabled(enabled: Boolean) {

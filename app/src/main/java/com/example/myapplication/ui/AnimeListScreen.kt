@@ -118,8 +118,8 @@ fun AnimeListScreen(
     val randomAnimeNavigation by viewModel.randomAnimeNavigation.collectAsState()
     val isRefreshingAnimeRecommendations by viewModel.isRefreshingAnimeRecommendations.collectAsState()
     val isRefreshingMangaRecommendations by viewModel.isRefreshingMangaRecommendations.collectAsState()
-    val animeDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow(isAnime = true).collectAsState(initial = false)
-    val mangaDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow(isAnime = false).collectAsState(initial = false)
+    val animeDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow().collectAsState(initial = false)
+    val mangaDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow().collectAsState(initial = false)
     val animeDiscoverySort by viewModel.getDiscoverySortFlow(isAnime = true).collectAsState(initial = "members")
     val mangaDiscoverySort by viewModel.getDiscoverySortFlow(isAnime = false).collectAsState(initial = "members")
     val homeContinueWatchingEnabled by viewModel.getHomeContinueWatchingEnabledFlow().collectAsState(initial = true)
@@ -590,7 +590,7 @@ fun AnimeListScreen(
 
                             SeasonalActionToolbar(
                                 isGridView = currentDiscoveryIsGrid,
-                                onGridClick = { viewModel.setDiscoveryGridMode(isAnime = true, isGrid = !currentDiscoveryIsGrid) },
+                                onGridClick = { viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid) },
                                 currentSort = state.currentSort,
                                 onSortChange = {
                                     loadingViewContext = LoadingViewContext.DISCOVERY
@@ -674,7 +674,7 @@ fun AnimeListScreen(
                         
                         SeasonalActionToolbar(
                             isGridView = currentDiscoveryIsGrid,
-                            onGridClick = { viewModel.setDiscoveryGridMode(isAnime = false, isGrid = !currentDiscoveryIsGrid) },
+                            onGridClick = { viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid) },
                             currentSort = state.currentSort,
                             onSortChange = {
                                 loadingViewContext = LoadingViewContext.DISCOVERY
@@ -732,10 +732,7 @@ fun AnimeListScreen(
                         SeasonalActionToolbar(
                             isGridView = currentDiscoveryIsGrid,
                             onGridClick = {
-                                viewModel.setDiscoveryGridMode(
-                                    isAnime = state.isAnime,
-                                    isGrid = !currentDiscoveryIsGrid
-                                )
+                                viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid)
                             },
                             currentSort = state.currentSort,
                             onSortChange = {
@@ -795,10 +792,7 @@ fun AnimeListScreen(
                             },
                             isGridView = currentDiscoveryIsGrid,
                             onGridClick = {
-                                viewModel.setDiscoveryGridMode(
-                                    isAnime = searchMediaType == SearchMediaType.ANIME,
-                                    isGrid = !currentDiscoveryIsGrid
-                                )
+                                viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid)
                             }
                         )
 

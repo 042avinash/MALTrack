@@ -779,6 +779,7 @@ fun AnimeDetailsContent(
                             Column(
                                 modifier = Modifier
                                     .width(80.dp)
+                                    .heightIn(min = 136.dp)
                                     .clickable {
                                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(charData.character.url)))
                                     },
@@ -796,6 +797,7 @@ fun AnimeDetailsContent(
                                 Text(
                                     text = charData.character.name,
                                     style = MaterialTheme.typography.bodySmall,
+                                    minLines = 2,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = FontWeight.Medium,
@@ -805,6 +807,8 @@ fun AnimeDetailsContent(
                                     text = charData.role,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -814,7 +818,7 @@ fun AnimeDetailsContent(
                                 Box(
                                     modifier = Modifier
                                         .width(80.dp)
-                                        .height(120.dp)
+                                        .heightIn(min = 136.dp)
                                         .clickable { showAllCast = true },
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -875,6 +879,7 @@ fun AnimeDetailsContent(
                             Column(
                                 modifier = Modifier
                                     .width(80.dp)
+                                    .heightIn(min = 136.dp)
                                     .clickable {
                                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(vaData.person.url)))
                                     },
@@ -892,6 +897,7 @@ fun AnimeDetailsContent(
                                 Text(
                                     text = vaData.person.name,
                                     style = MaterialTheme.typography.bodySmall,
+                                    minLines = 2,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     fontWeight = FontWeight.Medium,
@@ -901,6 +907,8 @@ fun AnimeDetailsContent(
                                     text = vaData.language,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -910,7 +918,7 @@ fun AnimeDetailsContent(
                                 Box(
                                     modifier = Modifier
                                         .width(80.dp)
-                                        .height(120.dp)
+                                        .heightIn(min = 136.dp)
                                         .clickable { showAllCast = true },
                                     contentAlignment = Alignment.Center
                                 ) {

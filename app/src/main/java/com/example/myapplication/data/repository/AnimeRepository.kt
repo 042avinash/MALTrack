@@ -589,15 +589,50 @@ class AnimeRepository @Inject constructor(
         )
     }
 
-    suspend fun getUserAnimeList(username: String? = null, status: String? = null, sort: String = "list_score", offset: Int = 0, limit: Int = 100): UserAnimeListResponse {
-        return apiService.getUserAnimeList(clientId = clientId, username = username ?: "@me", status = status, sort = sort, offset = offset, limit = limit, nsfw = isNsfw())
+    suspend fun getUserAnimeList(
+        username: String? = null,
+        status: String? = null,
+        sort: String = "list_score",
+        offset: Int = 0,
+        limit: Int = 100,
+        includeNsfw: Boolean? = null
+    ): UserAnimeListResponse {
+        return apiService.getUserAnimeList(
+            clientId = clientId,
+            username = username ?: "@me",
+            status = status,
+            sort = sort,
+            offset = offset,
+            limit = limit,
+            nsfw = includeNsfw ?: isNsfw()
+        )
     }
 
-    suspend fun getUserMangaList(username: String? = null, status: String? = null, sort: String = "list_score", offset: Int = 0, limit: Int = 100): UserMangaListResponse {
-        return apiService.getUserMangaList(clientId = clientId, username = username ?: "@me", status = status, sort = sort, offset = offset, limit = limit, nsfw = isNsfw())
+    suspend fun getUserMangaList(
+        username: String? = null,
+        status: String? = null,
+        sort: String = "list_score",
+        offset: Int = 0,
+        limit: Int = 100,
+        includeNsfw: Boolean? = null
+    ): UserMangaListResponse {
+        return apiService.getUserMangaList(
+            clientId = clientId,
+            username = username ?: "@me",
+            status = status,
+            sort = sort,
+            offset = offset,
+            limit = limit,
+            nsfw = includeNsfw ?: isNsfw()
+        )
     }
 
-    suspend fun getAllUserAnimeList(username: String? = null, status: String? = null, sort: String = "list_score"): List<UserAnimeData> {
+    suspend fun getAllUserAnimeList(
+        username: String? = null,
+        status: String? = null,
+        sort: String = "list_score",
+        includeNsfw: Boolean? = null
+    ): List<UserAnimeData> {
         val allItems = mutableListOf<UserAnimeData>()
         var offset = 0
         val limit = 1000
@@ -608,7 +643,8 @@ class AnimeRepository @Inject constructor(
                 status = status,
                 sort = sort,
                 offset = offset,
-                limit = limit
+                limit = limit,
+                includeNsfw = includeNsfw
             )
             allItems.addAll(response.data)
             offset += response.data.size
@@ -617,7 +653,12 @@ class AnimeRepository @Inject constructor(
         return allItems
     }
 
-    suspend fun getAllUserMangaList(username: String? = null, status: String? = null, sort: String = "list_score"): List<UserMangaData> {
+    suspend fun getAllUserMangaList(
+        username: String? = null,
+        status: String? = null,
+        sort: String = "list_score",
+        includeNsfw: Boolean? = null
+    ): List<UserMangaData> {
         val allItems = mutableListOf<UserMangaData>()
         var offset = 0
         val limit = 1000
@@ -628,7 +669,8 @@ class AnimeRepository @Inject constructor(
                 status = status,
                 sort = sort,
                 offset = offset,
-                limit = limit
+                limit = limit,
+                includeNsfw = includeNsfw
             )
             allItems.addAll(response.data)
             offset += response.data.size
