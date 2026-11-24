@@ -3,6 +3,7 @@ package com.example.myapplication.data.local
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,7 +19,10 @@ import javax.inject.Singleton
 private val Context.userPrefsDataStore by preferencesDataStore(name = "user_settings_prefs")
 
 enum class ThemePreference { SYSTEM, LIGHT, DARK, AMOLED }
-enum class ThemePalette { SYSTEM, ANIME_NIGHT, MANGA_PAPER, MAL_INSPIRED, SOFT_PASTEL }
+enum class ThemePalette { SYSTEM, WINTER, SPRING, SUMMER, FALL, CUSTOM, ANIME_NIGHT, MANGA_PAPER, MAL_INSPIRED, SOFT_PASTEL }
+data class ThemeCustomColors(
+    val primary: Int = 0xFF315B8A.toInt()
+)
 enum class TitleLanguage { ROMAJI, ENGLISH, JAPANESE }
 enum class DefaultSection { 
     HOME_ANIME, 
@@ -35,6 +39,7 @@ class UserPreferencesManager @Inject constructor(
 ) {
     private val themeKey = stringPreferencesKey("theme_preference")
     private val themePaletteKey = stringPreferencesKey("theme_palette")
+    private val customThemePrimaryKey = intPreferencesKey("custom_theme_primary")
     private val titleLangKey = stringPreferencesKey("title_language")
     private val defaultSectionKey = stringPreferencesKey("default_section")
     private val defaultAnimeStatusKey = stringPreferencesKey("default_anime_status")
@@ -64,13 +69,28 @@ class UserPreferencesManager @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     
     val themeFlow: Flow<ThemePreference> = context.userPrefsDataStore.data.map { prefs ->
-        ThemePreference.valueOf(prefs[themeKey] ?: ThemePreference.SYSTEM.name)
+        runCatching { ThemePreference.valueOf(prefs[themeKey] ?: ThemePreference.SYSTEM.name) }
+            .getOrDefault(ThemePreference.SYSTEM)
     }
 
     val themePaletteFlow: Flow<ThemePalette> = context.userPrefsDataStore.data.map { prefs ->
-        runCatching { ThemePalette.valueOf(prefs[themePaletteKey] ?: ThemePalette.SYSTEM.name) }
+        val saved = runCatching { ThemePalette.valueOf(prefs[themePaletteKey] ?: ThemePalette.SYSTEM.name) }
             .getOrDefault(ThemePalette.SYSTEM)
+        when (saved) {
+            ThemePalette.ANIME_NIGHT -> ThemePalette.WINTER
+            ThemePalette.MANGA_PAPER -> ThemePalette.FALL
+            ThemePalette.MAL_INSPIRED -> ThemePalette.WINTER
+            ThemePalette.SOFT_PASTEL -> ThemePalette.SPRING
+            else -> saved
+        }
     }
+
+    val customThemeColorsFlow: Flow<ThemeCustomColors> = context.userPrefsDataStore.data.map { prefs ->
+        ThemeCustomColors(
+            primary = prefs[customThemePrimaryKey] ?: ThemeCustomColors().primary
+        )
+    }
+
 
     val titleLanguageFlow: Flow<TitleLanguage> = context.userPrefsDataStore.data.map { prefs ->
         TitleLanguage.valueOf(prefs[titleLangKey] ?: TitleLanguage.ROMAJI.name)
@@ -196,6 +216,13 @@ class UserPreferencesManager @Inject constructor(
     suspend fun saveThemePalette(palette: ThemePalette) {
         context.userPrefsDataStore.edit { prefs -> prefs[themePaletteKey] = palette.name }
     }
+
+    suspend fun saveCustomThemeColor(color: Int) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[customThemePrimaryKey] = color
+        }
+    }
+
 
     suspend fun saveTitleLanguage(language: TitleLanguage) {
         context.userPrefsDataStore.edit { prefs -> prefs[titleLangKey] = language.name }
@@ -367,12 +394,6 @@ class UserPreferencesManager @Inject constructor(
     
     fun getGridModeFlow(): Flow<Boolean> {
         return listStyleFlow
-    }
-
-    suspend fun saveGridMode(isGrid: Boolean) {
-        context.userPrefsDataStore.edit { prefs ->
-            prefs[listStyleKey] = isGrid
-        }
     }
 
     fun getSortModeFlow(listKey: String): Flow<String> {

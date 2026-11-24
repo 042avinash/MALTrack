@@ -507,12 +507,6 @@ class UserListViewModel @Inject constructor(
             .replace(Regex("[\\p{Punct}\\s]+"), "")
     }
 
-    fun setGridMode(isGrid: Boolean) {
-        _savedGridModes.value = animeStatuses.associateWith { isGrid }
-        viewModelScope.launch {
-            prefsManager.saveGridMode(isGrid)
-        }
-    }
 }
 
 data class UserListState(

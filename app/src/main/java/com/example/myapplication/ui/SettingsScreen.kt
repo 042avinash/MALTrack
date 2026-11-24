@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -11,10 +12,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -35,11 +39,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -48,6 +57,7 @@ import com.example.myapplication.R
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
 import com.example.myapplication.data.local.ThemePalette
+import com.example.myapplication.data.local.ThemeCustomColors
 import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.notifications.AiringNotificationScheduler
 import kotlinx.coroutines.launch
@@ -65,6 +75,7 @@ fun SettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val theme by viewModel.themePreference.collectAsState()
     val themePalette by viewModel.themePalette.collectAsState()
+    val customThemeColors by viewModel.customThemeColors.collectAsState()
     val titleLang by viewModel.titleLanguage.collectAsState()
     val defaultSection by viewModel.defaultSection.collectAsState()
     val defaultAnimeStatus by viewModel.defaultAnimeStatus.collectAsState()
@@ -87,6 +98,7 @@ fun SettingsScreen(
     val powerManager = context.getSystemService(android.content.Context.POWER_SERVICE) as? PowerManager
     var pendingBatteryOptimizationPrompt by remember { mutableStateOf(false) }
     var showBatteryOptimizationWarning by remember { mutableStateOf(false) }
+    var showCustomColorDialog by remember { mutableStateOf(false) }
     var pendingTestNotification by remember { mutableStateOf(false) }
     val batteryOptimizationIgnoredNow = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -248,7 +260,7 @@ fun SettingsScreen(
                         Text(
                             text = "Download latest version",
                             textAlign = TextAlign.End,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.clickable {
                                 context.startActivity(
@@ -272,7 +284,7 @@ fun SettingsScreen(
                     ThemePreference.SYSTEM to "System",
                     ThemePreference.LIGHT to "Light",
                     ThemePreference.DARK to "Dark",
-                    ThemePreference.AMOLED to "AMOLED"
+                    ThemePreference.AMOLED to "Black"
                 )
                 SingleChoiceSegmentedButtonRow(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
@@ -311,15 +323,30 @@ fun SettingsScreen(
                 )
                 listOf(
                     ThemePalette.SYSTEM,
-                    ThemePalette.ANIME_NIGHT,
-                    ThemePalette.MANGA_PAPER,
-                    ThemePalette.MAL_INSPIRED,
-                    ThemePalette.SOFT_PASTEL
+                    ThemePalette.WINTER,
+                    ThemePalette.SPRING,
+                    ThemePalette.SUMMER,
+                    ThemePalette.FALL,
+                    ThemePalette.CUSTOM
                 ).forEach { palette ->
                     ThemePaletteCard(
                         palette = palette,
                         selected = themePalette == palette,
-                        onClick = { viewModel.setThemePalette(palette) }
+                        customColors = if (palette == ThemePalette.CUSTOM) customThemeColors else null,
+                        onClick = { viewModel.setThemePalette(palette) },
+                        onSwatchClick = if (palette == ThemePalette.CUSTOM) {
+                            { showCustomColorDialog = true }
+                        } else null
+                    )
+                }
+                if (showCustomColorDialog) {
+                    CustomThemeColorDialog(
+                        initialColor = customThemeColors.primary,
+                        onDismiss = { showCustomColorDialog = false },
+                        onSave = { color ->
+                            viewModel.setCustomThemeColor(color)
+                            showCustomColorDialog = false
+                        }
                     )
                 }
                 }
@@ -420,7 +447,7 @@ fun SettingsScreen(
                             Icon(
                                 imageVector = Icons.Default.Notifications,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.padding(end = 16.dp)
                             )
                             Column {
@@ -488,7 +515,7 @@ fun SettingsScreen(
                             )
                         },
                         confirmButton = {
-                            TextButton(onClick = {
+                            AccentTextButton(onClick = {
                                 showBatteryOptimizationWarning = false
                                 pendingBatteryOptimizationPrompt = true
                                 launchBatteryOptimizationRequest(context, batteryOptimizationRequestLauncher)
@@ -497,7 +524,7 @@ fun SettingsScreen(
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = {
+                            AccentTextButton(onClick = {
                                 showBatteryOptimizationWarning = false
                                 pendingBatteryOptimizationPrompt = false
                             }) {
@@ -532,7 +559,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.GridView,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.padding(end = 16.dp)
                         )
                         Column {
@@ -566,7 +593,7 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.padding(end = 16.dp)
                         )
                         Column {
@@ -634,13 +661,13 @@ fun SettingsScreen(
             title = { Text("Reset Defaults?") },
             text = { Text("Restore the original anime and manga list sections, styles, and sorting options?") },
             confirmButton = {
-                TextButton(onClick = {
+                AccentTextButton(onClick = {
                     viewModel.resetListDefaults()
                     showResetConfirmation = false
                 }) { Text("Reset") }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirmation = false }) { Text("Cancel") }
+                AccentTextButton(onClick = { showResetConfirmation = false }) { Text("Cancel") }
             }
         )
     }
@@ -689,13 +716,13 @@ fun SettingsScreen(
             title = { Text("Log out?") },
             text = { Text("You can sign back in to your MyAnimeList account at any time.") },
             confirmButton = {
-                TextButton(onClick = {
+                AccentTextButton(onClick = {
                     showLogoutConfirmation = false
                     onLogout()
                 }) { Text("Log Out") }
             },
             dismissButton = {
-                TextButton(onClick = { showLogoutConfirmation = false }) { Text("Cancel") }
+                AccentTextButton(onClick = { showLogoutConfirmation = false }) { Text("Cancel") }
             }
         )
     }
@@ -952,7 +979,7 @@ fun SettingsSection(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
         )
         Surface(
@@ -976,7 +1003,7 @@ fun SettingClickableItem(icon: ImageVector, title: String, subtitle: String, onC
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(end = 16.dp)
         )
         Column {
@@ -984,7 +1011,7 @@ fun SettingClickableItem(icon: ImageVector, title: String, subtitle: String, onC
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.onPrimary
             )
         }
     }
@@ -1013,7 +1040,7 @@ fun SettingToggleItem(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.padding(end = 16.dp)
             )
             Column {
@@ -1119,7 +1146,7 @@ private fun HomeSectionsDialog(
             }
         },
         confirmButton = {
-            TextButton(
+            AccentTextButton(
                 onClick = {
                     onSave(
                         HomeSectionsConfig(
@@ -1137,7 +1164,7 @@ private fun HomeSectionsDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            AccentTextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }
@@ -1148,37 +1175,45 @@ private fun themeModeLabel(mode: ThemePreference): String = when (mode) {
     ThemePreference.SYSTEM -> "System"
     ThemePreference.LIGHT -> "Light"
     ThemePreference.DARK -> "Dark"
-    ThemePreference.AMOLED -> "AMOLED"
+    ThemePreference.AMOLED -> "Black"
 }
 
 private fun themePaletteLabel(palette: ThemePalette): String = when (palette) {
     ThemePalette.SYSTEM -> "System colors"
-    ThemePalette.ANIME_NIGHT -> "Anime Night"
-    ThemePalette.MANGA_PAPER -> "Manga Paper"
-    ThemePalette.MAL_INSPIRED -> "MAL Inspired"
-    ThemePalette.SOFT_PASTEL -> "Soft Pastel"
+    ThemePalette.WINTER, ThemePalette.ANIME_NIGHT, ThemePalette.MAL_INSPIRED -> "Winter"
+    ThemePalette.SPRING, ThemePalette.SOFT_PASTEL -> "Spring"
+    ThemePalette.SUMMER -> "Summer"
+    ThemePalette.FALL, ThemePalette.MANGA_PAPER -> "Fall"
+    ThemePalette.CUSTOM -> "Custom"
 }
 
 private fun themePaletteDescription(palette: ThemePalette): String = when (palette) {
     ThemePalette.SYSTEM -> "Use colors from your device"
-    ThemePalette.ANIME_NIGHT -> "Navy, violet, and coral"
-    ThemePalette.MANGA_PAPER -> "Warm paper, ink, and vermilion"
-    ThemePalette.MAL_INSPIRED -> "Deep blue and cyan"
-    ThemePalette.SOFT_PASTEL -> "Lavender, teal, and rose"
+    ThemePalette.WINTER, ThemePalette.ANIME_NIGHT, ThemePalette.MAL_INSPIRED -> "Glacier blue with an icy sky highlight"
+    ThemePalette.SPRING, ThemePalette.SOFT_PASTEL -> "Rose pink with a soft blush highlight"
+    ThemePalette.SUMMER -> "Fern green with a fresh mint highlight"
+    ThemePalette.FALL, ThemePalette.MANGA_PAPER -> "Terracotta with a warm amber highlight"
+    ThemePalette.CUSTOM -> "Choose one color; its highlight shade is derived automatically"
 }
 
 @Composable
 private fun ThemePaletteCard(
     palette: ThemePalette,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    customColors: ThemeCustomColors? = null,
+    onSwatchClick: (() -> Unit)? = null
 ) {
     val swatches = when (palette) {
-        ThemePalette.SYSTEM -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.secondary
-        ThemePalette.ANIME_NIGHT -> Color(0xFF59428C) to Color(0xFFB64E42)
-        ThemePalette.MANGA_PAPER -> Color(0xFF854331) to Color(0xFF715B3D)
-        ThemePalette.MAL_INSPIRED -> Color(0xFF145B96) to Color(0xFF006970)
-        ThemePalette.SOFT_PASTEL -> Color(0xFF705586) to Color(0xFF35695B)
+        ThemePalette.SYSTEM -> emptyList()
+        ThemePalette.WINTER, ThemePalette.ANIME_NIGHT, ThemePalette.MAL_INSPIRED ->
+            listOf(Color(0xFF315B8A), Color(0xFFDCEBFA))
+        ThemePalette.SPRING, ThemePalette.SOFT_PASTEL ->
+            listOf(Color(0xFFAD4F75), Color(0xFFF8DDE8))
+        ThemePalette.SUMMER -> listOf(Color(0xFF34764A), Color(0xFFDBEFDE))
+        ThemePalette.FALL, ThemePalette.MANGA_PAPER ->
+            listOf(Color(0xFFB95B2A), Color(0xFFFFE3C4))
+        ThemePalette.CUSTOM -> listOf(Color(customColors?.primary ?: ThemeCustomColors().primary))
     }
     Card(
         onClick = onClick,
@@ -1186,7 +1221,7 @@ private fun ThemePaletteCard(
         colors = CardDefaults.cardColors(
             containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimary) else null
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1200,12 +1235,149 @@ private fun ThemePaletteCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Box(Modifier.size(22.dp).background(swatches.first, CircleShape))
-            Spacer(Modifier.width(7.dp))
-            Box(Modifier.size(22.dp).background(swatches.second, CircleShape))
+            swatches.forEach { color ->
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .then(
+                            if (onSwatchClick != null) {
+                                Modifier
+                                    .clickable { onSwatchClick() }
+                                    .semantics { contentDescription = "Edit custom accent color" }
+                            } else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        Modifier
+                            .size(20.dp)
+                            .background(color, CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                    )
+                    Box(
+                        Modifier
+                            .size(22.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f), CircleShape)
+                    )
+                }
+            }
             Spacer(Modifier.width(10.dp))
-            RadioButton(selected = selected, onClick = null)
+            RadioButton(
+                selected = selected,
+                onClick = null,
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            )
         }
+    }
+}
+
+@Composable
+private fun CustomThemeColorDialog(
+    initialColor: Int,
+    onDismiss: () -> Unit,
+    onSave: (Int) -> Unit
+) {
+    val hsv = remember(initialColor) { FloatArray(3).also { AndroidColor.colorToHSV(initialColor, it) } }
+    var hue by remember(initialColor) { mutableFloatStateOf(hsv[0]) }
+    var saturation by remember(initialColor) { mutableFloatStateOf(hsv[1]) }
+    var brightness by remember(initialColor) { mutableFloatStateOf(hsv[2]) }
+    val previewColor = AndroidColor.HSVToColor(floatArrayOf(hue, saturation, brightness))
+    val hueGradient = (0..6).map { step ->
+        Color(AndroidColor.HSVToColor(floatArrayOf(step * 60f, 1f, 1f)))
+    }
+    val saturationGradient = listOf(
+        Color(AndroidColor.HSVToColor(floatArrayOf(hue, 0f, brightness))),
+        Color(AndroidColor.HSVToColor(floatArrayOf(hue, 1f, brightness)))
+    )
+    val brightnessGradient = listOf(
+        Color.Black,
+        Color(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, 1f)))
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose custom accent color") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .background(Color(previewColor), RoundedCornerShape(12.dp))
+                )
+                Text("Hue", style = MaterialTheme.typography.labelMedium)
+                ColorGradientSlider(
+                    value = hue,
+                    onValueChange = { hue = it },
+                    valueRange = 0f..360f,
+                    gradientColors = hueGradient
+                )
+                Text("Saturation", style = MaterialTheme.typography.labelMedium)
+                ColorGradientSlider(
+                    value = saturation,
+                    onValueChange = { saturation = it },
+                    valueRange = 0f..1f,
+                    gradientColors = saturationGradient
+                )
+                Text("Brightness", style = MaterialTheme.typography.labelMedium)
+                ColorGradientSlider(
+                    value = brightness,
+                    onValueChange = { brightness = it },
+                    valueRange = 0f..1f,
+                    gradientColors = brightnessGradient
+                )
+            }
+        },
+        confirmButton = {
+            AccentTextButton(onClick = { onSave(previewColor) }) { Text("Save color") }
+        },
+        dismissButton = {
+            AccentTextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun ColorGradientSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    gradientColors: List<Color>
+) {
+    Box(Modifier.fillMaxWidth()) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .align(Alignment.Center)
+        ) {
+            drawRoundRect(
+                brush = Brush.horizontalGradient(gradientColors),
+                cornerRadius = CornerRadius(size.height / 2)
+            )
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.9f),
+                cornerRadius = CornerRadius(size.height / 2),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
+            )
+            drawRoundRect(
+                color = Color.Black.copy(alpha = 0.7f),
+                cornerRadius = CornerRadius(size.height / 2),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.onSurface,
+                activeTrackColor = Color.Transparent,
+                inactiveTrackColor = Color.Transparent
+            )
+        )
     }
 }
 
@@ -1231,7 +1403,7 @@ fun LanguageDialog(currentValue: TitleLanguage, onDismiss: () -> Unit, onSelect:
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1344,8 +1516,8 @@ private fun ListSectionDefaultsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(scope, selectedSection) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = { onSave(scope, selectedSection) }) { Text("Save") } },
+        dismissButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1387,8 +1559,8 @@ private fun ListSortingDefaultsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(scope, selectedSort) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = { onSave(scope, selectedSort) }) { Text("Save") } },
+        dismissButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1427,8 +1599,8 @@ private fun DiscoverySortingDefaultsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(scope, selectedSort) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = { onSave(scope, selectedSort) }) { Text("Save") } },
+        dismissButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1473,7 +1645,7 @@ private fun StartupPageDialog(currentValue: DefaultSection, onDismiss: () -> Uni
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1521,7 +1693,7 @@ private fun StartupContentDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Back") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Back") } }
     )
 }
 
@@ -1556,7 +1728,7 @@ fun StatusDialog(title: String, options: List<String>, currentValue: String, onD
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1587,7 +1759,7 @@ fun ListStyleDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1644,7 +1816,7 @@ fun SortDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1680,7 +1852,7 @@ fun DiscoverySortDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = { AccentTextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -1697,12 +1869,12 @@ private fun RestartRequiredDialog(
         title = { Text(title) },
         text = { Text(message) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            AccentTextButton(onClick = onConfirm) {
                 Text("Continue")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            AccentTextButton(onClick = onDismiss) {
                 Text("Not Now")
             }
         }

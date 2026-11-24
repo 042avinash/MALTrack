@@ -7,7 +7,22 @@ It combines MyAnimeList account and catalogue data with community metadata from 
 
 ## Current Version
 
-- `v1.4.8`
+- `v1.4.9`
+
+## v1.4.9 Highlights
+
+- **List and Discovery Controls**:
+  - Added temporary page-style and sorting controls to anime and manga lists, with permanent defaults managed in Settings.
+  - Added sorting controls to discovery pages, with persistent discovery sort defaults in Settings.
+  - Preserved the selected My List tab when navigating away and returning.
+- **MAL Search**:
+  - Added a Load More flow to search across additional MAL result pages, up to 100 results.
+- **Appearance and Profiles**:
+  - Added seasonal palettes and a custom accent color picker with visible hue, saturation, and brightness gradients.
+  - Refined the profile header and made its anime/manga selector match the home page selector.
+  - Made the bottom navigation use a consistent profile icon and highlight it on the user's own profile.
+- **Release Alignment**:
+  - App version bumped to `v1.4.9` (`versionCode 34`).
 
 ## v1.4.8 Highlights
 

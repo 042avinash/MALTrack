@@ -1,5 +1,6 @@
 package com.example.myapplication.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -42,7 +43,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
@@ -74,6 +76,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +88,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.data.local.getPreferredTitle
@@ -118,8 +122,8 @@ fun AnimeListScreen(
     val randomAnimeNavigation by viewModel.randomAnimeNavigation.collectAsState()
     val isRefreshingAnimeRecommendations by viewModel.isRefreshingAnimeRecommendations.collectAsState()
     val isRefreshingMangaRecommendations by viewModel.isRefreshingMangaRecommendations.collectAsState()
-    val animeDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow().collectAsState(initial = false)
-    val mangaDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow().collectAsState(initial = false)
+    val defaultDiscoveryIsGrid by viewModel.getDiscoveryGridModeFlow().collectAsState(initial = false)
+    val discoveryPageGridModes = remember { mutableStateMapOf<String, Boolean>() }
     val animeDiscoverySort by viewModel.getDiscoverySortFlow(isAnime = true).collectAsState(initial = "members")
     val mangaDiscoverySort by viewModel.getDiscoverySortFlow(isAnime = false).collectAsState(initial = "members")
     val homeContinueWatchingEnabled by viewModel.getHomeContinueWatchingEnabledFlow().collectAsState(initial = true)
@@ -152,13 +156,16 @@ fun AnimeListScreen(
     }
 
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val currentDiscoveryIsGrid = when (val state = uiState) {
-        is AnimeUiState.MangaDiscoveryDetails -> mangaDiscoveryIsGrid
-        is AnimeUiState.TopDiscoveryDetails -> if (state.isAnime) animeDiscoveryIsGrid else mangaDiscoveryIsGrid
-        is AnimeUiState.SearchSuccess -> if (searchMediaType == SearchMediaType.ANIME) animeDiscoveryIsGrid else mangaDiscoveryIsGrid
-        else -> animeDiscoveryIsGrid
+    val currentDiscoveryPageKey = when (val state = uiState) {
+        is AnimeUiState.SeasonalDetails -> "seasonal:${state.year}:${state.season}"
+        is AnimeUiState.MangaDiscoveryDetails -> "manga-discovery:${state.type}"
+        is AnimeUiState.TopDiscoveryDetails -> "top:${state.isAnime}:${state.title}"
+        is AnimeUiState.SearchSuccess -> "search:${searchMediaType.name}"
+        else -> "anime-discovery"
     }
+    val currentDiscoveryIsGrid = discoveryPageGridModes[currentDiscoveryPageKey] ?: defaultDiscoveryIsGrid
 
     LaunchedEffect(Unit) {
         if (!hasRequestedInitialHomeLoad && uiState is AnimeUiState.Loading && searchQuery.isEmpty()) {
@@ -241,12 +248,12 @@ fun AnimeListScreen(
                     title = { Text("Add to List?") },
                     text = { Text("Do you want to add \"${event.title}\" to your list and start watching/reading?") },
                     confirmButton = {
-                        TextButton(onClick = { viewModel.confirmQuickAdd(event.id, event.isAnime) }) {
+                        AccentTextButton(onClick = { viewModel.confirmQuickAdd(event.id, event.isAnime) }) {
                             Text("Add")
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { viewModel.dismissQuickUpdate() }) {
+                        AccentTextButton(onClick = { viewModel.dismissQuickUpdate() }) {
                             Text("Cancel")
                         }
                     }
@@ -339,6 +346,7 @@ fun AnimeListScreen(
                 onMediaTypeToggle = {
                     val nextType = if (searchMediaType == SearchMediaType.ANIME) SearchMediaType.MANGA else SearchMediaType.ANIME
                     searchMediaType = nextType
+                    Toast.makeText(context, "Searching for ${nextType.label} in MAL", Toast.LENGTH_SHORT).show()
                     viewModel.setHomeDefaultSearchAnime(nextType == SearchMediaType.ANIME)
                     if (searchQuery.isNotBlank()) {
                         loadingViewContext = LoadingViewContext.SEARCH
@@ -468,7 +476,7 @@ fun AnimeListScreen(
                                         onItemPlusOne = { id, title -> viewModel.onLongPressAnime(id, title) },
                                         onItemEditStatus = { id, title -> viewModel.prepareAnimeEdit(id, title) },
                                         endButtonLabel = "Anime List",
-                                        endButtonIcon = Icons.AutoMirrored.Filled.List,
+                                        endButtonIcon = ImageVector.vectorResource(com.example.myapplication.R.drawable.ic_patient_list),
                                         onEndButtonClick = onOpenAnimeUserList
                                     )
                                 }
@@ -485,7 +493,7 @@ fun AnimeListScreen(
                                         onItemPlusOne = { id, title -> viewModel.onLongPressManga(id, title) },
                                         onItemEditStatus = { id, title -> viewModel.prepareMangaEdit(id, title) },
                                         endButtonLabel = "Manga List",
-                                        endButtonIcon = Icons.AutoMirrored.Filled.List,
+                                        endButtonIcon = ImageVector.vectorResource(com.example.myapplication.R.drawable.ic_patient_list),
                                         onEndButtonClick = onOpenMangaUserList
                                     )
                                 }
@@ -567,34 +575,17 @@ fun AnimeListScreen(
                     }
                     Box(modifier = Modifier.fillMaxSize()) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        loadingViewContext = LoadingViewContext.HOME
-                                        viewModel.loadHomeData()
-                                    }
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                }
-                                Text(
-                                    text = "Seasonal Chart",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
                             SeasonalActionToolbar(
+                                title = "Seasonal Chart",
+                                onBackClick = {
+                                    loadingViewContext = LoadingViewContext.HOME
+                                    viewModel.loadHomeData()
+                                },
                                 isGridView = currentDiscoveryIsGrid,
-                                onGridClick = { viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid) },
+                                onGridClick = { discoveryPageGridModes[currentDiscoveryPageKey] = !currentDiscoveryIsGrid },
                                 currentSort = state.currentSort,
                                 onSortChange = {
                                     loadingViewContext = LoadingViewContext.DISCOVERY
-                                    viewModel.setDiscoverySort(isAnime = true, sort = it)
                                     viewModel.showSeasonalDetails(it)
                                 },
                                 listFilters = listFilters,
@@ -638,7 +629,7 @@ fun AnimeListScreen(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    TextButton(
+                                    AccentTextButton(
                                         onClick = {
                                             loadingViewContext = LoadingViewContext.DISCOVERY
                                             viewModel.selectSpecificSeason(currentSeasonYear, currentSeasonValue)
@@ -659,26 +650,17 @@ fun AnimeListScreen(
                 }
                 is AnimeUiState.MangaDiscoveryDetails -> {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = state.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(16.dp),
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        
                         SeasonalActionToolbar(
+                            title = state.title,
+                            onBackClick = {
+                                loadingViewContext = LoadingViewContext.HOME
+                                viewModel.loadHomeData()
+                            },
                             isGridView = currentDiscoveryIsGrid,
-                            onGridClick = { viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid) },
+                            onGridClick = { discoveryPageGridModes[currentDiscoveryPageKey] = !currentDiscoveryIsGrid },
                             currentSort = state.currentSort,
                             onSortChange = {
                                 loadingViewContext = LoadingViewContext.DISCOVERY
-                                viewModel.setDiscoverySort(isAnime = false, sort = it)
                                 viewModel.showMangaDiscovery(state.type, it)
                             },
                             listFilters = listFilters,
@@ -701,43 +683,19 @@ fun AnimeListScreen(
                 }
                 is AnimeUiState.TopDiscoveryDetails -> {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        loadingViewContext = LoadingViewContext.HOME
-                                        viewModel.loadHomeData()
-                                    }
-                                ) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                                }
-                                Text(
-                                    text = state.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        
                         SeasonalActionToolbar(
+                            title = state.title,
+                            onBackClick = {
+                                loadingViewContext = LoadingViewContext.HOME
+                                viewModel.loadHomeData()
+                            },
                             isGridView = currentDiscoveryIsGrid,
                             onGridClick = {
-                                viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid)
+                                discoveryPageGridModes[currentDiscoveryPageKey] = !currentDiscoveryIsGrid
                             },
                             currentSort = state.currentSort,
                             onSortChange = {
                                 loadingViewContext = LoadingViewContext.DISCOVERY
-                                viewModel.setDiscoverySort(isAnime = state.isAnime, sort = it)
                                 viewModel.showTopDiscovery(state.isAnime, it)
                             },
                             listFilters = listFilters,
@@ -764,23 +722,13 @@ fun AnimeListScreen(
                     }
                 }
                 is AnimeUiState.SearchSuccess -> {
-                    val sortedAnimeResults = if (animeDiscoverySort == "score") {
-                        state.animeList.sortedByDescending { it.node.meanScore ?: 0f }
-                    } else {
-                        state.animeList
-                    }
-                    val sortedMangaResults = if (mangaDiscoverySort == "score") {
-                        state.mangaList.sortedByDescending { it.node.meanScore ?: 0f }
-                    } else {
-                        state.mangaList
-                    }
-
                     Column(modifier = Modifier.fillMaxSize()) {
                         SearchActionToolbar(
                             searchMediaType = searchMediaType,
                             onMediaTypeToggle = {
                                 val nextType = if (searchMediaType == SearchMediaType.ANIME) SearchMediaType.MANGA else SearchMediaType.ANIME
                                 searchMediaType = nextType
+                                Toast.makeText(context, "Searching for ${nextType.label} in MAL", Toast.LENGTH_SHORT).show()
                                 viewModel.setHomeDefaultSearchAnime(nextType == SearchMediaType.ANIME)
                                 if (searchQuery.isNotBlank()) {
                                     loadingViewContext = LoadingViewContext.SEARCH
@@ -792,17 +740,27 @@ fun AnimeListScreen(
                             },
                             isGridView = currentDiscoveryIsGrid,
                             onGridClick = {
-                                viewModel.setDiscoveryGridMode(isGrid = !currentDiscoveryIsGrid)
+                                discoveryPageGridModes[currentDiscoveryPageKey] = !currentDiscoveryIsGrid
                             }
                         )
 
                         when {
-                            sortedAnimeResults.isNotEmpty() -> {
+                            state.animeList.isNotEmpty() -> {
                                 TopDiscoveryView(
-                                    items = sortedAnimeResults,
+                                    items = state.animeList,
                                     airingDetails = airingDetails,
                                     titleLanguage = titleLanguage,
                                     isGridView = currentDiscoveryIsGrid,
+                                    footerContent = if (state.hasMoreResults) {
+                                        {
+                                            SearchLoadMoreFooter(
+                                                isLoading = state.isLoadingMore,
+                                                onLoadMore = {
+                                                    viewModel.loadMoreSearchResults(searchQuery, isAnimeSearch = true)
+                                                }
+                                            )
+                                        }
+                                    } else null,
                                     onItemClick = onAnimeClick,
                                     onItemPlusOne = { id, title ->
                                         viewModel.onLongPressAnime(id, title)
@@ -813,12 +771,22 @@ fun AnimeListScreen(
                                 )
                             }
 
-                            sortedMangaResults.isNotEmpty() -> {
+                            state.mangaList.isNotEmpty() -> {
                                 TopDiscoveryView(
-                                    items = sortedMangaResults.map { it.toAnimeData() },
+                                    items = state.mangaList.map { it.toAnimeData() },
                                     airingDetails = emptyMap(),
                                     titleLanguage = titleLanguage,
                                     isGridView = currentDiscoveryIsGrid,
+                                    footerContent = if (state.hasMoreResults) {
+                                        {
+                                            SearchLoadMoreFooter(
+                                                isLoading = state.isLoadingMore,
+                                                onLoadMore = {
+                                                    viewModel.loadMoreSearchResults(searchQuery, isAnimeSearch = false)
+                                                }
+                                            )
+                                        }
+                                    } else null,
                                     onItemClick = onMangaClick,
                                     onItemPlusOne = { id, title ->
                                         viewModel.onLongPressManga(id, title)
@@ -858,6 +826,8 @@ fun AnimeListScreen(
 
 @Composable
 fun SeasonalActionToolbar(
+    title: String,
+    onBackClick: () -> Unit,
     isGridView: Boolean,
     onGridClick: () -> Unit,
     currentSort: String,
@@ -881,11 +851,21 @@ fun SeasonalActionToolbar(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End
     ) {
+        IconButton(onClick = onBackClick, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(18.dp))
+        }
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         Box {
-            IconButton(onClick = { showFilterMenu = true }) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filter")
+            IconButton(onClick = { showFilterMenu = true }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.FilterAlt, contentDescription = "Filter", modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = showFilterMenu, onDismissRequest = { showFilterMenu = false }) {
                 val filters = if (isManga) {
@@ -934,8 +914,8 @@ fun SeasonalActionToolbar(
         }
 
         Box {
-            TextButton(onClick = { showSortMenu = true }) {
-                Text("Sort: $currentSortLabel")
+            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Sort, contentDescription = "Sort by $currentSortLabel", modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                 sortOptions.forEach { (key, label) ->
@@ -951,10 +931,11 @@ fun SeasonalActionToolbar(
             }
         }
 
-        IconButton(onClick = onGridClick) {
+        IconButton(onClick = onGridClick, modifier = Modifier.size(36.dp)) {
             Icon(
                 imageVector = if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
-                contentDescription = "Toggle View"
+                contentDescription = "Toggle View",
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -984,7 +965,7 @@ private fun HomeBackgroundBlobs() {
                 .background(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                             Color.Transparent
                         )
                     ),
@@ -998,7 +979,7 @@ private fun HomeBackgroundBlobs() {
                 .background(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.07f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
                             Color.Transparent
                         )
                     ),
@@ -1318,6 +1299,7 @@ fun TopDiscoveryView(
     airingDetails: Map<Int, AniListMedia>,
     titleLanguage: TitleLanguage,
     isGridView: Boolean,
+    footerContent: (@Composable () -> Unit)? = null,
     onItemClick: (Int) -> Unit,
     onItemPlusOne: (Int, String) -> Unit,
     onItemEditStatus: (Int, String) -> Unit
@@ -1342,6 +1324,9 @@ fun TopDiscoveryView(
                     onEditStatus = { onItemEditStatus(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
                 )
             }
+            if (footerContent != null) {
+                item(span = { GridItemSpan(maxLineSpan) }) { footerContent() }
+            }
         }
     } else {
         val listState = rememberLazyListState()
@@ -1360,6 +1345,35 @@ fun TopDiscoveryView(
                     onPlusOne = { onItemPlusOne(item.node.id, item.node.getPreferredTitle(titleLanguage)) },
                     onEditStatus = { onItemEditStatus(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
                 )
+            }
+            if (footerContent != null) {
+                item { footerContent() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchLoadMoreFooter(
+    isLoading: Boolean,
+    onLoadMore: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Button(onClick = onLoadMore, enabled = !isLoading) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Loading…")
+            } else {
+                Text("Load more")
             }
         }
     }
@@ -1391,7 +1405,7 @@ fun SeasonNavigation(
             IconButton(onClick = onPrevious) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Season")
             }
-            TextButton(onClick = onPick) {
+            AccentTextButton(onClick = onPick) {
                 Text(
                     text = "${season.replaceFirstChar { it.uppercase() }} $year",
                     style = MaterialTheme.typography.titleSmall,
@@ -1455,7 +1469,10 @@ fun SeasonPicker(
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { expanded = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
                     ) {
                         Text(selectedSeason)
                     }
@@ -1477,7 +1494,7 @@ fun SeasonPicker(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            AccentTextButton(onClick = {
                 val parsedYear = yearText.toIntOrNull()
                 val year = (parsedYear ?: currentYear).coerceIn(minYear, maxYear)
                 onSeasonSelected(year, selectedSeason.lowercase())
@@ -1486,7 +1503,7 @@ fun SeasonPicker(
             }
         },
         dismissButton = {
-            TextButton(onClick = { onDismiss() }) {
+            AccentTextButton(onClick = { onDismiss() }) {
                 Text("Cancel")
             }
         }
@@ -2031,7 +2048,7 @@ fun SeasonalDetailsView(
                             text = type,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                         CollapseChevronPill(
                             isCollapsed = isCollapsed,
@@ -2075,7 +2092,7 @@ fun SeasonalDetailsView(
                             text = type,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                         CollapseChevronPill(
                             isCollapsed = isCollapsed,
@@ -2326,7 +2343,7 @@ fun HorizontalCard(
             Text(
                 text = "+1",
                 style = MaterialTheme.typography.headlineLarge.copy(fontSize = 48.sp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier.scale(scale)
             )
@@ -2405,7 +2422,7 @@ fun AnimeItem(
                     Text(
                         text = "Type: ${anime.node.mediaType?.uppercase() ?: "N/A"}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                     Text(
                         text = "Members: ${formatMembersCount(anime.node.numListUsers)}",
@@ -2508,7 +2525,7 @@ fun AnimeItem(
             Text(
                 text = "+1",
                 style = MaterialTheme.typography.headlineLarge.copy(fontSize = 48.sp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier.scale(scale)
             )

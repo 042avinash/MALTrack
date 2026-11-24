@@ -155,7 +155,7 @@ fun ReviewItemCard(review: JikanReviewData) {
             Text(
                 text = if (expanded) "Show Less" else "Read More",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier
                     .clickable { expanded = !expanded }
                     .padding(top = 4.dp)

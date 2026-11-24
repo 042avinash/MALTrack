@@ -446,12 +446,6 @@ class UserMangaListViewModel @Inject constructor(
         return titles.any { it.lowercase().contains(query) }
     }
 
-    fun setGridMode(isGrid: Boolean) {
-        _savedGridModes.value = mangaStatuses.associateWith { isGrid }
-        viewModelScope.launch {
-            prefsManager.saveGridMode(isGrid)
-        }
-    }
 }
 
 data class UserMangaListState(

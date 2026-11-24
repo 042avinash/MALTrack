@@ -1,5 +1,6 @@
 package com.example.myapplication.ui
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
@@ -74,7 +76,6 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -82,10 +83,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,6 +103,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -129,6 +133,7 @@ fun UserListScreen(
     onOpenSettings: () -> Unit,
     onOpenHomeSearch: (String, Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     var isAnimeView by rememberSaveable(username, initialMainTab) {
         mutableStateOf(initialMainTab == 0)
     }
@@ -141,7 +146,10 @@ fun UserListScreen(
                 initialSubTab = initialSubTab,
                 username = username,
                 onAnimeClick = onAnimeClick,
-                onTypeSwitch = { isAnimeView = false },
+                onTypeSwitch = {
+                    isAnimeView = false
+                    Toast.makeText(context, "Viewing Manga list", Toast.LENGTH_SHORT).show()
+                },
                 onOpenSettings = onOpenSettings,
                 onOpenHomeSearch = { query -> onOpenHomeSearch(query, true) }
             )
@@ -152,7 +160,10 @@ fun UserListScreen(
                 initialSubTab = initialSubTab,
                 username = username,
                 onMangaClick = onMangaClick,
-                onTypeSwitch = { isAnimeView = true },
+                onTypeSwitch = {
+                    isAnimeView = true
+                    Toast.makeText(context, "Viewing Anime list", Toast.LENGTH_SHORT).show()
+                },
                 onOpenSettings = onOpenSettings,
                 onOpenHomeSearch = { query -> onOpenHomeSearch(query, false) }
             )
@@ -283,7 +294,8 @@ private fun ListStatusCountRow(
     nsfwEnabled: Boolean,
     nsfwCount: Int?,
     isGridView: Boolean,
-    onToggleView: () -> Unit
+    onToggleView: () -> Unit,
+    onSortClick: () -> Unit
 ) {
     val label = when (status) {
         "all" -> "All"
@@ -316,6 +328,9 @@ private fun ListStatusCountRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+        IconButton(onClick = onSortClick, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Sort, contentDescription = "Sort list", modifier = Modifier.size(18.dp))
+        }
         Box(
             modifier = Modifier
                 .size(36.dp)
@@ -356,7 +371,7 @@ fun UserAnimeSection(
 
     val statuses = listOf("all", "watching", "completed", "on_hold", "plan_to_watch", "dropped")
     val statusIcons = listOf(
-        Icons.AutoMirrored.Filled.List,
+        null,
         Icons.Default.Visibility,
         Icons.Default.CheckCircle,
         Icons.Default.PauseCircle,
@@ -370,6 +385,7 @@ fun UserAnimeSection(
     var searchQuery by remember { mutableStateOf("") }
     var submittedSearchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
     var isSearchTransitionLoading by remember { mutableStateOf(false) }
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
     var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
@@ -380,8 +396,10 @@ fun UserAnimeSection(
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
-    val isGridView by viewModel.getGridModeFlow()
-        .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
+    val defaultIsGridView by viewModel.getGridModeFlow().collectAsState(initial = false)
+    val pageGridModes = remember(username) { mutableStateMapOf<String, Boolean>() }
+    val isGridView = pageGridModes[currentStatus] ?: defaultIsGridView
+    val currentSort = if (userListState.status == currentStatus) userListState.sort else viewModel.getSavedSortMode(currentStatus)
 
     val effectiveUsername = (if (username == "null") null else username) ?: "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
@@ -499,7 +517,7 @@ fun UserAnimeSection(
                         if (pagerState.currentPage < tabPositions.size) {
                             TabRowDefaults.SecondaryIndicator(
                                 Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
@@ -507,13 +525,18 @@ fun UserAnimeSection(
                     statuses.forEachIndexed { index, _ ->
                         Tab(
                             selected = pagerState.currentPage == index,
+                            selectedContentColor = MaterialTheme.colorScheme.onPrimary,
                             onClick = {
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(index)
                                 }
                             },
                             icon = {
-                                Icon(statusIcons[index], contentDescription = null, modifier = Modifier.size(24.dp))
+                                if (index == 0) {
+                                    Icon(painterResource(com.example.myapplication.R.drawable.ic_all_dashboard), contentDescription = null, modifier = Modifier.size(24.dp))
+                                } else {
+                                    Icon(statusIcons[index]!!, contentDescription = null, modifier = Modifier.size(24.dp))
+                                }
                             }
                         )
                     }
@@ -525,7 +548,8 @@ fun UserAnimeSection(
                     nsfwEnabled = nsfwEnabled,
                     nsfwCount = currentStatusNsfwCount,
                     isGridView = isGridView,
-                    onToggleView = { viewModel.setGridMode(!isGridView) }
+                    onToggleView = { pageGridModes[currentStatus] = !isGridView },
+                    onSortClick = { showSortDialog = true }
                 )
             }
         }
@@ -543,8 +567,7 @@ fun UserAnimeSection(
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userListState.status) userListState.sort else null
-                val pageIsGridView by viewModel.getGridModeFlow()
-                    .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
+                val pageIsGridView = pageGridModes[pageStatus] ?: defaultIsGridView
                 val pageListState = rememberSaveable(
                     key = "anime_list_${username ?: "@me"}_$pageStatus",
                     saver = LazyListState.Saver
@@ -619,6 +642,23 @@ fun UserAnimeSection(
         }
     }
 
+    if (showSortDialog) {
+        SortDialog(
+            title = "Sort Anime List",
+            currentValue = currentSort,
+            onDismiss = { showSortDialog = false },
+            onSelect = { sort ->
+                val mediaSort = when (sort) {
+                    "title" -> "anime_title"
+                    "start_date" -> "anime_start_date"
+                    else -> sort
+                }
+                viewModel.loadUserList(currentStatus, username = username, sort = mediaSort)
+                showSortDialog = false
+            }
+        )
+    }
+
     pendingAnimeEdit?.let { item ->
         EditListStatusDialog(
             currentStatus = item.listStatus.toMyListStatus(),
@@ -668,7 +708,7 @@ fun UserMangaSection(
 
     val statuses = listOf("all", "reading", "completed", "on_hold", "plan_to_read", "dropped")
     val statusIcons = listOf(
-        Icons.AutoMirrored.Filled.List,
+        null,
         Icons.Default.Visibility,
         Icons.Default.CheckCircle,
         Icons.Default.PauseCircle,
@@ -682,6 +722,7 @@ fun UserMangaSection(
     var searchQuery by remember { mutableStateOf("") }
     var submittedSearchQuery by remember { mutableStateOf("") }
     var isSearchExpanded by remember { mutableStateOf(false) }
+    var showSortDialog by remember { mutableStateOf(false) }
     var isSearchTransitionLoading by remember { mutableStateOf(false) }
     var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
     var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
@@ -692,8 +733,10 @@ fun UserMangaSection(
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
-    val isGridView by viewModel.getGridModeFlow()
-        .collectAsState(initial = viewModel.getSavedGridMode(currentStatus))
+    val defaultIsGridView by viewModel.getGridModeFlow().collectAsState(initial = false)
+    val pageGridModes = remember(username) { mutableStateMapOf<String, Boolean>() }
+    val isGridView = pageGridModes[currentStatus] ?: defaultIsGridView
+    val currentSort = if (userMangaListState.status == currentStatus) userMangaListState.sort else viewModel.getSavedSortMode(currentStatus)
 
     val effectiveUsername = (if (username == "null") null else username) ?: "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
@@ -811,7 +854,7 @@ fun UserMangaSection(
                         if (pagerState.currentPage < tabPositions.size) {
                             TabRowDefaults.SecondaryIndicator(
                                 Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
@@ -819,13 +862,18 @@ fun UserMangaSection(
                     statuses.forEachIndexed { index, _ ->
                         Tab(
                             selected = pagerState.currentPage == index,
+                            selectedContentColor = MaterialTheme.colorScheme.onPrimary,
                             onClick = {
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(index)
                                 }
                             },
                             icon = {
-                                Icon(statusIcons[index], contentDescription = null, modifier = Modifier.size(24.dp))
+                                if (index == 0) {
+                                    Icon(painterResource(com.example.myapplication.R.drawable.ic_all_dashboard), contentDescription = null, modifier = Modifier.size(24.dp))
+                                } else {
+                                    Icon(statusIcons[index]!!, contentDescription = null, modifier = Modifier.size(24.dp))
+                                }
                             }
                         )
                     }
@@ -837,7 +885,8 @@ fun UserMangaSection(
                     nsfwEnabled = nsfwEnabled,
                     nsfwCount = currentStatusNsfwCount,
                     isGridView = isGridView,
-                    onToggleView = { viewModel.setGridMode(!isGridView) }
+                    onToggleView = { pageGridModes[currentStatus] = !isGridView },
+                    onSortClick = { showSortDialog = true }
                 )
             }
         }
@@ -855,8 +904,7 @@ fun UserMangaSection(
             ) { page ->
                 val pageStatus = statuses[page]
                 val pageSort = if (pageStatus == userMangaListState.status) userMangaListState.sort else null
-                val pageIsGridView by viewModel.getGridModeFlow()
-                    .collectAsState(initial = viewModel.getSavedGridMode(pageStatus))
+                val pageIsGridView = pageGridModes[pageStatus] ?: defaultIsGridView
                 val pageListState = rememberSaveable(
                     key = "manga_list_${username ?: "@me"}_$pageStatus",
                     saver = LazyListState.Saver
@@ -928,6 +976,23 @@ fun UserMangaSection(
                 }
             }
         }
+    }
+
+    if (showSortDialog) {
+        SortDialog(
+            title = "Sort Manga List",
+            currentValue = currentSort,
+            onDismiss = { showSortDialog = false },
+            onSelect = { sort ->
+                val mediaSort = when (sort) {
+                    "title" -> "manga_title"
+                    "start_date" -> "manga_start_date"
+                    else -> sort
+                }
+                viewModel.loadUserMangaList(currentStatus, username = username, sort = mediaSort)
+                showSortDialog = false
+            }
+        )
     }
 
     pendingMangaEdit?.let { item ->
@@ -1006,10 +1071,10 @@ fun UserAnimeList(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (currentStatus != "all") {
-                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
                                 }
-                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                TextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
+                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                AccentTextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
                             }
                         }
                     }
@@ -1074,10 +1139,10 @@ fun UserAnimeList(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 if (currentStatus != "all") {
-                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
                                 }
-                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                TextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
+                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                AccentTextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
                             }
                         }
                     }
@@ -1167,10 +1232,10 @@ fun UserMangaList(
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (currentStatus != "all") {
-                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
                                 }
-                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                TextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
+                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                AccentTextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
                             }
                         }
                     }
@@ -1227,10 +1292,10 @@ fun UserMangaList(
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 if (currentStatus != "all") {
-                                    TextButton(onClick = onSwitchToAll) { Text("Search in All") }
+                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
                                 }
-                                TextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                TextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
+                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+                                AccentTextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
                             }
                         }
                     }
@@ -1533,7 +1598,7 @@ fun UserAnimeItem(
                                     ),
                                     contentDescription = null,
                                     modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.secondary
+                                    tint = MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
@@ -1542,7 +1607,7 @@ fun UserAnimeItem(
                                         isRewatching = data.listStatus.isRewatching
                                     ),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary
+                                    color = MaterialTheme.colorScheme.onPrimary
                                 )
                             }
                         }
@@ -1593,7 +1658,7 @@ fun UserAnimeItem(
             Text(
                 text = "+1",
                 style = MaterialTheme.typography.headlineLarge.copy(fontSize = 48.sp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier.scale(scale)
             )
@@ -1681,7 +1746,7 @@ fun UserMangaItem(
                                 ),
                                 contentDescription = null,
                                 modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.secondary
+                                tint = MaterialTheme.colorScheme.onPrimary
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
@@ -1690,7 +1755,7 @@ fun UserMangaItem(
                                     isRereading = data.listStatus.isRereading
                                 ),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
@@ -1720,7 +1785,7 @@ fun UserMangaItem(
             Text(
                 text = "+1",
                 style = MaterialTheme.typography.headlineLarge.copy(fontSize = 48.sp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier.scale(scale)
             )
@@ -1907,7 +1972,7 @@ fun UserAnimeGridItem(
             Text(
                 text = "+1",
                 style = MaterialTheme.typography.headlineLarge.copy(fontSize = 48.sp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier.scale(scale)
             )
@@ -2097,7 +2162,7 @@ fun UserMangaGridItem(
             Text(
                 text = "+1",
                 style = MaterialTheme.typography.headlineLarge.copy(fontSize = 48.sp),
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.onPrimary,
                 fontWeight = FontWeight.Black,
                 modifier = Modifier.scale(scale)
             )

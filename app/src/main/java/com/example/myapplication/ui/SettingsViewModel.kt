@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
 import com.example.myapplication.data.local.ThemePalette
+import com.example.myapplication.data.local.ThemeCustomColors
 import com.example.myapplication.data.local.TitleLanguage
 import com.example.myapplication.data.local.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,6 +30,13 @@ class SettingsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = ThemePalette.SYSTEM
     )
+
+    val customThemeColors = prefsManager.customThemeColorsFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = ThemeCustomColors()
+    )
+
 
     val titleLanguage = prefsManager.titleLanguageFlow.stateIn(
         scope = viewModelScope,
@@ -157,6 +165,14 @@ class SettingsViewModel @Inject constructor(
     fun setThemePalette(palette: ThemePalette) {
         viewModelScope.launch { prefsManager.saveThemePalette(palette) }
     }
+
+    fun setCustomThemeColor(color: Int) {
+        viewModelScope.launch {
+            prefsManager.saveCustomThemeColor(color)
+            prefsManager.saveThemePalette(ThemePalette.CUSTOM)
+        }
+    }
+
 
     fun setTitleLanguage(language: TitleLanguage) {
         viewModelScope.launch { prefsManager.saveTitleLanguage(language) }

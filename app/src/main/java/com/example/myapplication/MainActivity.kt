@@ -18,20 +18,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
@@ -39,7 +37,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import coil.compose.AsyncImage
 import com.example.myapplication.data.local.DefaultSection
 import com.example.myapplication.data.local.ThemePreference
 import com.example.myapplication.data.local.ThemePalette
@@ -65,8 +62,8 @@ class MainActivity : ComponentActivity() {
             val animeViewModel: AnimeViewModel = hiltViewModel()
             val themePref by settingsViewModel.themePreference.collectAsState()
             val themePalette by settingsViewModel.themePalette.collectAsState()
+            val customThemeColors by settingsViewModel.customThemeColors.collectAsState()
             val titleLanguage by settingsViewModel.titleLanguage.collectAsState()
-            val userPfp by animeViewModel.userPfp.collectAsState()
             
             val isDarkTheme = when (themePref) {
                 ThemePreference.LIGHT -> false
@@ -74,11 +71,11 @@ class MainActivity : ComponentActivity() {
                 ThemePreference.AMOLED -> true
                 ThemePreference.SYSTEM -> isSystemInDarkTheme()
             }
-
             MALTrackTheme(
                 darkTheme = isDarkTheme,
                 palette = themePalette,
-                amoled = themePref == ThemePreference.AMOLED
+                customColors = customThemeColors,
+                amoled = themePref == ThemePreference.AMOLED,
             ) {
                 loginViewModel = hiltViewModel()
                 val navController = rememberNavController()
@@ -146,8 +143,11 @@ class MainActivity : ComponentActivity() {
                     lastBottomNavClickAt = now
                     runCatching {
                         navController.navigate(route) {
-                            popUpTo(navController.graph.id) { inclusive = false }
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 }
@@ -326,8 +326,11 @@ class MainActivity : ComponentActivity() {
                             lastBottomNavClickAt = now
                             runCatching {
                                 navController.navigate(route) {
-                                    popUpTo(navController.graph.id) { inclusive = false }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
+                                    restoreState = true
                                 }
                             }
                         }
@@ -429,7 +432,7 @@ class MainActivity : ComponentActivity() {
                                             }
                                         )
                                         NavigationBarItem(
-                                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "User List", modifier = Modifier.size(20.dp)) },
+                                            icon = { Icon(painterResource(R.drawable.ic_patient_list), contentDescription = "User List", modifier = Modifier.size(20.dp)) },
                                             label = { Text("My List", style = MaterialTheme.typography.labelSmall) },
                                             selected = currentDestination?.hierarchy?.any { it.route?.startsWith("user_list") == true } == true,
                                             onClick = {
@@ -441,22 +444,9 @@ class MainActivity : ComponentActivity() {
                                             }
                                         )
                                         NavigationBarItem(
-                                            icon = {
-                                                if (userPfp.isNullOrBlank()) {
-                                                    Icon(Icons.Filled.Person, contentDescription = "Profile", modifier = Modifier.size(20.dp))
-                                                } else {
-                                                    AsyncImage(
-                                                        model = userPfp,
-                                                        contentDescription = "Profile",
-                                                        modifier = Modifier
-                                                            .size(20.dp)
-                                                            .clip(CircleShape),
-                                                        contentScale = ContentScale.Crop
-                                                    )
-                                                }
-                                            },
+                                            icon = { Icon(Icons.Filled.Person, contentDescription = "Profile", modifier = Modifier.size(20.dp)) },
                                             label = { Text("Profile", style = MaterialTheme.typography.labelSmall) },
-                                            selected = currentDestination?.hierarchy?.any { it.route?.startsWith("profile_route") == true && currentDestination?.route?.contains("username=null") == true } == true,
+                                            selected = isOwnProfileRootRoute,
                                             onClick = {
                                                 navigateToBottomDestination(
                                                     route = "profile_route?username=null",
@@ -628,9 +618,7 @@ class MainActivity : ComponentActivity() {
                                             onMangaClick = { mangaId ->
                                                 navigateToExistingOrPush("manga_details/$mangaId")
                                             },
-                                            onLogout = {
-                                                loginViewModel.logout()
-                                            }
+                                            onOpenSettings = { navigateSingleTop("settings") }
                                         )
                                     }
                                     composable("settings") {

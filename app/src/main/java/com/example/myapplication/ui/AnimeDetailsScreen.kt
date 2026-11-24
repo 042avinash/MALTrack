@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -64,6 +65,7 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
@@ -172,6 +174,9 @@ fun AnimeDetailsScreen(
     onAnimeClick: (Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val defaultIsGridView by viewModel.getListStyleFlow().collectAsState(initial = false)
+    var isGridView by remember { mutableStateOf(defaultIsGridView) }
+    LaunchedEffect(defaultIsGridView) { isGridView = defaultIsGridView }
     val context = LocalContext.current
     var isPullRefreshing by remember { mutableStateOf(false) }
 
@@ -277,6 +282,8 @@ fun AnimeDetailsScreen(
                             isAvailabilityRefreshing = state.isAvailabilityRefreshing,
                             airingMedia = state.airingMedia,
                             recommendationMeta = state.recommendationMeta,
+                            isGridView = isGridView,
+                            onToggleView = { isGridView = !isGridView },
                             titleLanguage = titleLanguage,
                             onReviewsClick = { onReviewsClick(state.details.id) },
                             onLoadReviews = { viewModel.loadReviews(userTriggered = true) },
@@ -326,6 +333,8 @@ fun AnimeDetailsContent(
     isAvailabilityRefreshing: Boolean,
     airingMedia: AniListMedia?,
     recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
+    isGridView: Boolean,
+    onToggleView: () -> Unit,
     titleLanguage: TitleLanguage,
     onReviewsClick: () -> Unit,
     onLoadReviews: () -> Unit,
@@ -377,7 +386,7 @@ fun AnimeDetailsContent(
             title = { Text("Delete from list") },
             text = { Text("Are you sure you want to delete this anime from your list?") },
             confirmButton = {
-                TextButton(
+                AccentTextButton(
                     onClick = {
                         onDeleteStatus()
                         showDeleteConfirm = false
@@ -388,7 +397,7 @@ fun AnimeDetailsContent(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
+                AccentTextButton(onClick = { showDeleteConfirm = false }) {
                     Text("Cancel")
                 }
             }
@@ -401,7 +410,7 @@ fun AnimeDetailsContent(
             title = { Text("Storage Access Needed") },
             text = { Text("This device requires storage permission to save images to Downloads. Open app settings to allow it.") },
             confirmButton = {
-                TextButton(
+                AccentTextButton(
                     onClick = {
                         showStorageSettingsPrompt = false
                         openAppSettings(context)
@@ -411,7 +420,7 @@ fun AnimeDetailsContent(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showStorageSettingsPrompt = false }) {
+                AccentTextButton(onClick = { showStorageSettingsPrompt = false }) {
                     Text("Cancel")
                 }
             }
@@ -429,6 +438,8 @@ fun AnimeDetailsContent(
             },
             recommendationMeta = recommendationMeta,
             titleLanguage = titleLanguage,
+            isGridView = isGridView,
+            onToggleView = onToggleView,
             onAnimeClick = onAnimeClick,
             onDismiss = { showRelatedPopup = false }
         )
@@ -445,6 +456,8 @@ fun AnimeDetailsContent(
             },
             recommendationMeta = recommendationMeta,
             titleLanguage = titleLanguage,
+            isGridView = isGridView,
+            onToggleView = onToggleView,
             isLoading = isRecommendationsLoading,
             onAnimeClick = onAnimeClick,
             onDismiss = { showRecommendationsPopup = false }
@@ -457,7 +470,7 @@ fun AnimeDetailsContent(
             title = { Text(title) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { communityStatsInfo = null }) { Text("OK") }
+                AccentTextButton(onClick = { communityStatsInfo = null }) { Text("OK") }
             }
         )
     }
@@ -727,7 +740,7 @@ fun AnimeDetailsContent(
                     Text(
                         text = if (isSynopsisExpanded) "Show Less" else "...More",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier
                             .clickable { isSynopsisExpanded = !isSynopsisExpanded }
                             .padding(top = 4.dp)
@@ -806,7 +819,7 @@ fun AnimeDetailsContent(
                                 Text(
                                     text = charData.role,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
@@ -832,7 +845,7 @@ fun AnimeDetailsContent(
                                             Text(
                                                 text = "View\nAll",
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = MaterialTheme.colorScheme.onPrimary,
                                                 textAlign = TextAlign.Center
                                             )
                                         }
@@ -906,7 +919,7 @@ fun AnimeDetailsContent(
                                 Text(
                                     text = vaData.language,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
@@ -932,7 +945,7 @@ fun AnimeDetailsContent(
                                             Text(
                                                 text = "View\nAll",
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = MaterialTheme.colorScheme.onPrimary,
                                                 textAlign = TextAlign.Center
                                             )
                                         }
@@ -1036,7 +1049,7 @@ fun AnimeDetailsContent(
                         },
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
-                    TextButton(
+                    AccentTextButton(
                         onClick = onRefreshStaffSection,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1079,7 +1092,7 @@ fun AnimeDetailsContent(
                                 Text(
                                     text = staffData.positions.firstOrNull() ?: "Staff",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.secondary,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center
@@ -1105,7 +1118,7 @@ fun AnimeDetailsContent(
                                             Text(
                                                 text = "View\nAll",
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = MaterialTheme.colorScheme.onPrimary,
                                                 textAlign = TextAlign.Center
                                             )
                                         }
@@ -1276,7 +1289,7 @@ fun AnimeDetailsContent(
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
@@ -1434,7 +1447,7 @@ fun AnimeDetailsContent(
                         Text(
                             text = if (expanded) "Show Less" else "Read More",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier
                                 .clickable { expanded = !expanded }
                                 .padding(top = 4.dp)
@@ -1467,7 +1480,7 @@ fun AnimeDetailsContent(
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -1968,7 +1981,7 @@ fun AnimeDetailsContent(
                                     Icon(
                                         imageVector = Icons.Default.Info,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
@@ -2117,7 +2130,7 @@ fun AnimeDetailsContent(
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column {
                                             Text(charData.character.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                            Text(charData.role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                                            Text(charData.role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                                         }
                                     }
                                     
@@ -2148,7 +2161,7 @@ fun AnimeDetailsContent(
                                             ) {
                                                 Column(horizontalAlignment = Alignment.End) {
                                                     Text(va.person.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text(va.language, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                                    Text(va.language, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                                                 }
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 AsyncImage(
@@ -2226,7 +2239,7 @@ fun AnimeDetailsContent(
                                     Text(
                                         text = staffData.positions.joinToString().ifBlank { "Staff" },
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.secondary,
+                                        color = MaterialTheme.colorScheme.onPrimary,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -2262,6 +2275,8 @@ private fun DetailsGridPopup(
     entries: List<DetailsPopupEntry>,
     recommendationMeta: Map<Int, RecommendationCardMeta>,
     titleLanguage: TitleLanguage,
+    isGridView: Boolean,
+    onToggleView: () -> Unit,
     isLoading: Boolean = false,
     onAnimeClick: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -2292,6 +2307,12 @@ private fun DetailsGridPopup(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = onToggleView) {
+                        Icon(
+                            imageVector = if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
+                            contentDescription = if (isGridView) "Show as list" else "Show as grid"
+                        )
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
@@ -2315,34 +2336,60 @@ private fun DetailsGridPopup(
                         }
                     }
                     else -> {
-                        val relatedGridState = rememberLazyGridState()
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            state = relatedGridState,
-                            modifier = Modifier.fillMaxSize().verticalScrollbar(relatedGridState),
-                            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            gridItems(
-                                items = entries,
-                                key = { "${it.node.id}_${it.relationLabel ?: ""}" }
-                            ) { entry ->
-                                RecommendationGridCard(
-                                    anime = entry.node,
-                                    relationLabel = entry.relationLabel,
-                                    meta = recommendationMeta[entry.node.id],
-                                    titleLanguage = titleLanguage,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = {
-                                        onDismiss()
-                                        onAnimeClick(entry.node.id)
+                        if (isGridView) {
+                            val relatedGridState = rememberLazyGridState()
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(3), state = relatedGridState,
+                                modifier = Modifier.fillMaxSize().verticalScrollbar(relatedGridState),
+                                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                gridItems(items = entries, key = { "${it.node.id}_${it.relationLabel ?: ""}" }) { entry ->
+                                    RecommendationGridCard(
+                                        anime = entry.node, relationLabel = entry.relationLabel,
+                                        meta = recommendationMeta[entry.node.id], titleLanguage = titleLanguage,
+                                        modifier = Modifier.fillMaxWidth(), onClick = { onDismiss(); onAnimeClick(entry.node.id) }
+                                    )
+                                }
+                            }
+                        } else {
+                            val listState = rememberLazyListState()
+                            LazyColumn(
+                                state = listState, modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
+                                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(entries, key = { "${it.node.id}_${it.relationLabel ?: ""}" }) { entry ->
+                                    RecommendationListRow(entry, recommendationMeta[entry.node.id], titleLanguage) {
+                                        onDismiss(); onAnimeClick(entry.node.id)
                                     }
-                                )
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecommendationListRow(
+    entry: DetailsPopupEntry,
+    meta: RecommendationCardMeta?,
+    titleLanguage: TitleLanguage,
+    onClick: () -> Unit
+) {
+    val anime = entry.node
+    val status = anime.myListStatus ?: meta?.myListStatus
+    Card(modifier = Modifier.fillMaxWidth().heightIn(min = 92.dp).clickable(onClick = onClick)) {
+        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(anime.mainPicture?.medium, null, Modifier.width(58.dp).height(78.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(getPreferredTitle(anime.title, meta?.alternativeTitles ?: anime.alternativeTitles, titleLanguage), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                entry.relationLabel?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary) }
+                Text(listOfNotNull(anime.mediaType?.uppercase(), anime.numEpisodes?.let { "$it eps" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -2539,7 +2586,7 @@ fun EditListStatusDialog(
         DatePickerDialog(
             onDismissRequest = { showStartDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                AccentTextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
                         startDate = dateFormat.format(Date(it))
                     }
@@ -2547,7 +2594,7 @@ fun EditListStatusDialog(
                 }) { Text("OK") }
             },
             dismissButton = {
-                TextButton(onClick = { showStartDatePicker = false }) { Text("Cancel") }
+                AccentTextButton(onClick = { showStartDatePicker = false }) { Text("Cancel") }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -2563,7 +2610,7 @@ fun EditListStatusDialog(
         DatePickerDialog(
             onDismissRequest = { showEndDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                AccentTextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
                         endDate = dateFormat.format(Date(it))
                     }
@@ -2571,7 +2618,7 @@ fun EditListStatusDialog(
                 }) { Text("OK") }
             },
             dismissButton = {
-                TextButton(onClick = { showEndDatePicker = false }) { Text("Cancel") }
+                AccentTextButton(onClick = { showEndDatePicker = false }) { Text("Cancel") }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -2683,7 +2730,7 @@ fun EditListStatusDialog(
                                 }
                             }
                         )
-                        TextButton(onClick = { startDate = dateFormat.format(Calendar.getInstance().time) }) {
+                        AccentTextButton(onClick = { startDate = dateFormat.format(Calendar.getInstance().time) }) {
                             Text("Today")
                         }
                         IconButton(onClick = { startDate = "" }) {
@@ -2707,7 +2754,7 @@ fun EditListStatusDialog(
                                 }
                             }
                         )
-                        TextButton(onClick = { endDate = dateFormat.format(Calendar.getInstance().time) }) {
+                        AccentTextButton(onClick = { endDate = dateFormat.format(Calendar.getInstance().time) }) {
                             Text("Today")
                         }
                         IconButton(onClick = { endDate = "" }) {
@@ -2887,7 +2934,7 @@ private fun DetailsInfoMessageCard(
             Icon(
                 imageVector = Icons.Default.Info,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -2951,7 +2998,7 @@ private fun ThemeLink(theme: String, onClick: () -> Unit) {
     Text(
         text = theme,
         style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onPrimary,
         textDecoration = TextDecoration.Underline,
         modifier = Modifier
             .fillMaxWidth()

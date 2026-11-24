@@ -2,6 +2,7 @@ package com.example.myapplication.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,10 +19,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material.icons.filled.Bolt
@@ -70,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -112,11 +115,12 @@ fun ProfileScreen(
     onListClick: (String) -> Unit,
     onAnimeClick: (Int) -> Unit,
     onMangaClick: (Int) -> Unit,
-    onLogout: () -> Unit
+    onOpenSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
+    var selectedTabIndex by remember(username) { mutableIntStateOf(0) }
     var showSearchDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -145,50 +149,64 @@ fun ProfileScreen(
             SnackbarHost(hostState = snackbarHostState)
         },
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        text = if (username == null || username == "null") "Profile" else username,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    ) 
-                },
-                navigationIcon = if (username == null || username == "null") ({}) else ({
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }),
-                actions = {
-                    val currentProfile = uiState as? ProfileUiState.Success
-                    val currentProfileUsername = currentProfile?.jikanUser?.username
-                    if (currentProfileUsername != null) {
-                        TextButton(onClick = {
-                            val url = currentProfile.jikanUser.url ?: "https://myanimelist.net/profile/${currentProfileUsername}"
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        }) {
-                            Icon(
-                                Icons.Default.Link,
-                                contentDescription = "Visit MAL",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Visit MAL")
+            val isOwnProfile = username == null || username == "null"
+            val currentProfile = uiState as? ProfileUiState.Success
+            val currentProfileUsername = currentProfile?.jikanUser?.username
+            Surface(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                shadowElevation = 8.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!isOwnProfile) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     }
-
-                    if (username == null || username == "null") {
-                        TextButton(onClick = onLogout) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = "Logout",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Logout")
+                    Button(
+                        onClick = {
+                            selectedTabIndex = 1 - selectedTabIndex
+                            val selectedType = if (selectedTabIndex == 0) "Anime" else "Manga"
+                            Toast.makeText(context, "Viewing $selectedType stats", Toast.LENGTH_SHORT).show()
+                        },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Icon(
+                            if (selectedTabIndex == 0) Icons.Default.Movie else Icons.Default.MenuBook,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (selectedTabIndex == 0) "Anime" else "Manga", fontSize = 12.sp)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (currentProfileUsername != null) {
+                        FilledTonalButton(
+                            onClick = {
+                                val url = currentProfile?.jikanUser?.url
+                                    ?: "https://myanimelist.net/profile/$currentProfileUsername"
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                            },
+                            modifier = Modifier.height(36.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Visit MAL", fontSize = 12.sp)
+                        }
+                    }
+                    if (isOwnProfile) {
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     }
                 }
-            )
+            }
         }
     ) { paddingValues ->
         PullToRefreshBox(
@@ -207,6 +225,7 @@ fun ProfileScreen(
                         ProfileContent(
                             malUser = state.malUser,
                             jikanUser = state.jikanUser,
+                            selectedTabIndex = selectedTabIndex,
                             titleLanguage = titleLanguage,
                             friends = state.friends,
                             friendsLoading = state.friendsLoading,
@@ -420,6 +439,7 @@ private fun rememberProfileShimmerBrush(): Brush {
 fun ProfileContent(
     malUser: UserProfile?, 
     jikanUser: JikanFullUserProfile, 
+    selectedTabIndex: Int,
     titleLanguage: TitleLanguage,
     friends: List<JikanFriend>,
     friendsLoading: Boolean,
@@ -436,8 +456,6 @@ fun ProfileContent(
     loadFavoriteAnimeDetails: suspend (Int) -> AnimeDetailsResponse?
 ) {
     val context = LocalContext.current
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Anime", "Manga")
     var showAboutDialog by remember { mutableStateOf(false) }
     var showFriendsDialog by remember { mutableStateOf(false) }
     var showFriendsSection by remember { mutableStateOf(false) }
@@ -470,14 +488,14 @@ fun ProfileContent(
                         Text(
                             text = signal.metric,
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { selectedSignal = null }) { Text("Close") }
+                AccentTextButton(onClick = { selectedSignal = null }) { Text("Close") }
             }
         )
     }
@@ -576,7 +594,7 @@ fun ProfileContent(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.List,
+                                painter = painterResource(com.example.myapplication.R.drawable.ic_patient_list),
                                 contentDescription = "View List"
                             )
                             Text(
@@ -706,7 +724,7 @@ fun ProfileContent(
                         friendsError != null -> {
                             Text(text = friendsError, color = MaterialTheme.colorScheme.error)
                             Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = onRefreshFriends) { Text("Retry Friends") }
+                            AccentTextButton(onClick = onRefreshFriends) { Text("Retry Friends") }
                         }
                         friends.isEmpty() -> Text("No friends to show.")
                         else -> {
@@ -737,37 +755,6 @@ fun ProfileContent(
                             }
                         }
                     }
-                }
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                tabs.forEachIndexed { index, title ->
-                    val selected = selectedTabIndex == index
-                    FilterChip(
-                        selected = selected,
-                        onClick = { selectedTabIndex = index },
-                        modifier = Modifier.weight(1f),
-                        shape = CircleShape,
-                        label = {
-                            Text(
-                                text = title,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    )
                 }
             }
         }
@@ -1162,7 +1149,7 @@ private fun FriendsDialog(
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    TextButton(onClick = onDismiss) {
+                    AccentTextButton(onClick = onDismiss) {
                         Text("Close")
                     }
                 }
@@ -1226,7 +1213,7 @@ private fun FriendsDialog(
                             Text(
                                 text = "View",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     }
@@ -1446,7 +1433,7 @@ fun SearchUserDialog(onDismiss: () -> Unit, onSearch: (String) -> Unit) {
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            AccentTextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
 }
@@ -1631,7 +1618,7 @@ fun AboutDialog(about: String, onDismiss: () -> Unit) {
                     Text(text = parseBBCode(about), style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                AccentTextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                     Text("Close")
                 }
             }

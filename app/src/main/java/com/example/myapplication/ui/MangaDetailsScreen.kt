@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cancel
@@ -57,6 +58,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -132,6 +134,9 @@ fun MangaDetailsScreen(
     onMangaClick: (Int) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val defaultIsGridView by viewModel.getListStyleFlow().collectAsState(initial = false)
+    var isGridView by remember { mutableStateOf(defaultIsGridView) }
+    LaunchedEffect(defaultIsGridView) { isGridView = defaultIsGridView }
     val context = LocalContext.current
     var isPullRefreshing by remember { mutableStateOf(false) }
 
@@ -231,6 +236,8 @@ fun MangaDetailsScreen(
                             charactersError = state.charactersError,
                             communityStatsError = state.communityStatsError,
                             scoreDistributionError = state.scoreDistributionError,
+                            isGridView = isGridView,
+                            onToggleView = { isGridView = !isGridView },
                             titleLanguage = titleLanguage,
                             onLoadRecommendations = { viewModel.loadRecommendations(forceRefresh = false) },
                             onLoadReviews = { viewModel.loadReviews(forceRefresh = false) },
@@ -274,6 +281,8 @@ fun MangaDetailsContent(
     charactersError: String?,
     communityStatsError: String?,
     scoreDistributionError: String?,
+    isGridView: Boolean,
+    onToggleView: () -> Unit,
     titleLanguage: TitleLanguage,
     onLoadRecommendations: () -> Unit,
     onLoadReviews: () -> Unit,
@@ -313,7 +322,7 @@ fun MangaDetailsContent(
             title = { Text("Delete from list") },
             text = { Text("Are you sure you want to delete this manga from your list?") },
             confirmButton = {
-                TextButton(
+                AccentTextButton(
                     onClick = {
                         onDeleteStatus()
                         showDeleteConfirm = false
@@ -324,7 +333,7 @@ fun MangaDetailsContent(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
+                AccentTextButton(onClick = { showDeleteConfirm = false }) {
                     Text("Cancel")
                 }
             }
@@ -337,6 +346,8 @@ fun MangaDetailsContent(
             nodes = details.relatedManga.orEmpty().map { it.node },
             cardMeta = cardMeta,
             titleLanguage = titleLanguage,
+            isGridView = isGridView,
+            onToggleView = onToggleView,
             onMangaClick = onMangaClick,
             onDismiss = { showRelatedPopup = false }
         )
@@ -348,6 +359,8 @@ fun MangaDetailsContent(
             nodes = recommendations.map { it.node },
             cardMeta = cardMeta,
             titleLanguage = titleLanguage,
+            isGridView = isGridView,
+            onToggleView = onToggleView,
             isLoading = isRecommendationsLoading,
             onMangaClick = onMangaClick,
             onDismiss = { showRecommendationsPopup = false }
@@ -435,7 +448,7 @@ fun MangaDetailsContent(
             title = { Text(title) },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { communityStatsInfo = null }) { Text("OK") }
+                AccentTextButton(onClick = { communityStatsInfo = null }) { Text("OK") }
             }
         )
     }
@@ -672,7 +685,7 @@ fun MangaDetailsContent(
                     Text(
                         text = if (isSynopsisExpanded) "Show Less" else "...More",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier
                             .clickable { isSynopsisExpanded = !isSynopsisExpanded }
                             .padding(top = 4.dp)
@@ -766,7 +779,7 @@ fun MangaDetailsContent(
                                             Text(
                                                 text = "View\nAll",
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = MaterialTheme.colorScheme.onPrimary,
                                                 textAlign = TextAlign.Center
                                             )
                                         }
@@ -972,7 +985,7 @@ fun MangaDetailsContent(
                         Text(
                             text = if (expanded) "Show Less" else "Read More",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier
                                 .clickable { expanded = !expanded }
                                 .padding(top = 4.dp)
@@ -1006,7 +1019,7 @@ fun MangaDetailsContent(
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -1358,7 +1371,7 @@ fun MangaDetailsContent(
                                     Icon(
                                         imageVector = Icons.Default.Info,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
@@ -1476,6 +1489,8 @@ private fun MangaDetailsGridPopup(
     nodes: List<MangaNode>,
     cardMeta: Map<Int, MangaCardMeta>,
     titleLanguage: TitleLanguage,
+    isGridView: Boolean,
+    onToggleView: () -> Unit,
     isLoading: Boolean = false,
     onMangaClick: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -1506,6 +1521,12 @@ private fun MangaDetailsGridPopup(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = onToggleView) {
+                        Icon(
+                            imageVector = if (isGridView) Icons.AutoMirrored.Filled.List else Icons.Default.GridView,
+                            contentDescription = if (isGridView) "Show as list" else "Show as grid"
+                        )
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
@@ -1529,33 +1550,55 @@ private fun MangaDetailsGridPopup(
                         }
                     }
                     else -> {
-                        val gridState = rememberLazyGridState()
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            state = gridState,
-                            modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
-                            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            gridItems(
-                                items = nodes,
-                                key = { it.id }
-                            ) { node ->
-                                MangaGridCard(
-                                    manga = node,
-                                    meta = cardMeta[node.id],
-                                    titleLanguage = titleLanguage,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    onClick = {
-                                        onDismiss()
-                                        onMangaClick(node.id)
+                        if (isGridView) {
+                            val gridState = rememberLazyGridState()
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(3), state = gridState,
+                                modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
+                                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                gridItems(items = nodes, key = { it.id }) { node ->
+                                    MangaGridCard(manga = node, meta = cardMeta[node.id], titleLanguage = titleLanguage,
+                                        modifier = Modifier.fillMaxWidth(), onClick = { onDismiss(); onMangaClick(node.id) })
+                                }
+                            }
+                        } else {
+                            val listState = rememberLazyListState()
+                            LazyColumn(
+                                state = listState, modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
+                                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(nodes, key = { it.id }) { node ->
+                                    MangaPopupListRow(node, cardMeta[node.id], titleLanguage) {
+                                        onDismiss(); onMangaClick(node.id)
                                     }
-                                )
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MangaPopupListRow(
+    manga: MangaNode,
+    meta: MangaCardMeta?,
+    titleLanguage: TitleLanguage,
+    onClick: () -> Unit
+) {
+    val status = manga.myListStatus ?: meta?.myListStatus
+    Card(modifier = Modifier.fillMaxWidth().heightIn(min = 92.dp).clickable(onClick = onClick)) {
+        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(manga.mainPicture?.medium, null, Modifier.width(58.dp).height(78.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(getPreferredTitle(manga.title, meta?.alternativeTitles ?: manga.alternativeTitles, titleLanguage), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(listOfNotNull(manga.mediaType?.uppercase(), manga.numVolumes?.let { "$it vols" }, manga.numChapters?.let { "$it ch" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -1733,7 +1776,7 @@ fun EditMangaListStatusDialog(
         DatePickerDialog(
             onDismissRequest = { showStartDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                AccentTextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { startDate = dateFormat.format(Date(it)) }
                     showStartDatePicker = false
                 }) { Text("OK") }
@@ -1748,7 +1791,7 @@ fun EditMangaListStatusDialog(
         DatePickerDialog(
             onDismissRequest = { showEndDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
+                AccentTextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { endDate = dateFormat.format(Date(it)) }
                     showEndDatePicker = false
                 }) { Text("OK") }
@@ -1806,7 +1849,7 @@ fun EditMangaListStatusDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(value = startDate, onValueChange = { startDate = it }, modifier = Modifier.weight(1f), readOnly = true, 
                             trailingIcon = { IconButton(onClick = { showStartDatePicker = true }) { Icon(Icons.Default.DateRange, null) } })
-                        TextButton(onClick = { startDate = dateFormat.format(Date()) }) { Text("Today") }
+                        AccentTextButton(onClick = { startDate = dateFormat.format(Date()) }) { Text("Today") }
                         IconButton(onClick = { startDate = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear start date") }
                     }
 
@@ -1816,7 +1859,7 @@ fun EditMangaListStatusDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(value = endDate, onValueChange = { endDate = it }, modifier = Modifier.weight(1f), readOnly = true, 
                             trailingIcon = { IconButton(onClick = { showEndDatePicker = true }) { Icon(Icons.Default.DateRange, null) } })
-                        TextButton(onClick = { endDate = dateFormat.format(Date()) }) { Text("Today") }
+                        AccentTextButton(onClick = { endDate = dateFormat.format(Date()) }) { Text("Today") }
                         IconButton(onClick = { endDate = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear finish date") }
                     }
 
@@ -2001,7 +2044,7 @@ private fun ThemeLink(theme: String, onClick: () -> Unit) {
     Text(
         text = theme,
         style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.primary,
+        color = MaterialTheme.colorScheme.onPrimary,
         textDecoration = TextDecoration.Underline,
         modifier = Modifier
             .fillMaxWidth()

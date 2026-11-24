@@ -14,6 +14,7 @@ import com.example.myapplication.data.remote.JikanAnimeScoreBucket
 import com.example.myapplication.data.remote.JikanCharacterData
 import com.example.myapplication.data.remote.JikanReviewData
 import com.example.myapplication.data.repository.AnimeRepository
+import com.example.myapplication.data.local.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -30,7 +31,8 @@ import javax.inject.Inject
 @HiltViewModel
 class MangaDetailsViewModel @Inject constructor(
     private val repository: AnimeRepository,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
     companion object {
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
@@ -49,6 +51,8 @@ class MangaDetailsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<MangaDetailsUiState>(MangaDetailsUiState.Loading)
     val uiState: StateFlow<MangaDetailsUiState> = _uiState.asStateFlow()
+
+    fun getListStyleFlow() = prefsManager.listStyleFlow
 
     init {
         loadDetails()

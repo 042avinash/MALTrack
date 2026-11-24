@@ -34,6 +34,12 @@ import java.net.SocketTimeoutException
 import java.util.Calendar
 import javax.inject.Inject
 
+private data class SearchCacheEntry<T>(
+    val cachedAt: Long,
+    val items: List<T>,
+    val hasMore: Boolean
+)
+
 @HiltViewModel
 class AnimeViewModel @Inject constructor(
     private val repository: AnimeRepository,
@@ -43,6 +49,8 @@ class AnimeViewModel @Inject constructor(
         private const val HOME_CACHE_TTL_MS = 2 * 60 * 1000L
         private const val DISCOVERY_CACHE_TTL_MS = 10 * 60 * 1000L
         private const val SEARCH_CACHE_TTL_MS = 5 * 60 * 1000L
+        private const val SEARCH_PAGE_SIZE = 20
+        private const val MAX_SEARCH_RESULTS = 100
         private val MEDIA_TYPE_ORDER = listOf(
             "TV",
             "MOVIE",
@@ -60,8 +68,8 @@ class AnimeViewModel @Inject constructor(
         private var publishingMangaCache: Pair<Long, List<MangaData>>? = null
         private val topAnimeRawCache = mutableMapOf<String, Pair<Long, List<AnimeData>>>()
         private val topMangaRawCache = mutableMapOf<String, Pair<Long, List<MangaData>>>()
-        private val animeSearchCache = mutableMapOf<String, Pair<Long, List<AnimeData>>>()
-        private val mangaSearchCache = mutableMapOf<String, Pair<Long, List<MangaData>>>()
+        private val animeSearchCache = mutableMapOf<String, SearchCacheEntry<AnimeData>>()
+        private val mangaSearchCache = mutableMapOf<String, SearchCacheEntry<MangaData>>()
     }
 
     private val _uiState = MutableStateFlow<AnimeUiState>(AnimeUiState.Loading)
@@ -101,6 +109,7 @@ class AnimeViewModel @Inject constructor(
     )
 
     private var searchJob: Job? = null
+    private var loadMoreSearchJob: Job? = null
     private var currentSeasonalData: List<AnimeData> = emptyList()
     private var currentMangaDiscoveryData: List<MangaData> = emptyList()
     
@@ -789,6 +798,7 @@ class AnimeViewModel @Inject constructor(
 
     fun searchAnime(query: String, isAnimeSearch: Boolean) {
         searchJob?.cancel()
+        loadMoreSearchJob?.cancel()
         if (query.isBlank()) {
             loadHomeData()
             return
@@ -801,20 +811,26 @@ class AnimeViewModel @Inject constructor(
         val now = SystemClock.elapsedRealtime()
         if (isAnimeSearch) {
             val cached = animeSearchCache[normalized]
-            if (cached != null && now - cached.first < SEARCH_CACHE_TTL_MS) {
+            if (cached != null && now - cached.cachedAt < SEARCH_CACHE_TTL_MS) {
                 _uiState.value = AnimeUiState.SearchSuccess(
-                    animeList = cached.second,
-                    mangaList = emptyList()
+                    animeList = cached.items,
+                    mangaList = emptyList(),
+                    hasMoreResults = cached.hasMore,
+                    query = normalized,
+                    isAnimeSearch = true
                 )
-                fetchAiringDetails(cached.second.map { it.node.id })
+                fetchAiringDetails(cached.items.map { it.node.id })
                 return
             }
         } else {
             val cached = mangaSearchCache[normalized]
-            if (cached != null && now - cached.first < SEARCH_CACHE_TTL_MS) {
+            if (cached != null && now - cached.cachedAt < SEARCH_CACHE_TTL_MS) {
                 _uiState.value = AnimeUiState.SearchSuccess(
                     animeList = emptyList(),
-                    mangaList = cached.second
+                    mangaList = cached.items,
+                    hasMoreResults = cached.hasMore,
+                    query = normalized,
+                    isAnimeSearch = false
                 )
                 return
             }
@@ -825,19 +841,29 @@ class AnimeViewModel @Inject constructor(
             _uiState.value = AnimeUiState.Loading
             try {
                 if (isAnimeSearch) {
-                    val animeResponse = repository.searchAnime(trimmedQuery)
-                    animeSearchCache[normalized] = SystemClock.elapsedRealtime() to animeResponse.data
+                    val animeResponse = repository.searchAnime(trimmedQuery, limit = SEARCH_PAGE_SIZE, offset = 0)
+                    val hasMore = (animeResponse.paging?.let { it.next != null } ?: (animeResponse.data.size == SEARCH_PAGE_SIZE)) &&
+                        animeResponse.data.size < MAX_SEARCH_RESULTS
+                    animeSearchCache[normalized] = SearchCacheEntry(SystemClock.elapsedRealtime(), animeResponse.data, hasMore)
                     _uiState.value = AnimeUiState.SearchSuccess(
                         animeList = animeResponse.data,
-                        mangaList = emptyList()
+                        mangaList = emptyList(),
+                        hasMoreResults = hasMore,
+                        query = normalized,
+                        isAnimeSearch = true
                     )
                     fetchAiringDetails(animeResponse.data.map { it.node.id })
                 } else {
-                    val mangaResponse = repository.searchManga(trimmedQuery)
-                    mangaSearchCache[normalized] = SystemClock.elapsedRealtime() to mangaResponse.data
+                    val mangaResponse = repository.searchManga(trimmedQuery, limit = SEARCH_PAGE_SIZE, offset = 0)
+                    val hasMore = (mangaResponse.paging?.let { it.next != null } ?: (mangaResponse.data.size == SEARCH_PAGE_SIZE)) &&
+                        mangaResponse.data.size < MAX_SEARCH_RESULTS
+                    mangaSearchCache[normalized] = SearchCacheEntry(SystemClock.elapsedRealtime(), mangaResponse.data, hasMore)
                     _uiState.value = AnimeUiState.SearchSuccess(
                         animeList = emptyList(),
-                        mangaList = mangaResponse.data
+                        mangaList = mangaResponse.data,
+                        hasMoreResults = hasMore,
+                        query = normalized,
+                        isAnimeSearch = false
                     )
                 }
             } catch (e: CancellationException) {
@@ -845,6 +871,57 @@ class AnimeViewModel @Inject constructor(
             } catch (e: Exception) {
                 _errorMessage.value = getFriendlyErrorMessage(e)
                 _uiState.value = AnimeUiState.Error(e.message ?: "Unknown Error")
+            }
+        }
+    }
+
+    fun loadMoreSearchResults(query: String, isAnimeSearch: Boolean) {
+        val currentState = _uiState.value as? AnimeUiState.SearchSuccess ?: return
+        val normalized = query.trim().lowercase()
+        if (currentState.query != normalized || currentState.isAnimeSearch != isAnimeSearch) return
+        val currentItemsCount = if (isAnimeSearch) currentState.animeList.size else currentState.mangaList.size
+        if (!currentState.hasMoreResults || currentState.isLoadingMore || currentItemsCount >= MAX_SEARCH_RESULTS) return
+
+        val trimmedQuery = query.trim()
+        if (trimmedQuery.length < 3) return
+        loadMoreSearchJob = viewModelScope.launch {
+            _uiState.value = currentState.copy(isLoadingMore = true)
+            try {
+                if (isAnimeSearch) {
+                    val response = repository.searchAnime(trimmedQuery, SEARCH_PAGE_SIZE, currentItemsCount)
+                    val latestState = _uiState.value as? AnimeUiState.SearchSuccess ?: return@launch
+                    if (latestState.query != normalized || !latestState.isAnimeSearch) return@launch
+                    val mergedItems = (latestState.animeList + response.data).distinctBy { it.node.id }.take(MAX_SEARCH_RESULTS)
+                    val hasMore = (response.paging?.let { it.next != null } ?: (response.data.size == SEARCH_PAGE_SIZE)) &&
+                        mergedItems.size < MAX_SEARCH_RESULTS
+                    animeSearchCache[normalized] = SearchCacheEntry(SystemClock.elapsedRealtime(), mergedItems, hasMore)
+                    _uiState.value = latestState.copy(
+                        animeList = mergedItems,
+                        hasMoreResults = hasMore,
+                        isLoadingMore = false
+                    )
+                    fetchAiringDetails(response.data.map { it.node.id })
+                } else {
+                    val response = repository.searchManga(trimmedQuery, SEARCH_PAGE_SIZE, currentItemsCount)
+                    val latestState = _uiState.value as? AnimeUiState.SearchSuccess ?: return@launch
+                    if (latestState.query != normalized || latestState.isAnimeSearch) return@launch
+                    val mergedItems = (latestState.mangaList + response.data).distinctBy { it.node.id }.take(MAX_SEARCH_RESULTS)
+                    val hasMore = (response.paging?.let { it.next != null } ?: (response.data.size == SEARCH_PAGE_SIZE)) &&
+                        mergedItems.size < MAX_SEARCH_RESULTS
+                    mangaSearchCache[normalized] = SearchCacheEntry(SystemClock.elapsedRealtime(), mergedItems, hasMore)
+                    _uiState.value = latestState.copy(
+                        mangaList = mergedItems,
+                        hasMoreResults = hasMore,
+                        isLoadingMore = false
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                (_uiState.value as? AnimeUiState.SearchSuccess)?.let { latestState ->
+                    _uiState.value = latestState.copy(isLoadingMore = false)
+                }
+                _errorMessage.value = getFriendlyErrorMessage(e)
             }
         }
     }
@@ -1022,12 +1099,6 @@ class AnimeViewModel @Inject constructor(
 
     fun getDiscoveryGridModeFlow() = prefsManager.listStyleFlow
 
-    fun setDiscoveryGridMode(isGrid: Boolean) {
-        viewModelScope.launch {
-            prefsManager.saveListStyle(isGrid)
-        }
-    }
-
     fun getDiscoverySortFlow(isAnime: Boolean) = if (isAnime) {
         prefsManager.defaultAnimeDiscoverySortFlow
     } else {
@@ -1045,13 +1116,6 @@ class AnimeViewModel @Inject constructor(
     fun setHomeDefaultSearchAnime(isAnimeDefault: Boolean) {
         viewModelScope.launch {
             prefsManager.saveHomeDefaultSearchAnime(isAnimeDefault)
-        }
-    }
-
-    fun setDiscoverySort(isAnime: Boolean, sort: String) {
-        viewModelScope.launch {
-            if (isAnime) prefsManager.saveDefaultAnimeDiscoverySort(sort)
-            else prefsManager.saveDefaultMangaDiscoverySort(sort)
         }
     }
 
@@ -1183,7 +1247,11 @@ sealed interface AnimeUiState {
     ) : AnimeUiState
     data class SearchSuccess(
         val animeList: List<AnimeData>,
-        val mangaList: List<MangaData>
+        val mangaList: List<MangaData>,
+        val hasMoreResults: Boolean = false,
+        val isLoadingMore: Boolean = false,
+        val query: String = "",
+        val isAnimeSearch: Boolean = true
     ) : AnimeUiState
     data class SeasonalDetails(
         val categorizedAnime: Map<String, List<AnimeData>>,

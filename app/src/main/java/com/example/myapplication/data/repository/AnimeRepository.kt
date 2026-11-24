@@ -285,12 +285,12 @@ class AnimeRepository @Inject constructor(
         }
     }
 
-    suspend fun searchAnime(query: String): AnimeResponse {
-        return apiService.searchAnime(clientId = clientId, query = query, nsfw = isNsfw())
+    suspend fun searchAnime(query: String, limit: Int = 20, offset: Int = 0): AnimeResponse {
+        return apiService.searchAnime(clientId = clientId, query = query, limit = limit, offset = offset, nsfw = isNsfw())
     }
     
-    suspend fun searchManga(query: String): MangaResponse {
-        return apiService.searchManga(clientId = clientId, query = query, nsfw = isNsfw())
+    suspend fun searchManga(query: String, limit: Int = 20, offset: Int = 0): MangaResponse {
+        return apiService.searchManga(clientId = clientId, query = query, limit = limit, offset = offset, nsfw = isNsfw())
     }
 
     suspend fun getAnimeSuggestions(limit: Int = 5, offset: Int = 0): AnimeResponse {

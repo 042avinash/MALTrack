@@ -9,8 +9,10 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import com.example.myapplication.data.local.ThemePalette
+import com.example.myapplication.data.local.ThemeCustomColors
 
 private val DefaultDarkColors = darkColorScheme(
     primary = Purple80,
@@ -108,15 +110,150 @@ private val SoftPastelLight = lightColorScheme(
     surfaceVariant = Color(0xFFECE1EB), onSurfaceVariant = Color(0xFF4B454E)
 )
 
+private val WinterDark = darkColorScheme(
+    primary = Color(0xFF9CCBFA),
+    onPrimary = Color(0xFF102F4D),
+    primaryContainer = Color(0xFF294969),
+    onPrimaryContainer = Color(0xFFE1F1FF),
+    secondary = Color(0xFF9CCBFA),
+    onSecondary = Color(0xFF102F4D),
+    secondaryContainer = Color(0xFF294969),
+    onSecondaryContainer = Color(0xFFE1F1FF),
+    tertiary = Color(0xFF9CCBFA),
+    onTertiary = Color(0xFF102F4D),
+    tertiaryContainer = Color(0xFF294969),
+    onTertiaryContainer = Color(0xFFE1F1FF)
+)
+private val WinterLight = lightColorScheme(
+    primary = Color(0xFF315B8A),
+    primaryContainer = Color(0xFFDCEBFA),
+    onPrimaryContainer = Color(0xFF142E49),
+    secondary = Color(0xFF315B8A),
+    secondaryContainer = Color(0xFFDCEBFA),
+    onSecondaryContainer = Color(0xFF142E49),
+    tertiary = Color(0xFF315B8A),
+    tertiaryContainer = Color(0xFFDCEBFA),
+    onTertiaryContainer = Color(0xFF142E49)
+)
+private val SpringDark = darkColorScheme(
+    primary = Color(0xFFF3A9C4),
+    onPrimary = Color(0xFF52233A),
+    primaryContainer = Color(0xFF60364A),
+    onPrimaryContainer = Color(0xFFFFE3ED),
+    secondary = Color(0xFFF3A9C4),
+    onSecondary = Color(0xFF52233A),
+    secondaryContainer = Color(0xFF60364A),
+    onSecondaryContainer = Color(0xFFFFE3ED),
+    tertiary = Color(0xFFF3A9C4),
+    onTertiary = Color(0xFF52233A),
+    tertiaryContainer = Color(0xFF60364A),
+    onTertiaryContainer = Color(0xFFFFE3ED)
+)
+private val SpringLight = lightColorScheme(
+    primary = Color(0xFFAD4F75),
+    primaryContainer = Color(0xFFF8DDE8),
+    onPrimaryContainer = Color(0xFF4D1930),
+    secondary = Color(0xFFAD4F75),
+    secondaryContainer = Color(0xFFF8DDE8),
+    onSecondaryContainer = Color(0xFF4D1930),
+    tertiary = Color(0xFFAD4F75),
+    tertiaryContainer = Color(0xFFF8DDE8),
+    onTertiaryContainer = Color(0xFF4D1930)
+)
+private val SummerDark = darkColorScheme(
+    primary = Color(0xFFA7D8A7),
+    onPrimary = Color(0xFF173B25),
+    primaryContainer = Color(0xFF2C5038),
+    onPrimaryContainer = Color(0xFFE0F4DF),
+    secondary = Color(0xFFA7D8A7),
+    onSecondary = Color(0xFF173B25),
+    secondaryContainer = Color(0xFF2C5038),
+    onSecondaryContainer = Color(0xFFE0F4DF),
+    tertiary = Color(0xFFA7D8A7),
+    onTertiary = Color(0xFF173B25),
+    tertiaryContainer = Color(0xFF2C5038),
+    onTertiaryContainer = Color(0xFFE0F4DF)
+)
+private val SummerLight = lightColorScheme(
+    primary = Color(0xFF34764A),
+    primaryContainer = Color(0xFFDBEFDE),
+    onPrimaryContainer = Color(0xFF173B25),
+    secondary = Color(0xFF34764A),
+    secondaryContainer = Color(0xFFDBEFDE),
+    onSecondaryContainer = Color(0xFF173B25),
+    tertiary = Color(0xFF34764A),
+    tertiaryContainer = Color(0xFFDBEFDE),
+    onTertiaryContainer = Color(0xFF173B25)
+)
+private val FallDark = darkColorScheme(
+    primary = Color(0xFFFFB36B),
+    onPrimary = Color(0xFF4A2500),
+    primaryContainer = Color(0xFF633D20),
+    onPrimaryContainer = Color(0xFFFFE9D4),
+    secondary = Color(0xFFFFB36B),
+    onSecondary = Color(0xFF4A2500),
+    secondaryContainer = Color(0xFF633D20),
+    onSecondaryContainer = Color(0xFFFFE9D4),
+    tertiary = Color(0xFFFFB36B),
+    onTertiary = Color(0xFF4A2500),
+    tertiaryContainer = Color(0xFF633D20),
+    onTertiaryContainer = Color(0xFFFFE9D4)
+)
+private val FallLight = lightColorScheme(
+    primary = Color(0xFFB95B2A),
+    primaryContainer = Color(0xFFFFE3C4),
+    onPrimaryContainer = Color(0xFF4E260E),
+    secondary = Color(0xFFB95B2A),
+    secondaryContainer = Color(0xFFFFE3C4),
+    onSecondaryContainer = Color(0xFF4E260E),
+    tertiary = Color(0xFFB95B2A),
+    tertiaryContainer = Color(0xFFFFE3C4),
+    onTertiaryContainer = Color(0xFF4E260E)
+)
+
+private fun readableContentColor(color: Color) = if (color.luminance() > 0.5f) Color.Black else Color.White
+
+private fun blendColors(from: Color, to: Color, fraction: Float) = Color(
+    red = from.red + (to.red - from.red) * fraction,
+    green = from.green + (to.green - from.green) * fraction,
+    blue = from.blue + (to.blue - from.blue) * fraction,
+    alpha = 1f
+)
+
+private fun customColorScheme(custom: ThemeCustomColors, darkTheme: Boolean) = run {
+    val primary = Color(custom.primary)
+    val primaryContainer = if (darkTheme) {
+        blendColors(primary, Color.Black, 0.64f)
+    } else {
+        blendColors(primary, Color.White, 0.84f)
+    }
+    val colors = if (darkTheme) darkColorScheme() else lightColorScheme()
+    colors.copy(
+        primary = primary,
+        onPrimary = readableContentColor(primary),
+        primaryContainer = primaryContainer,
+        onPrimaryContainer = readableContentColor(primaryContainer),
+        secondary = primary,
+        onSecondary = readableContentColor(primary),
+        secondaryContainer = primaryContainer,
+        onSecondaryContainer = readableContentColor(primaryContainer),
+        tertiary = primary,
+        onTertiary = readableContentColor(primary),
+        tertiaryContainer = primaryContainer,
+        onTertiaryContainer = readableContentColor(primaryContainer)
+    )
+}
+
 @Composable
 fun MALTrackTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     palette: ThemePalette = ThemePalette.SYSTEM,
+    customColors: ThemeCustomColors = ThemeCustomColors(),
     amoled: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    val selectedColorScheme = when (palette) {
+    val sourceColorScheme = when (palette) {
         ThemePalette.SYSTEM -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         } else if (darkTheme) DefaultDarkColors else DefaultLightColors
@@ -124,7 +261,28 @@ fun MALTrackTheme(
         ThemePalette.MANGA_PAPER -> if (darkTheme) MangaPaperDark else MangaPaperLight
         ThemePalette.MAL_INSPIRED -> if (darkTheme) MalInspiredDark else MalInspiredLight
         ThemePalette.SOFT_PASTEL -> if (darkTheme) SoftPastelDark else SoftPastelLight
+        ThemePalette.WINTER -> if (darkTheme) WinterDark else WinterLight
+        ThemePalette.SPRING -> if (darkTheme) SpringDark else SpringLight
+        ThemePalette.SUMMER -> if (darkTheme) SummerDark else SummerLight
+        ThemePalette.FALL -> if (darkTheme) FallDark else FallLight
+        ThemePalette.CUSTOM -> customColorScheme(customColors, darkTheme)
     }
+    val accentBackground = sourceColorScheme.primaryContainer
+    val accentText = sourceColorScheme.onPrimaryContainer
+    val selectedColorScheme = sourceColorScheme.copy(
+        primary = accentBackground,
+        onPrimary = accentText,
+        primaryContainer = accentBackground,
+        onPrimaryContainer = accentText,
+        secondary = accentBackground,
+        onSecondary = accentText,
+        secondaryContainer = accentBackground,
+        onSecondaryContainer = accentText,
+        tertiary = accentBackground,
+        onTertiary = accentText,
+        tertiaryContainer = accentBackground,
+        onTertiaryContainer = accentText
+    )
     val colorScheme = if (amoled) {
         selectedColorScheme.copy(
             background = Color.Black,
