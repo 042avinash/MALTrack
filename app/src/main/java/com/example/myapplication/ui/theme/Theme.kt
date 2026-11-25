@@ -69,8 +69,8 @@ private val MangaPaperLight = lightColorScheme(
 )
 
 private val MalInspiredDark = darkColorScheme(
-    primary = Color(0xFF9ECAFF), onPrimary = Color(0xFF003258),
-    primaryContainer = Color(0xFF00497D), onPrimaryContainer = Color(0xFFD1E4FF),
+    primary = Color(0xFF77D5DE), onPrimary = Color(0xFF00363B),
+    primaryContainer = Color(0xFF005057), onPrimaryContainer = Color(0xFF9CF1FA),
     secondary = Color(0xFF77D5DE), onSecondary = Color(0xFF00363B),
     secondaryContainer = Color(0xFF005057), onSecondaryContainer = Color(0xFF9CF1FA),
     tertiary = Color(0xFFFFD27D), onTertiary = Color(0xFF402D00),
@@ -79,8 +79,8 @@ private val MalInspiredDark = darkColorScheme(
     surfaceVariant = Color(0xFF414A54), onSurfaceVariant = Color(0xFFC1CAD5)
 )
 private val MalInspiredLight = lightColorScheme(
-    primary = Color(0xFF145B96), onPrimary = Color.White,
-    primaryContainer = Color(0xFFD2E4FF), onPrimaryContainer = Color(0xFF001C35),
+    primary = Color(0xFF006A70), onPrimary = Color.White,
+    primaryContainer = Color(0xFF9CF1FA), onPrimaryContainer = Color(0xFF002022),
     secondary = Color(0xFF006970), onSecondary = Color.White,
     secondaryContainer = Color(0xFF9CF1FA), onSecondaryContainer = Color(0xFF002022),
     tertiary = Color(0xFF775A00), onTertiary = Color.White,
@@ -89,9 +89,9 @@ private val MalInspiredLight = lightColorScheme(
     surfaceVariant = Color(0xFFDDE3ED), onSurfaceVariant = Color(0xFF414750)
 )
 
-private val SoftPastelDark = darkColorScheme(
-    primary = Color(0xFFD8BFFF), onPrimary = Color(0xFF392751),
-    primaryContainer = Color(0xFF503D69), onPrimaryContainer = Color(0xFFF0DBFF),
+private val GraphiteDark = darkColorScheme(
+    primary = Color(0xFFD0D0D6), onPrimary = Color(0xFF2C2C30),
+    primaryContainer = Color(0xFF45454A), onPrimaryContainer = Color(0xFFF4F4F5),
     secondary = Color(0xFF9DD8CA), onSecondary = Color(0xFF12382F),
     secondaryContainer = Color(0xFF2B5046), onSecondaryContainer = Color(0xFFB9F4E5),
     tertiary = Color(0xFFFFB2C1), onTertiary = Color(0xFF5F112B),
@@ -99,9 +99,9 @@ private val SoftPastelDark = darkColorScheme(
     surface = Color(0xFF19171C), onSurface = Color(0xFFE9E0E9),
     surfaceVariant = Color(0xFF49434C), onSurfaceVariant = Color(0xFFCBC3CD)
 )
-private val SoftPastelLight = lightColorScheme(
-    primary = Color(0xFF705586), onPrimary = Color.White,
-    primaryContainer = Color(0xFFF0DBFF), onPrimaryContainer = Color(0xFF281438),
+private val GraphiteLight = lightColorScheme(
+    primary = Color(0xFF52525B), onPrimary = Color.White,
+    primaryContainer = Color(0xFFE4E4E7), onPrimaryContainer = Color(0xFF18181B),
     secondary = Color(0xFF35695B), onSecondary = Color.White,
     secondaryContainer = Color(0xFFB9F4E5), onSecondaryContainer = Color(0xFF002117),
     tertiary = Color(0xFF9A4057), onTertiary = Color.White,
@@ -260,7 +260,7 @@ fun MALTrackTheme(
         ThemePalette.ANIME_NIGHT -> if (darkTheme) AnimeNightDark else AnimeNightLight
         ThemePalette.MANGA_PAPER -> if (darkTheme) MangaPaperDark else MangaPaperLight
         ThemePalette.MAL_INSPIRED -> if (darkTheme) MalInspiredDark else MalInspiredLight
-        ThemePalette.SOFT_PASTEL -> if (darkTheme) SoftPastelDark else SoftPastelLight
+        ThemePalette.SOFT_PASTEL -> if (darkTheme) GraphiteDark else GraphiteLight
         ThemePalette.WINTER -> if (darkTheme) WinterDark else WinterLight
         ThemePalette.SPRING -> if (darkTheme) SpringDark else SpringLight
         ThemePalette.SUMMER -> if (darkTheme) SummerDark else SummerLight

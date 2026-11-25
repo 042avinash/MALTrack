@@ -2356,7 +2356,7 @@ private fun DetailsGridPopup(
                             val listState = rememberLazyListState()
                             LazyColumn(
                                 state = listState, modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
-                                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 12.dp),
+                                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(entries, key = { "${it.node.id}_${it.relationLabel ?: ""}" }) { entry ->
@@ -2382,14 +2382,134 @@ private fun RecommendationListRow(
 ) {
     val anime = entry.node
     val status = anime.myListStatus ?: meta?.myListStatus
-    Card(modifier = Modifier.fillMaxWidth().heightIn(min = 92.dp).clickable(onClick = onClick)) {
-        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(anime.mainPicture?.medium, null, Modifier.width(58.dp).height(78.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(getPreferredTitle(anime.title, meta?.alternativeTitles ?: anime.alternativeTitles, titleLanguage), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                entry.relationLabel?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary) }
-                Text(listOfNotNull(anime.mediaType?.let { formatMediaType(it) }, anime.numEpisodes?.let { "$it eps" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.Top
+    ) {
+        AsyncImage(
+            model = anime.mainPicture?.medium,
+            contentDescription = null,
+            modifier = Modifier
+                .width(72.dp)
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(10.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(Modifier.width(6.dp))
+        Card(
+            modifier = Modifier.weight(1f).heightIn(min = 92.dp, max = 128.dp),
+            shape = RoundedCornerShape(14.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = getPreferredTitle(anime.title, meta?.alternativeTitles ?: anime.alternativeTitles, titleLanguage),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    status?.takeIf { it.score > 0 }?.let {
+                        Row(
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Your score",
+                                tint = Color.Yellow,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = it.score.toString(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+                entry.relationLabel?.let {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                val resolvedMean = meta?.mean ?: anime.meanScore
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Members: ${formatMembersCountLocal(meta?.members ?: anime.numListUsers)}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "MAL: ${resolvedMean?.let { String.format(Locale.US, "%.2f", it) } ?: "N/A"}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                status?.takeIf { !it.status.isNullOrBlank() }?.let { listStatus ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = getUserStatusIcon(
+                                status = listStatus.status,
+                                isRewatching = listStatus.isRewatching
+                            ),
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = getUserStatusLabel(
+                                status = listStatus.status,
+                                isRewatching = listStatus.isRewatching
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
             }
         }
     }

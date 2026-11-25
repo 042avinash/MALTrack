@@ -634,7 +634,7 @@ fun UserAnimeSection(
                                 .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.surface)
                         ) {
-                            UserListLoadingShimmer(isGridView = pageIsGridView)
+                            UserListLoadingShimmer(isGridView = pageIsGridView, isManga = false)
                         }
                     }
                 }
@@ -970,7 +970,7 @@ fun UserMangaSection(
                                 .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.surface)
                         ) {
-                            UserListLoadingShimmer(isGridView = pageIsGridView)
+                            UserListLoadingShimmer(isGridView = pageIsGridView, isManga = true)
                         }
                     }
                 }
@@ -1121,7 +1121,7 @@ fun UserAnimeList(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isSearching) {
@@ -1276,7 +1276,7 @@ fun UserMangaList(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isSearching) {
@@ -1336,7 +1336,7 @@ fun UserMangaList(
 }
 
 @Composable
-private fun UserListLoadingShimmer(isGridView: Boolean) {
+private fun UserListLoadingShimmer(isGridView: Boolean, isManga: Boolean) {
     val shimmerBrush = rememberShimmerBrush()
 
     if (isGridView) {
@@ -1364,14 +1364,13 @@ private fun UserListLoadingShimmer(isGridView: Boolean) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(6) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp)
                         .height(IntrinsicSize.Min),
                     verticalAlignment = Alignment.Top
                 ) {
@@ -1382,16 +1381,19 @@ private fun UserListLoadingShimmer(isGridView: Boolean) {
                             .clip(RoundedCornerShape(12.dp))
                             .background(shimmerBrush)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .heightIn(min = 108.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .padding(
+                                if (isManga) PaddingValues(6.dp)
+                                else PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                            )
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(if (isManga) 2.dp else 6.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1557,7 +1559,6 @@ fun UserAnimeItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp)
                 .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
@@ -1575,7 +1576,7 @@ fun UserAnimeItem(
                     .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Card(
                 modifier = Modifier
                     .weight(1f)
@@ -1772,7 +1773,6 @@ fun UserMangaItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp)
                 .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
@@ -1790,7 +1790,7 @@ fun UserMangaItem(
                     .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Card(
                 modifier = Modifier
                     .weight(1f)

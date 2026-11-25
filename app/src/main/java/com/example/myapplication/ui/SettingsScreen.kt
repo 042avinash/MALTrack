@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Movie
@@ -49,7 +50,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.myapplication.BuildConfig
@@ -257,20 +257,32 @@ fun SettingsScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.labelMedium)
                         Spacer(Modifier.weight(1f))
-                        Text(
-                            text = "Download latest version",
-                            textAlign = TextAlign.End,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.clickable {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/042avinash/MALTrack/releases/latest/download/app-release.apk")
+                        Row(
+                            modifier = Modifier
+                                .clickable {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://github.com/042avinash/MALTrack/releases/latest/download/app-release.apk")
+                                        )
                                     )
-                                )
-                            }.padding(vertical = 8.dp)
-                        )
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Download latest version",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            Icon(
+                                imageVector = Icons.Default.Link,
+                                contentDescription = "Download latest version",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
 
@@ -327,6 +339,10 @@ fun SettingsScreen(
                     ThemePalette.SPRING,
                     ThemePalette.SUMMER,
                     ThemePalette.FALL,
+                    ThemePalette.ANIME_NIGHT,
+                    ThemePalette.MANGA_PAPER,
+                    ThemePalette.MAL_INSPIRED,
+                    ThemePalette.SOFT_PASTEL,
                     ThemePalette.CUSTOM
                 ).forEach { palette ->
                     ThemePaletteCard(
@@ -1180,19 +1196,27 @@ private fun themeModeLabel(mode: ThemePreference): String = when (mode) {
 
 private fun themePaletteLabel(palette: ThemePalette): String = when (palette) {
     ThemePalette.SYSTEM -> "System colors"
-    ThemePalette.WINTER, ThemePalette.ANIME_NIGHT, ThemePalette.MAL_INSPIRED -> "Winter"
-    ThemePalette.SPRING, ThemePalette.SOFT_PASTEL -> "Spring"
-    ThemePalette.SUMMER -> "Summer"
-    ThemePalette.FALL, ThemePalette.MANGA_PAPER -> "Fall"
+    ThemePalette.WINTER -> "MAL"
+    ThemePalette.SPRING -> "Sakura"
+    ThemePalette.SUMMER -> "Fern"
+    ThemePalette.FALL -> "Ember"
+    ThemePalette.ANIME_NIGHT -> "Midnight"
+    ThemePalette.MANGA_PAPER -> "Parchment"
+    ThemePalette.MAL_INSPIRED -> "Lagoon"
+    ThemePalette.SOFT_PASTEL -> "Graphite"
     ThemePalette.CUSTOM -> "Custom"
 }
 
 private fun themePaletteDescription(palette: ThemePalette): String = when (palette) {
     ThemePalette.SYSTEM -> "Use colors from your device"
-    ThemePalette.WINTER, ThemePalette.ANIME_NIGHT, ThemePalette.MAL_INSPIRED -> "Glacier blue with an icy sky highlight"
-    ThemePalette.SPRING, ThemePalette.SOFT_PASTEL -> "Rose pink with a soft blush highlight"
+    ThemePalette.WINTER -> "MAL blue with an icy sky highlight"
+    ThemePalette.SPRING -> "Cherry blossom pink with a soft blush highlight"
     ThemePalette.SUMMER -> "Fern green with a fresh mint highlight"
-    ThemePalette.FALL, ThemePalette.MANGA_PAPER -> "Terracotta with a warm amber highlight"
+    ThemePalette.FALL -> "Ember terracotta with a warm amber highlight"
+    ThemePalette.ANIME_NIGHT -> "Violet tones with coral highlights"
+    ThemePalette.MANGA_PAPER -> "Warm ink tones with a cream highlight"
+    ThemePalette.MAL_INSPIRED -> "Cool teal tones with aqua highlights"
+    ThemePalette.SOFT_PASTEL -> "Neutral charcoal tones with silver highlights"
     ThemePalette.CUSTOM -> "Choose one color; its highlight shade is derived automatically"
 }
 
@@ -1206,13 +1230,14 @@ private fun ThemePaletteCard(
 ) {
     val swatches = when (palette) {
         ThemePalette.SYSTEM -> emptyList()
-        ThemePalette.WINTER, ThemePalette.ANIME_NIGHT, ThemePalette.MAL_INSPIRED ->
-            listOf(Color(0xFF315B8A), Color(0xFFDCEBFA))
-        ThemePalette.SPRING, ThemePalette.SOFT_PASTEL ->
-            listOf(Color(0xFFAD4F75), Color(0xFFF8DDE8))
+        ThemePalette.WINTER -> listOf(Color(0xFF315B8A), Color(0xFFDCEBFA))
+        ThemePalette.SPRING -> listOf(Color(0xFFAD4F75), Color(0xFFF8DDE8))
         ThemePalette.SUMMER -> listOf(Color(0xFF34764A), Color(0xFFDBEFDE))
-        ThemePalette.FALL, ThemePalette.MANGA_PAPER ->
-            listOf(Color(0xFFB95B2A), Color(0xFFFFE3C4))
+        ThemePalette.FALL -> listOf(Color(0xFFB95B2A), Color(0xFFFFE3C4))
+        ThemePalette.ANIME_NIGHT -> listOf(Color(0xFF59428C), Color(0xFFEBDDFF))
+        ThemePalette.MANGA_PAPER -> listOf(Color(0xFF854331), Color(0xFFFFDAD0))
+        ThemePalette.MAL_INSPIRED -> listOf(Color(0xFF006A70), Color(0xFF9CF1FA))
+        ThemePalette.SOFT_PASTEL -> listOf(Color(0xFF52525B), Color(0xFFE4E4E7))
         ThemePalette.CUSTOM -> listOf(Color(customColors?.primary ?: ThemeCustomColors().primary))
     }
     Card(

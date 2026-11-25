@@ -74,15 +74,8 @@ class UserPreferencesManager @Inject constructor(
     }
 
     val themePaletteFlow: Flow<ThemePalette> = context.userPrefsDataStore.data.map { prefs ->
-        val saved = runCatching { ThemePalette.valueOf(prefs[themePaletteKey] ?: ThemePalette.SYSTEM.name) }
+        runCatching { ThemePalette.valueOf(prefs[themePaletteKey] ?: ThemePalette.SYSTEM.name) }
             .getOrDefault(ThemePalette.SYSTEM)
-        when (saved) {
-            ThemePalette.ANIME_NIGHT -> ThemePalette.WINTER
-            ThemePalette.MANGA_PAPER -> ThemePalette.FALL
-            ThemePalette.MAL_INSPIRED -> ThemePalette.WINTER
-            ThemePalette.SOFT_PASTEL -> ThemePalette.SPRING
-            else -> saved
-        }
     }
 
     val customThemeColorsFlow: Flow<ThemeCustomColors> = context.userPrefsDataStore.data.map { prefs ->

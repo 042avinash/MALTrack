@@ -7,7 +7,22 @@ It combines MyAnimeList account and catalogue data with community metadata from 
 
 ## Current Version
 
-- `v1.4.10`
+- `v1.5.0`
+
+## v1.5.0 Highlights
+
+- **Related and Recommendation Lists**:
+  - Matched anime and manga popup list rows with the app's poster-and-details card style.
+  - Added MAL relation badges to related manga in both list and grid views.
+  - Tightened poster-to-details and row spacing, capped list titles to one line, and included user list status with score and MAL metadata.
+- **Discovery and User List Layouts**:
+  - Matched list-view spacing and side margins across anime and manga user lists, search results, Top 100 pages, and seasonal charts.
+  - Updated discovery and user list loading shimmers to reflect the list card spacing and details tile.
+- **Appearance and Settings**:
+  - Added distinct MAL, Sakura, Fern, Ember, Midnight, Parchment, Lagoon, and Graphite palettes.
+  - Added a link icon beside the latest version download action.
+- **Release Alignment**:
+  - App version bumped to `v1.5.0` (`versionCode 36`).
 
 ## v1.4.10 Highlights
 

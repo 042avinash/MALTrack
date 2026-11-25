@@ -1062,7 +1062,7 @@ private fun DiscoveryLoadingShimmer(
         LazyColumn(
             state = listState,
             modifier = modifier.verticalScrollbar(listState),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(10) {
@@ -1078,34 +1078,42 @@ private fun DiscoveryLoadingShimmer(
                             .clip(RoundedCornerShape(12.dp))
                             .background(shimmerBrush)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
                     ) {
-                        Box(
+                        Column(
                             modifier = Modifier
-                                .fillMaxWidth(0.85f)
-                                .height(18.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(shimmerBrush)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.55f)
-                                .height(14.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(shimmerBrush)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.65f)
-                                .height(14.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(shimmerBrush)
-                        )
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .height(18.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.55f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.65f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(shimmerBrush)
+                            )
+                        }
                     }
                 }
             }
@@ -1334,8 +1342,8 @@ fun TopDiscoveryView(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(items) { item ->
                 AnimeItem(
@@ -2077,8 +2085,8 @@ fun SeasonalDetailsView(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(listState),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + extraBottomPadding),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp + extraBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             categorizedAnime.forEach { (type, animeList) ->
                 item {
@@ -2381,7 +2389,6 @@ fun AnimeItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp)
                 .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
@@ -2402,7 +2409,7 @@ fun AnimeItem(
                     .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Card(
                 modifier = Modifier
                     .weight(1f)
