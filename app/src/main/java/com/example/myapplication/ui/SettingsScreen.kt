@@ -171,7 +171,7 @@ fun SettingsScreen(
             else -> onBack()
         }
     }
-    BackHandler(enabled = selectedSettingsPage != null) {
+    BackHandler {
         navigateUp()
     }
 

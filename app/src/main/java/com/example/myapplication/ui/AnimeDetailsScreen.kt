@@ -543,7 +543,7 @@ fun AnimeDetailsContent(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${details.mediaType?.uppercase() ?: "N/A"} • ${details.status?.replace("_", " ")?.uppercase() ?: "N/A"}",
+                            text = "${formatMediaType(details.mediaType)} • ${details.status?.replace("_", " ")?.uppercase() ?: "N/A"}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.LightGray
                         )
@@ -2389,7 +2389,7 @@ private fun RecommendationListRow(
             Column(Modifier.weight(1f)) {
                 Text(getPreferredTitle(anime.title, meta?.alternativeTitles ?: anime.alternativeTitles, titleLanguage), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 entry.relationLabel?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary) }
-                Text(listOfNotNull(anime.mediaType?.uppercase(), anime.numEpisodes?.let { "$it eps" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(listOfNotNull(anime.mediaType?.let { formatMediaType(it) }, anime.numEpisodes?.let { "$it eps" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }

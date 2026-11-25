@@ -1371,54 +1371,87 @@ private fun UserListLoadingShimmer(isGridView: Boolean) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(146.dp),
+                        .padding(vertical = 4.dp)
+                        .height(IntrinsicSize.Min),
                     verticalAlignment = Alignment.Top
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(82.dp)
+                            .width(86.dp)
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(12.dp))
                             .background(shimmerBrush)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight()
+                            .heightIn(min = 108.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                            .padding(10.dp)
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .height(18.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(shimmerBrush)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.6f)
-                                    .height(14.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(shimmerBrush)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.7f)
-                                    .height(14.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(shimmerBrush)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.65f)
-                                    .height(14.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(shimmerBrush)
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(22.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(shimmerBrush)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .width(38.dp)
+                                        .height(22.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(shimmerBrush)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(16.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(shimmerBrush)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .width(90.dp)
+                                        .height(18.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(shimmerBrush)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(16.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(shimmerBrush)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .width(84.dp)
+                                        .height(22.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(shimmerBrush)
+                                )
+                            }
                         }
                     }
                 }
@@ -1465,7 +1498,7 @@ fun getUserStatusIcon(
     }
 }
 
-private fun getUserStatusLabel(
+fun getUserStatusLabel(
     status: String?,
     isRewatching: Boolean = false,
     isRereading: Boolean = false
@@ -1524,6 +1557,7 @@ fun UserAnimeItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(vertical = 4.dp)
                 .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
@@ -1536,98 +1570,143 @@ fun UserAnimeItem(
                 model = data.node.mainPicture?.medium,
                 contentDescription = null,
                 modifier = Modifier
-                    .width(82.dp)
-                    .aspectRatio(9f / 16f)
+                    .width(86.dp)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Card(
                 modifier = Modifier
                     .weight(1f)
-                    .height(146.dp),
+                    .heightIn(min = 108.dp),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Row(modifier = Modifier.padding(8.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = data.node.getPreferredTitle(titleLanguage),
+                            modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.titleMedium,
-                            minLines = 2,
+                            minLines = 1,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             fontWeight = FontWeight.Bold
                         )
-                        
-                        val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
-                        val episodesText = if (
-                            data.node.status == "currently_airing" &&
-                            anilistMedia?.nextAiringEpisode != null
-                        ) {
-                            val aired = anilistMedia?.nextAiringEpisode?.episode?.let { maxOf(it - 1, 0).toString() } ?: "?"
-                            "${data.listStatus.numEpisodesWatched} / $aired / $total"
-                        } else {
-                            "${data.listStatus.numEpisodesWatched} / $total"
-                        }
-                        
-                        Text(
-                            text = "Score: ${data.listStatus.score} | Watched: $episodesText",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        val nextAiring = anilistMedia?.nextAiringEpisode
-                        val airingLabel = airingTileLabel(
-                            schedule = nextAiring,
-                            malStatus = data.node.status,
-                            broadcast = data.node.broadcast,
-                            nowEpochSeconds = nowEpochSeconds
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (data.listStatus.score > 0) {
+                            Row(
+                                modifier = Modifier
+                                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Icon(
-                                    imageVector = getUserStatusIcon(
-                                        status = data.listStatus.status,
-                                        isRewatching = data.listStatus.isRewatching
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimary
+                                    Icons.Default.Star,
+                                    contentDescription = "Your score",
+                                    tint = Color.Yellow,
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = getUserStatusLabel(
-                                        status = data.listStatus.status,
-                                        isRewatching = data.listStatus.isRewatching
-                                    ),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimary
+                                    text = data.listStatus.score.toString(),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
                                 )
                             }
                         }
+                    }
 
+                    val total = if (data.node.numEpisodes != null && data.node.numEpisodes > 0) data.node.numEpisodes.toString() else "?"
+                    val episodesText = if (
+                        data.node.status == "currently_airing" &&
+                        anilistMedia?.nextAiringEpisode != null
+                    ) {
+                        val aired = anilistMedia?.nextAiringEpisode?.episode?.let { maxOf(it - 1, 0).toString() } ?: "?"
+                        "${data.listStatus.numEpisodesWatched} / $aired / $total"
+                    } else {
+                        "${data.listStatus.numEpisodesWatched} / $total"
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = formatMediaType(data.node.mediaType),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = getUserStatusIcon(
+                                    status = data.listStatus.status,
+                                    isRewatching = data.listStatus.isRewatching
+                                ),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = getUserStatusLabel(
+                                    status = data.listStatus.status,
+                                    isRewatching = data.listStatus.isRewatching
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+
+                    val nextAiring = anilistMedia?.nextAiringEpisode
+                    val airingLabel = airingTileLabel(
+                        schedule = nextAiring,
+                        malStatus = data.node.status,
+                        broadcast = data.node.broadcast,
+                        nowEpochSeconds = nowEpochSeconds
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Watched: $episodesText",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                         if (airingLabel != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
                             Box(
                                 modifier = Modifier
                                     .background(
                                         color = MaterialTheme.colorScheme.primaryContainer,
                                         shape = RoundedCornerShape(4.dp)
                                     )
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
                             ) {
                                 Text(
                                     text = airingLabel,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -1693,6 +1772,7 @@ fun UserMangaItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(vertical = 4.dp)
                 .height(IntrinsicSize.Min)
                 .alpha(alpha)
                 .combinedClickable(
@@ -1705,59 +1785,87 @@ fun UserMangaItem(
                 model = data.node.mainPicture?.medium,
                 contentDescription = null,
                 modifier = Modifier
-                    .width(82.dp)
-                    .aspectRatio(9f / 16f)
+                    .width(86.dp)
+                    .fillMaxHeight()
                     .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Card(
                 modifier = Modifier
                     .weight(1f)
-                    .height(146.dp),
+                    .heightIn(min = 108.dp),
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
-                Row(modifier = Modifier.padding(8.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = data.node.getPreferredTitle(titleLanguage),
-                            style = MaterialTheme.typography.titleMedium,
-                            minLines = 2,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            fontWeight = FontWeight.Bold
-                        )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = data.node.getPreferredTitle(titleLanguage),
+                        style = MaterialTheme.typography.titleSmall,
+                        minLines = 1,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Bold
+                    )
                         
-                        val totalVols = if (data.node.numVolumes != null && data.node.numVolumes > 0) data.node.numVolumes.toString() else "?"
-                        val totalChaps = if (data.node.numChapters != null && data.node.numChapters > 0) data.node.numChapters.toString() else "?"
-                        
-                        Text(
-                            text = "Score: ${data.listStatus.score} | Read: ${data.listStatus.numVolumesRead}/$totalVols vols, ${data.listStatus.numChaptersRead}/$totalChaps chaps",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    val totalVols = if (data.node.numVolumes != null && data.node.numVolumes > 0) data.node.numVolumes.toString() else "?"
+                    val totalChaps = if (data.node.numChapters != null && data.node.numChapters > 0) data.node.numChapters.toString() else "?"
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(
-                                imageVector = getUserStatusIcon(
-                                    status = data.listStatus.status,
-                                    isRereading = data.listStatus.isRereading
-                                ),
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onPrimary
+                                Icons.Default.Star,
+                                contentDescription = "Score",
+                                tint = Color.Yellow,
+                                modifier = Modifier.size(10.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Text(
-                                text = getUserStatusLabel(
-                                    status = data.listStatus.status,
-                                    isRereading = data.listStatus.isRereading
-                                ),
+                                text = data.listStatus.score.toString(),
+                                color = Color.White,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
                             )
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Read: ${data.listStatus.numVolumesRead}/$totalVols vols, ${data.listStatus.numChaptersRead}/$totalChaps chaps",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = getUserStatusIcon(
+                                status = data.listStatus.status,
+                                isRereading = data.listStatus.isRereading
+                            ),
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = getUserStatusLabel(
+                                status = data.listStatus.status,
+                                isRereading = data.listStatus.isRereading
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
                     }
                 }
             }

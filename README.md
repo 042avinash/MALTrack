@@ -7,7 +7,19 @@ It combines MyAnimeList account and catalogue data with community metadata from 
 
 ## Current Version
 
-- `v1.4.9`
+- `v1.4.10`
+
+## v1.4.10 Highlights
+
+- **List and Discovery Cards**:
+  - Reworked Anime list and discovery details for clearer score, status, progress, and airing information.
+  - Matched Discovery grid tile sizing and spacing to My List grids, and updated the My List loading shimmer to match its cards.
+  - Displayed media types with readable labels, including `TV Special`.
+- **Navigation and Appearance**:
+  - Fixed Continue Watching and Continue Reading buttons to open the Watching and Reading tabs respectively.
+  - Improved Settings back navigation and exit dialog text contrast.
+- **Release Alignment**:
+  - App version bumped to `v1.4.10` (`versionCode 35`).
 
 ## v1.4.9 Highlights
 

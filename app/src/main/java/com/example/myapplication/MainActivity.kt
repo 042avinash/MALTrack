@@ -112,12 +112,22 @@ class MainActivity : ComponentActivity() {
                         title = { Text("Exit App") },
                         text = { Text("Are you sure you want to exit?") },
                         confirmButton = {
-                            TextButton(onClick = { finish() }) {
+                            TextButton(
+                                onClick = { finish() },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
                                 Text("Exit")
                             }
                         },
                         dismissButton = {
-                            TextButton(onClick = { showExitDialog = false }) {
+                            TextButton(
+                                onClick = { showExitDialog = false },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
                                 Text("Cancel")
                             }
                         }
@@ -303,19 +313,33 @@ class MainActivity : ComponentActivity() {
                                 title = { Text("Exit App") },
                                 text = { Text("Are you sure you want to exit?") },
                                 confirmButton = {
-                                    TextButton(onClick = { finish() }) {
+                                    TextButton(
+                                        onClick = { finish() },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
                                         Text("Exit")
                                     }
                                 },
                                 dismissButton = {
-                                    TextButton(onClick = { showExitDialog = false }) {
+                                    TextButton(
+                                        onClick = { showExitDialog = false },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
                                         Text("Cancel")
                                     }
                                 }
                             )
                         }
 
-                        fun navigateToBottomDestination(route: String, destinationPrefix: String) {
+                        fun navigateToBottomDestination(
+                            route: String,
+                            destinationPrefix: String,
+                            restoreDestinationState: Boolean = true
+                        ) {
                             val now = SystemClock.elapsedRealtime()
                             val isAlreadySelected = currentDestination?.hierarchy?.any {
                                 it.route?.startsWith(destinationPrefix) == true
@@ -330,7 +354,7 @@ class MainActivity : ComponentActivity() {
                                         saveState = true
                                     }
                                     launchSingleTop = true
-                                    restoreState = true
+                                    restoreState = restoreDestinationState
                                 }
                             }
                         }
@@ -493,13 +517,15 @@ class MainActivity : ComponentActivity() {
                                             onOpenAnimeUserList = {
                                                 navigateToBottomDestination(
                                                     route = "user_list?mainTab=0&subTab=1",
-                                                    destinationPrefix = "user_list"
+                                                    destinationPrefix = "user_list",
+                                                    restoreDestinationState = false
                                                 )
                                             },
                                             onOpenMangaUserList = {
                                                 navigateToBottomDestination(
                                                     route = "user_list?mainTab=1&subTab=1",
-                                                    destinationPrefix = "user_list"
+                                                    destinationPrefix = "user_list",
+                                                    restoreDestinationState = false
                                                 )
                                             },
                                             onSettingsClick = {
@@ -626,7 +652,13 @@ class MainActivity : ComponentActivity() {
                                             viewModel = hiltViewModel(),
                                             onFeedbackClick = { navigateSingleTop("feedback") },
                                             onLogout = { loginViewModel.logout() },
-                                            onBack = { navController.popBackStack() }
+                                            onBack = {
+                                                if (!navController.popBackStack()) {
+                                                    navController.navigate(startRoute) {
+                                                        launchSingleTop = true
+                                                    }
+                                                }
+                                            }
                                         )
                                     }
                                     composable("feedback") {

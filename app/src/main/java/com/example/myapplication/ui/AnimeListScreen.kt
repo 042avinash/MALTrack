@@ -1310,15 +1310,16 @@ fun TopDiscoveryView(
             columns = GridCells.Fixed(3),
             state = gridState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(items) { item ->
                 HorizontalCard(
                     anime = item, 
                     anilistMedia = airingDetails[item.node.id],
                     titleLanguage = titleLanguage,
+                    useGridCellWidth = true,
                     onClick = { onItemClick(item.node.id) },
                     onPlusOne = { onItemPlusOne(item.node.id, item.node.getPreferredTitle(titleLanguage)) },
                     onEditStatus = { onItemEditStatus(item.node.id, item.node.getPreferredTitle(titleLanguage)) }
@@ -2030,9 +2031,9 @@ fun SeasonalDetailsView(
             columns = GridCells.Fixed(3),
             state = gridState,
             modifier = Modifier.fillMaxSize().verticalScrollbar(gridState),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + extraBottomPadding),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 8.dp + extraBottomPadding),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             categorizedAnime.forEach { (type, animeList) ->
                 item(span = { GridItemSpan(3) }) {
@@ -2045,7 +2046,7 @@ fun SeasonalDetailsView(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = type,
+                            text = if (type == "UNKNOWN") type else formatMediaType(type),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimary
@@ -2062,6 +2063,7 @@ fun SeasonalDetailsView(
                             anime = anime, 
                             anilistMedia = airingDetails[anime.node.id],
                             titleLanguage = titleLanguage,
+                            useGridCellWidth = true,
                             onClick = { onAnimeClick(anime.node.id) },
                             onPlusOne = { onAnimePlusOne(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) },
                             onEditStatus = { onAnimeEditStatus(anime.node.id, anime.node.getPreferredTitle(titleLanguage)) }
@@ -2089,7 +2091,7 @@ fun SeasonalDetailsView(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = type,
+                            text = if (type == "UNKNOWN") type else formatMediaType(type),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimary
@@ -2161,6 +2163,7 @@ fun HorizontalCard(
     anilistMedia: AniListMedia?,
     titleLanguage: TitleLanguage,
     showHomeMeta: Boolean = true,
+    useGridCellWidth: Boolean = false,
     onClick: () -> Unit,
     onPlusOne: () -> Unit,
     onEditStatus: () -> Unit
@@ -2181,7 +2184,7 @@ fun HorizontalCard(
     Box(contentAlignment = Alignment.Center) {
         Card(
             modifier = Modifier
-                .width(124.dp)
+                .then(if (useGridCellWidth) Modifier.fillMaxWidth() else Modifier.width(124.dp))
                 .aspectRatio(0.7f)
                 .alpha(alpha)
                 .combinedClickable(
@@ -2410,25 +2413,46 @@ fun AnimeItem(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = anime.node.getPreferredTitle(titleLanguage),
-                        style = MaterialTheme.typography.titleMedium,
-                        minLines = 2,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = "Type: ${anime.node.mediaType?.uppercase() ?: "N/A"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Text(
-                        text = "Members: ${formatMembersCount(anime.node.numListUsers)}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = anime.node.getPreferredTitle(titleLanguage),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            minLines = 1,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        anime.node.myListStatus?.takeIf { it.score > 0 }?.let { status ->
+                            Row(
+                                modifier = Modifier
+                                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = "Your score",
+                                    tint = Color.Yellow,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = status.score.toString(),
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
                     val nowEpochSeconds by rememberAiringEpochSeconds()
                     val airingLabel = airingTileLabel(
                         schedule = anilistMedia?.nextAiringEpisode,
@@ -2436,24 +2460,40 @@ fun AnimeItem(
                         broadcast = anime.node.broadcast,
                         nowEpochSeconds = nowEpochSeconds
                     )
-                    if (airingLabel != null) {
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
-                                    shape = RoundedCornerShape(4.dp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${formatMediaType(anime.node.mediaType)} · ${formatMembersCount(anime.node.numListUsers)}",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        anime.node.myListStatus?.takeIf { it.status != null }?.let { status ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = getUserStatusIcon(
+                                        status = status.status,
+                                        isRewatching = status.isRewatching
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimary
                                 )
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = airingLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = getUserStatusLabel(
+                                        status = status.status,
+                                        isRewatching = status.isRewatching
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
                         }
                     }
 
@@ -2463,42 +2503,31 @@ fun AnimeItem(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "MAL Score: ${anime.node.meanScore ?: "N/A"}",
+                            text = "MAL: ${anime.node.meanScore?.let { String.format("%.2f", it) } ?: "N/A"}",
                             style = MaterialTheme.typography.bodyMedium
                         )
-
-                        anime.node.myListStatus?.let { status ->
-                            if (status.status != null) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        @Suppress("DEPRECATION")
-                                        Icon(
-                                            imageVector = getStatusIcon(status.status),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(12.dp),
-                                            tint = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                        if (status.score > 0) {
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Icon(Icons.Default.Star, null, tint = Color.Yellow, modifier = Modifier.size(12.dp))
-                                            Text(
-                                                text = status.score.toString(),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
+                        if (airingLabel != null) {
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = airingLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
+
                 }
             }
         }

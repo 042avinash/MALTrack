@@ -511,7 +511,7 @@ fun MangaDetailsContent(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "${details.mediaType?.uppercase() ?: "N/A"} • ${details.status?.replace("_", " ")?.uppercase() ?: "N/A"}",
+                            text = "${formatMediaType(details.mediaType)} • ${details.status?.replace("_", " ")?.uppercase() ?: "N/A"}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.LightGray
                         )
@@ -816,7 +816,7 @@ fun MangaDetailsContent(
                 InfoRow("Synonyms", details.alternativeTitles?.synonyms?.joinToString()?.takeIf { it.isNotEmpty() } ?: "Unknown")
                 Spacer(modifier = Modifier.height(8.dp))
 
-                InfoRow("Type", details.mediaType?.replace("_", " ")?.replaceFirstChar { it.uppercase(Locale.getDefault()) } ?: "Unknown")
+                InfoRow("Type", formatMediaType(details.mediaType, fallback = "Unknown"))
                 InfoRow("Status", details.status?.replace("_", " ")?.replaceFirstChar { it.uppercase(Locale.getDefault()) } ?: "Unknown")
                 InfoRow("MAL Rating", details.mean?.takeIf { it > 0f }?.let { "${"%.2f".format(Locale.US, it)}/10" } ?: "Unknown")
                 InfoRow("Rank", "#${details.rank ?: "Unknown"}")
@@ -1598,7 +1598,7 @@ private fun MangaPopupListRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(getPreferredTitle(manga.title, meta?.alternativeTitles ?: manga.alternativeTitles, titleLanguage), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(listOfNotNull(manga.mediaType?.uppercase(), manga.numVolumes?.let { "$it vols" }, manga.numChapters?.let { "$it ch" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(listOfNotNull(manga.mediaType?.let { formatMediaType(it) }, manga.numVolumes?.let { "$it vols" }, manga.numChapters?.let { "$it ch" }, status?.takeIf { it.score > 0 }?.let { "Score ${it.score}" }).joinToString(" • "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
