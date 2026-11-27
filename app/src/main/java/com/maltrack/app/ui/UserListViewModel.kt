@@ -1,0 +1,481 @@
+package com.maltrack.app.ui
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.maltrack.app.data.local.UserPreferencesManager
+import com.maltrack.app.data.model.AniListMedia
+import com.maltrack.app.data.model.UserAnimeData
+import com.maltrack.app.data.repository.AnimeRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
+import javax.inject.Inject
+
+@HiltViewModel
+class UserListViewModel @Inject constructor(
+    private val repository: AnimeRepository,
+    private val prefsManager: UserPreferencesManager
+) : ViewModel() {
+    companion object {
+        private const val SOFT_TIMEOUT_MS = 1_500L
+        // AnimeSchedule receives these in batches of 18, so this still stays within
+        // its API limit while covering the full initially loaded list page.
+        private const val INITIAL_PAGE_LIMIT = 40
+        private val globalFullAnimeListCache = mutableMapOf<String, List<UserAnimeData>>()
+        private val globalAnimeListCacheComplete = mutableSetOf<String>()
+        private val globalStatsCache = mutableMapOf<String, Map<String, Int>>()
+    }
+
+    private val animeStatuses = listOf("all", "watching", "completed", "on_hold", "plan_to_watch", "dropped")
+
+    private val _userListState = MutableStateFlow(UserListState())
+    val userListState: StateFlow<UserListState> = _userListState.asStateFlow()
+
+    private val _airingDetails = MutableStateFlow<Map<Int, AniListMedia>>(emptyMap())
+    val airingDetails: StateFlow<Map<Int, AniListMedia>> = _airingDetails.asStateFlow()
+    private val _savedSorts = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val _savedGridModes = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    private val _refreshGenerations = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val refreshGenerations: StateFlow<Map<String, Int>> = _refreshGenerations.asStateFlow()
+    private val _searchState = MutableStateFlow(UserAnimeSearchState())
+    val searchState: StateFlow<UserAnimeSearchState> = _searchState.asStateFlow()
+    private val _loadedLists = MutableStateFlow<Map<String, List<UserAnimeData>>>(emptyMap())
+    val loadedLists: StateFlow<Map<String, List<UserAnimeData>>> = _loadedLists.asStateFlow()
+    private val _completeListKeys = MutableStateFlow<Set<String>>(emptySet())
+    val completeListKeys: StateFlow<Set<String>> = _completeListKeys.asStateFlow()
+    private val _loadingStatuses = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val loadingStatuses: StateFlow<Map<String, Boolean>> = _loadingStatuses.asStateFlow()
+    val recentSearches = prefsManager.recentSearchesFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val nsfwEnabled = prefsManager.nsfwFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val showNsfwCount = prefsManager.showNsfwCountFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    private var loadJob: Job? = null
+    private var searchJob: Job? = null
+    private val backgroundFullLoadJobs = mutableMapOf<String, Job>()
+
+    private fun markListComplete(cacheKey: String) {
+        globalAnimeListCacheComplete.add(cacheKey)
+        _completeListKeys.value = _completeListKeys.value + cacheKey
+    }
+
+    private fun markListIncomplete(cacheKey: String) {
+        globalAnimeListCacheComplete.remove(cacheKey)
+        _completeListKeys.value = _completeListKeys.value - cacheKey
+    }
+
+    init {
+        preloadSavedPreferences()
+    }
+
+    private fun preloadSavedPreferences() {
+        animeStatuses.forEach { status ->
+            viewModelScope.launch {
+                val listKey = "anime_$status"
+                val sort = prefsManager.getSortModeFlow(listKey).first()
+                val grid = prefsManager.getGridModeFlow().first()
+
+                _savedSorts.value = _savedSorts.value + (status to sort)
+                _savedGridModes.value = _savedGridModes.value + (status to grid)
+            }
+        }
+    }
+
+    fun loadUserList(status: String?, sort: String? = null, forceRefresh: Boolean = false) {
+        val statusKey = status ?: "all"
+
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            try {
+                val savedSort = prefsManager.getSortModeFlow("anime_$statusKey").first()
+                val effectiveSort = sort ?: savedSort
+                val includeNsfw = prefsManager.nsfwFlow.first()
+                val cacheKey = listOf("@me", statusKey, effectiveSort, includeNsfw).joinToString("|")
+                val statusLoadingKey = listOf("@me", statusKey).joinToString("|")
+
+                _savedSorts.value = _savedSorts.value + (statusKey to effectiveSort)
+
+                _userListState.value = UserListState(
+                    status = statusKey,
+                    sort = effectiveSort
+                )
+
+                if (forceRefresh) {
+                    backgroundFullLoadJobs.remove(cacheKey)?.cancel()
+                    globalFullAnimeListCache.remove(cacheKey)
+                    markListIncomplete(cacheKey)
+                    _loadedLists.value = _loadedLists.value - cacheKey
+                }
+
+                val cachedList = globalFullAnimeListCache[cacheKey]
+                if (cachedList != null) {
+                    _loadedLists.value = _loadedLists.value + (cacheKey to cachedList)
+                    if (globalAnimeListCacheComplete.contains(cacheKey)) {
+                        _completeListKeys.value = _completeListKeys.value + cacheKey
+                    }
+                    _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
+                    viewModelScope.launch { fetchMissingAiringDetails(cachedList.take(INITIAL_PAGE_LIMIT)) }
+                    if (!globalAnimeListCacheComplete.contains(cacheKey)) {
+                        launchFullListBackfill(
+                            cacheKey = cacheKey,
+                            statusKey = statusKey,
+                            sort = effectiveSort,
+                            includeNsfw = includeNsfw
+                        )
+                    }
+                } else {
+                    _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to true)
+                    try {
+                        val firstPageDeferred = async {
+                            repository.getUserAnimeList(
+                                status = if (statusKey == "all") null else statusKey,
+                                sort = effectiveSort,
+                                limit = INITIAL_PAGE_LIMIT,
+                                includeNsfw = includeNsfw
+                            )
+                        }
+                        val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
+                        if (firstPage == null) {
+                            launchStatsLoad(forceRefresh = forceRefresh)
+                            backgroundFullLoadJobs[cacheKey]?.cancel()
+                            backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
+                                runCatching {
+                                    val resolvedFirstPage = firstPageDeferred.await()
+                                    globalFullAnimeListCache[cacheKey] = resolvedFirstPage.data
+                                    _loadedLists.value = _loadedLists.value + (cacheKey to resolvedFirstPage.data)
+                                    fetchMissingAiringDetails(resolvedFirstPage.data.take(INITIAL_PAGE_LIMIT))
+                                    if (resolvedFirstPage.paging.next == null) {
+                                        markListComplete(cacheKey)
+                                    } else {
+                                        val fullList = repository.getAllUserAnimeList(
+                                            status = if (statusKey == "all") null else statusKey,
+                                            sort = effectiveSort,
+                                            includeNsfw = includeNsfw
+                                        )
+                                        globalFullAnimeListCache[cacheKey] = fullList
+                                        markListComplete(cacheKey)
+                                        _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
+                        globalFullAnimeListCache[cacheKey] = firstPage.data
+                        _loadedLists.value = _loadedLists.value + (cacheKey to firstPage.data)
+                        // Begin the schedule lookup independently of list backfill so the
+                        // currently visible tiles receive their countdowns immediately.
+                        viewModelScope.launch {
+                            fetchMissingAiringDetails(firstPage.data.take(INITIAL_PAGE_LIMIT))
+                        }
+                        if (firstPage.paging.next == null) {
+                            markListComplete(cacheKey)
+                        } else {
+                            launchFullListBackfill(
+                                cacheKey = cacheKey,
+                                statusKey = statusKey,
+                                sort = effectiveSort,
+                                includeNsfw = includeNsfw
+                            )
+                        }
+
+                    } finally {
+                        _loadingStatuses.value = _loadingStatuses.value + (statusLoadingKey to false)
+                    }
+                }
+
+                launchStatsLoad(
+                    forceRefresh = forceRefresh
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun launchFullListBackfill(
+        cacheKey: String,
+        statusKey: String,
+        sort: String,
+        includeNsfw: Boolean
+    ) {
+        if (globalAnimeListCacheComplete.contains(cacheKey)) return
+        backgroundFullLoadJobs[cacheKey]?.cancel()
+        backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
+            try {
+                val fullList = repository.getAllUserAnimeList(
+                    status = if (statusKey == "all") null else statusKey,
+                    sort = sort,
+                    includeNsfw = includeNsfw
+                )
+                globalFullAnimeListCache[cacheKey] = fullList
+                markListComplete(cacheKey)
+                _loadedLists.value = _loadedLists.value + (cacheKey to fullList)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun launchStatsLoad(forceRefresh: Boolean) {
+        viewModelScope.launch {
+            try {
+                val statsCacheKey = "@me"
+                val cachedStats = globalStatsCache[statsCacheKey]
+                if (cachedStats != null && !forceRefresh) {
+                    _userListState.value = _userListState.value.copy(counts = cachedStats)
+                } else {
+                    try {
+                        val profile = repository.getMyUserProfile()
+                        val stats = profile.animeStatistics
+                        globalStatsCache[statsCacheKey] = mapOf(
+                            "all" to (stats?.numItems ?: 0),
+                            "watching" to (stats?.numWatching ?: 0),
+                            "completed" to (stats?.numCompleted ?: 0),
+                            "on_hold" to (stats?.numOnHold ?: 0),
+                            "plan_to_watch" to (stats?.numPlanToWatch ?: 0),
+                            "dropped" to (stats?.numDropped ?: 0)
+                        )
+                        _userListState.value = _userListState.value.copy(counts = globalStatsCache[statsCacheKey].orEmpty())
+                    } catch (_: Exception) {
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun quickIncrement(animeId: Int) {
+        viewModelScope.launch {
+            try {
+                repository.quickIncrementAnime(animeId)
+                globalStatsCache.remove("@me")
+                loadUserList(userListState.value.status, forceRefresh = true)
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    fun getGridModeFlow() = prefsManager.getGridModeFlow()
+
+    fun getSavedGridMode(status: String): Boolean = _savedGridModes.value[status] ?: false
+
+    fun getSavedSortMode(status: String): String = _savedSorts.value[status] ?: "list_score"
+
+    fun getRefreshGeneration(status: String): Int {
+        val key = listOf("@me", status).joinToString("|")
+        return _refreshGenerations.value[key] ?: 0
+    }
+
+    fun refreshStatus(status: String) {
+        val refreshKey = listOf("@me", status).joinToString("|")
+        _refreshGenerations.value = _refreshGenerations.value + (
+            refreshKey to ((_refreshGenerations.value[refreshKey] ?: 0) + 1)
+        )
+        globalStatsCache.remove("@me")
+        _searchState.value = UserAnimeSearchState()
+        globalFullAnimeListCache.keys
+            .filter { it.startsWith("@me|$status|") }
+            .toList()
+            .forEach {
+                backgroundFullLoadJobs.remove(it)?.cancel()
+                globalFullAnimeListCache.remove(it)
+                markListIncomplete(it)
+                _loadedLists.value = _loadedLists.value - it
+            }
+        _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
+        loadUserList(status, forceRefresh = true)
+    }
+
+    fun clearSearch() {
+        _searchState.value = UserAnimeSearchState()
+    }
+
+    fun searchUserList(query: String, status: String, sort: String? = null) {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank()) {
+            clearSearch()
+            return
+        }
+
+        val effectiveSort = sort ?: _savedSorts.value[status] ?: userListState.value.sort
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            try {
+                val includeNsfw = prefsManager.nsfwFlow.first()
+                val cacheKey = listOf("@me", status, effectiveSort, includeNsfw).joinToString("|")
+                _searchState.value = _searchState.value.copy(
+                    query = normalizedQuery,
+                    isLoading = true
+                )
+
+                if (!globalAnimeListCacheComplete.contains(cacheKey)) {
+                    backgroundFullLoadJobs[cacheKey]?.cancel()
+                }
+                val fullList = if (globalAnimeListCacheComplete.contains(cacheKey)) {
+                    globalFullAnimeListCache[cacheKey].orEmpty()
+                } else {
+                    repository.getAllUserAnimeList(
+                        status = if (status == "all") null else status,
+                        sort = effectiveSort,
+                        includeNsfw = includeNsfw
+                    ).also { fetched ->
+                        globalFullAnimeListCache[cacheKey] = fetched
+                        markListComplete(cacheKey)
+                        _loadedLists.value = _loadedLists.value + (cacheKey to fetched)
+                    }
+                }
+
+                val lowerQuery = normalizedQuery.lowercase(Locale.ROOT)
+                val results = fullList.filter { item ->
+                    item.node.matchesQuery(lowerQuery)
+                }
+
+                val missingIds = results
+                    .asSequence()
+                    .map { it.node.id }
+                    .filter { _airingDetails.value[it]?.nextAiringEpisode == null }
+                    .toList()
+                if (missingIds.isNotEmpty()) {
+                    val airingDetails = repository.getAiringAnimeDetails(missingIds)
+                        .filter { it.idMal != null }
+                        .associateBy { it.idMal!! }
+                    _airingDetails.value = _airingDetails.value + airingDetails
+                }
+
+                _searchState.value = UserAnimeSearchState(
+                    query = normalizedQuery,
+                    results = results,
+                    isLoading = false
+                )
+            } catch (e: CancellationException) {
+                _searchState.value = _searchState.value.copy(isLoading = false)
+                throw e
+            } catch (_: Exception) {
+                _searchState.value = _searchState.value.copy(isLoading = false)
+            }
+        }
+    }
+
+    fun saveRecentSearch(query: String) {
+        val cleaned = query.trim()
+        if (cleaned.length < 2) return
+        viewModelScope.launch {
+            prefsManager.saveRecentSearch(cleaned)
+        }
+    }
+
+    private suspend fun fetchMissingAiringDetails(entries: List<UserAnimeData>) {
+        val missingIds = entries
+            .asSequence()
+            .map { it.node.id }
+            .filter { _airingDetails.value[it]?.nextAiringEpisode == null }
+            .toList()
+
+        if (missingIds.isEmpty()) return
+
+        val airingDetails = repository.getAiringAnimeDetails(missingIds)
+            .filter { it.idMal != null }
+            .associateBy { it.idMal!! }
+        _airingDetails.value = _airingDetails.value + airingDetails
+    }
+
+    fun updateListStatus(
+        animeId: Int,
+        status: String? = null,
+        isRewatching: Boolean? = null,
+        score: Int? = null,
+        numWatchedEpisodes: Int? = null,
+        priority: Int? = null,
+        numTimesRewatched: Int? = null,
+        rewatchValue: Int? = null,
+        tags: String? = null,
+        comments: String? = null,
+        startDate: String? = null,
+        finishDate: String? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                repository.updateMyListStatus(
+                    animeId = animeId,
+                    status = status,
+                    isRewatching = isRewatching,
+                    score = score,
+                    numWatchedEpisodes = numWatchedEpisodes,
+                    priority = priority,
+                    numTimesRewatched = numTimesRewatched,
+                    rewatchValue = rewatchValue,
+                    tags = tags,
+                    comments = comments,
+                    startDate = startDate,
+                    finishDate = finishDate
+                )
+                globalStatsCache.remove("@me")
+                loadUserList(userListState.value.status, forceRefresh = true)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun com.maltrack.app.data.model.AnimeNode.matchesQuery(query: String): Boolean {
+        val normalizedQuery = query.searchNormalized()
+        val queryParts = query
+            .split(Regex("\\s+"))
+            .filter { it.isNotBlank() }
+            .map { it.searchNormalized() }
+            .filter { it.isNotBlank() }
+        val titles = buildList {
+            add(title)
+            alternativeTitles?.en?.let(::add)
+            alternativeTitles?.ja?.let(::add)
+            alternativeTitles?.synonyms?.let { addAll(it) }
+        }
+        return titles.any { candidate ->
+            val lowerCandidate = candidate.lowercase(Locale.ROOT)
+            val normalizedCandidate = lowerCandidate.searchNormalized()
+            lowerCandidate.contains(query) ||
+                (normalizedQuery.isNotBlank() && normalizedCandidate.contains(normalizedQuery)) ||
+                (queryParts.isNotEmpty() && queryParts.all { part -> normalizedCandidate.contains(part) })
+        }
+    }
+
+    private fun String.searchNormalized(): String {
+        return lowercase(Locale.ROOT)
+            .replace(Regex("[\\p{Punct}\\s]+"), "")
+    }
+
+}
+
+data class UserListState(
+    val status: String = "all",
+    val sort: String = "list_score",
+    val counts: Map<String, Int> = emptyMap()
+)
+
+data class UserAnimeSearchState(
+    val query: String = "",
+    val results: List<UserAnimeData> = emptyList(),
+    val isLoading: Boolean = false
+)

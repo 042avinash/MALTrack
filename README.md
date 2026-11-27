@@ -7,20 +7,22 @@ It combines MyAnimeList account and catalogue data with community metadata from 
 
 ## Current Version
 
-- `v1.5.1`
+- `v1.5.2`
+
+### v1.5.2 Highlights
+
+- **Package cleanup**:
+  - Moved the app code namespace to `com.maltrack.app` and removed template package and theme names.
+- **Anime details**:
+  - Fixed a grid-view reference that prevented Kotlin compilation.
+- **Release Alignment**:
+  - App version bumped to `v1.5.2` (`versionCode 38`).
 
 ### v1.5.1 Highlights
 
-- **Profile**:
-  - Added birthday and MAL supporter status to the signed-in profile.
-  - Added anime and manga favorites through Jikan Edge and refined the profile header layout.
-- **User List Search**:
-  - Redesigned the no-results page with centered search actions styled as buttons.
-- **Settings**:
-  - Moved Page Style to the top of Appearance settings.
-  - Kept the selected Anime/Manga sorting scope visible when reopening the sorting settings.
-- **Release Alignment**:
-  - App version bumped to `v1.5.1` (`versionCode 37`).
+- Added birthday, MAL supporter status, and anime/manga favorites to the signed-in profile.
+- Redesigned the user-list no-results page with centered search actions.
+- Moved Page Style to the top of Appearance settings and kept the active Anime/Manga sorting scope visible when reopening sorting settings.
 
 ## Features
 
@@ -714,7 +716,7 @@ MALTrack is organized into a Compose presentation layer, data access, local stor
 ## Project Structure
 
 ```text
-app/src/main/java/com/example/myapplication/
+app/src/main/java/com/maltrack/app/
 |- data/
 |  |- local/         # DataStore preferences, OAuth tokens, and title helpers
 |  |- model/         # Anime, manga, profile, and list data models
