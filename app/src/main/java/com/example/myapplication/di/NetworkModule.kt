@@ -4,9 +4,8 @@ import com.example.myapplication.data.local.TokenManager
 import com.example.myapplication.data.remote.AnimeScheduleApiService
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.data.remote.AuthApiService
-import com.example.myapplication.data.remote.JikanApiService
-import com.example.myapplication.data.remote.JikanEdgeApiService
 import com.example.myapplication.data.remote.MalApiService
+import com.example.myapplication.data.remote.JikanEdgeApiService
 import com.example.myapplication.data.remote.TenraiApiService
 import dagger.Module
 import dagger.Provides
@@ -117,27 +116,6 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideJikanApiService(json: Json): JikanApiService {
-        val contentType = "application/json".toMediaType()
-        val okHttpClient = OkHttpClient.Builder()
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            })
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .build()
-
-        return Retrofit.Builder()
-            .baseUrl(JikanApiService.BASE_URL)
-            .client(okHttpClient)
-            .addConverterFactory(json.asConverterFactory(contentType))
-            .build()
-            .create(JikanApiService::class.java)
-    }
-
-    @Provides
-    @Singleton
     fun provideTenraiApiService(json: Json): TenraiApiService {
         val contentType = "application/json".toMediaType()
         val okHttpClient = OkHttpClient.Builder()
@@ -177,4 +155,5 @@ object NetworkModule {
             .build()
             .create(JikanEdgeApiService::class.java)
     }
+
 }

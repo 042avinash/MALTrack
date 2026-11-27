@@ -48,6 +48,9 @@ class UserPreferencesManager @Inject constructor(
     private val defaultMangaSortKey = stringPreferencesKey("default_manga_sort")
     private val defaultAnimeDiscoverySortKey = stringPreferencesKey("default_anime_discovery_sort")
     private val defaultMangaDiscoverySortKey = stringPreferencesKey("default_manga_discovery_sort")
+    private val listSectionScopeKey = stringPreferencesKey("list_section_scope")
+    private val listSortingScopeKey = stringPreferencesKey("list_sorting_scope")
+    private val discoverySortingScopeKey = stringPreferencesKey("discovery_sorting_scope")
     private val defaultAnimeListStyleKey = booleanPreferencesKey("default_anime_list_style_grid")
     private val defaultMangaListStyleKey = booleanPreferencesKey("default_manga_list_style_grid")
     private val defaultAnimeDiscoveryStyleKey = booleanPreferencesKey("default_anime_discovery_style_grid")
@@ -71,6 +74,28 @@ class UserPreferencesManager @Inject constructor(
     val themeFlow: Flow<ThemePreference> = context.userPrefsDataStore.data.map { prefs ->
         runCatching { ThemePreference.valueOf(prefs[themeKey] ?: ThemePreference.SYSTEM.name) }
             .getOrDefault(ThemePreference.SYSTEM)
+    }
+
+    val listSectionScopeFlow: Flow<String> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[listSectionScopeKey] ?: "ANIME"
+    }
+    val listSortingScopeFlow: Flow<String> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[listSortingScopeKey] ?: "ANIME"
+    }
+    val discoverySortingScopeFlow: Flow<String> = context.userPrefsDataStore.data.map { prefs ->
+        prefs[discoverySortingScopeKey] ?: "ANIME"
+    }
+
+    suspend fun setListSectionScope(scope: String) {
+        context.userPrefsDataStore.edit { it[listSectionScopeKey] = scope }
+    }
+
+    suspend fun setListSortingScope(scope: String) {
+        context.userPrefsDataStore.edit { it[listSortingScopeKey] = scope }
+    }
+
+    suspend fun setDiscoverySortingScope(scope: String) {
+        context.userPrefsDataStore.edit { it[discoverySortingScopeKey] = scope }
     }
 
     val themePaletteFlow: Flow<ThemePalette> = context.userPrefsDataStore.data.map { prefs ->

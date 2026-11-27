@@ -104,9 +104,8 @@ class UserListViewModel @Inject constructor(
         }
     }
 
-    fun loadUserList(status: String?, username: String? = null, sort: String? = null, forceRefresh: Boolean = false) {
+    fun loadUserList(status: String?, sort: String? = null, forceRefresh: Boolean = false) {
         val statusKey = status ?: "all"
-        val effectiveUsername = if (username == "null") null else username
 
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -114,18 +113,13 @@ class UserListViewModel @Inject constructor(
                 val savedSort = prefsManager.getSortModeFlow("anime_$statusKey").first()
                 val effectiveSort = sort ?: savedSort
                 val includeNsfw = prefsManager.nsfwFlow.first()
-                val cacheKey = listOf(effectiveUsername ?: "@me", statusKey, effectiveSort, includeNsfw).joinToString("|")
-                val statusLoadingKey = listOf(effectiveUsername ?: "@me", statusKey).joinToString("|")
+                val cacheKey = listOf("@me", statusKey, effectiveSort, includeNsfw).joinToString("|")
+                val statusLoadingKey = listOf("@me", statusKey).joinToString("|")
 
                 _savedSorts.value = _savedSorts.value + (statusKey to effectiveSort)
 
-                if (_userListState.value.username != effectiveUsername) {
-                    _airingDetails.value = emptyMap()
-                }
-
                 _userListState.value = UserListState(
                     status = statusKey,
-                    username = effectiveUsername,
                     sort = effectiveSort
                 )
 
@@ -148,7 +142,6 @@ class UserListViewModel @Inject constructor(
                         launchFullListBackfill(
                             cacheKey = cacheKey,
                             statusKey = statusKey,
-                            username = effectiveUsername,
                             sort = effectiveSort,
                             includeNsfw = includeNsfw
                         )
@@ -158,7 +151,6 @@ class UserListViewModel @Inject constructor(
                     try {
                         val firstPageDeferred = async {
                             repository.getUserAnimeList(
-                                username = effectiveUsername,
                                 status = if (statusKey == "all") null else statusKey,
                                 sort = effectiveSort,
                                 limit = INITIAL_PAGE_LIMIT,
@@ -167,10 +159,7 @@ class UserListViewModel @Inject constructor(
                         }
                         val firstPage = withTimeoutOrNull(SOFT_TIMEOUT_MS) { firstPageDeferred.await() }
                         if (firstPage == null) {
-                            launchStatsLoad(
-                                username = effectiveUsername,
-                                forceRefresh = forceRefresh
-                            )
+                            launchStatsLoad(forceRefresh = forceRefresh)
                             backgroundFullLoadJobs[cacheKey]?.cancel()
                             backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
                                 runCatching {
@@ -182,7 +171,6 @@ class UserListViewModel @Inject constructor(
                                         markListComplete(cacheKey)
                                     } else {
                                         val fullList = repository.getAllUserAnimeList(
-                                            username = effectiveUsername,
                                             status = if (statusKey == "all") null else statusKey,
                                             sort = effectiveSort,
                                             includeNsfw = includeNsfw
@@ -208,7 +196,6 @@ class UserListViewModel @Inject constructor(
                             launchFullListBackfill(
                                 cacheKey = cacheKey,
                                 statusKey = statusKey,
-                                username = effectiveUsername,
                                 sort = effectiveSort,
                                 includeNsfw = includeNsfw
                             )
@@ -220,7 +207,6 @@ class UserListViewModel @Inject constructor(
                 }
 
                 launchStatsLoad(
-                    username = effectiveUsername,
                     forceRefresh = forceRefresh
                 )
             } catch (e: CancellationException) {
@@ -233,7 +219,6 @@ class UserListViewModel @Inject constructor(
     private fun launchFullListBackfill(
         cacheKey: String,
         statusKey: String,
-        username: String?,
         sort: String,
         includeNsfw: Boolean
     ) {
@@ -242,7 +227,6 @@ class UserListViewModel @Inject constructor(
         backgroundFullLoadJobs[cacheKey] = viewModelScope.launch {
             try {
                 val fullList = repository.getAllUserAnimeList(
-                    username = username,
                     status = if (statusKey == "all") null else statusKey,
                     sort = sort,
                     includeNsfw = includeNsfw
@@ -255,42 +239,25 @@ class UserListViewModel @Inject constructor(
         }
     }
 
-    private fun launchStatsLoad(username: String?, forceRefresh: Boolean) {
+    private fun launchStatsLoad(forceRefresh: Boolean) {
         viewModelScope.launch {
             try {
-                val statsCacheKey = username ?: "@me"
+                val statsCacheKey = "@me"
                 val cachedStats = globalStatsCache[statsCacheKey]
                 if (cachedStats != null && !forceRefresh) {
                     _userListState.value = _userListState.value.copy(counts = cachedStats)
                 } else {
                     try {
-                        val profile = if (username != null) {
-                            repository.getUserFullProfile(username).statistics?.anime?.let { jikan ->
-                                globalStatsCache[statsCacheKey] = mapOf(
-                                    "all" to jikan.total_entries,
-                                    "watching" to jikan.watching,
-                                    "completed" to jikan.completed,
-                                    "on_hold" to jikan.on_hold,
-                                    "plan_to_watch" to jikan.plan_to_watch,
-                                    "dropped" to jikan.dropped
-                                )
-                            }
-                            repository.getMyUserProfile()
-                        } else {
-                            repository.getMyUserProfile()
-                        }
-
-                        if (globalStatsCache[statsCacheKey].isNullOrEmpty() || username == null) {
-                            val stats = profile.animeStatistics
-                            globalStatsCache[statsCacheKey] = mapOf(
-                                "all" to (stats?.numItems ?: 0),
-                                "watching" to (stats?.numWatching ?: 0),
-                                "completed" to (stats?.numCompleted ?: 0),
-                                "on_hold" to (stats?.numOnHold ?: 0),
-                                "plan_to_watch" to (stats?.numPlanToWatch ?: 0),
-                                "dropped" to (stats?.numDropped ?: 0)
-                            )
-                        }
+                        val profile = repository.getMyUserProfile()
+                        val stats = profile.animeStatistics
+                        globalStatsCache[statsCacheKey] = mapOf(
+                            "all" to (stats?.numItems ?: 0),
+                            "watching" to (stats?.numWatching ?: 0),
+                            "completed" to (stats?.numCompleted ?: 0),
+                            "on_hold" to (stats?.numOnHold ?: 0),
+                            "plan_to_watch" to (stats?.numPlanToWatch ?: 0),
+                            "dropped" to (stats?.numDropped ?: 0)
+                        )
                         _userListState.value = _userListState.value.copy(counts = globalStatsCache[statsCacheKey].orEmpty())
                     } catch (_: Exception) {
                     }
@@ -301,13 +268,11 @@ class UserListViewModel @Inject constructor(
     }
 
     fun quickIncrement(animeId: Int) {
-        if (userListState.value.username != null) return
-
         viewModelScope.launch {
             try {
                 repository.quickIncrementAnime(animeId)
-                globalStatsCache.remove(userListState.value.username ?: "@me")
-                loadUserList(userListState.value.status, userListState.value.username, forceRefresh = true)
+                globalStatsCache.remove("@me")
+                loadUserList(userListState.value.status, forceRefresh = true)
             } catch (e: Exception) {
             }
         }
@@ -319,22 +284,20 @@ class UserListViewModel @Inject constructor(
 
     fun getSavedSortMode(status: String): String = _savedSorts.value[status] ?: "list_score"
 
-    fun getRefreshGeneration(status: String, username: String? = null): Int {
-        val effectiveUsername = if (username == "null") null else username
-        val key = listOf(effectiveUsername ?: "@me", status).joinToString("|")
+    fun getRefreshGeneration(status: String): Int {
+        val key = listOf("@me", status).joinToString("|")
         return _refreshGenerations.value[key] ?: 0
     }
 
-    fun refreshStatus(status: String, username: String? = null) {
-        val effectiveUsername = if (username == "null") null else username
-        val refreshKey = listOf(effectiveUsername ?: "@me", status).joinToString("|")
+    fun refreshStatus(status: String) {
+        val refreshKey = listOf("@me", status).joinToString("|")
         _refreshGenerations.value = _refreshGenerations.value + (
             refreshKey to ((_refreshGenerations.value[refreshKey] ?: 0) + 1)
         )
-        globalStatsCache.remove(effectiveUsername ?: "@me")
+        globalStatsCache.remove("@me")
         _searchState.value = UserAnimeSearchState()
         globalFullAnimeListCache.keys
-            .filter { it.startsWith("${effectiveUsername ?: "@me"}|$status|") }
+            .filter { it.startsWith("@me|$status|") }
             .toList()
             .forEach {
                 backgroundFullLoadJobs.remove(it)?.cancel()
@@ -343,27 +306,26 @@ class UserListViewModel @Inject constructor(
                 _loadedLists.value = _loadedLists.value - it
             }
         _loadingStatuses.value = _loadingStatuses.value + (refreshKey to true)
-        loadUserList(status, username = effectiveUsername, forceRefresh = true)
+        loadUserList(status, forceRefresh = true)
     }
 
     fun clearSearch() {
         _searchState.value = UserAnimeSearchState()
     }
 
-    fun searchUserList(query: String, status: String, username: String? = null, sort: String? = null) {
+    fun searchUserList(query: String, status: String, sort: String? = null) {
         val normalizedQuery = query.trim()
         if (normalizedQuery.isBlank()) {
             clearSearch()
             return
         }
 
-        val effectiveUsername = if (username == "null") null else username
         val effectiveSort = sort ?: _savedSorts.value[status] ?: userListState.value.sort
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             try {
                 val includeNsfw = prefsManager.nsfwFlow.first()
-                val cacheKey = listOf(effectiveUsername ?: "@me", status, effectiveSort, includeNsfw).joinToString("|")
+                val cacheKey = listOf("@me", status, effectiveSort, includeNsfw).joinToString("|")
                 _searchState.value = _searchState.value.copy(
                     query = normalizedQuery,
                     isLoading = true
@@ -376,7 +338,6 @@ class UserListViewModel @Inject constructor(
                     globalFullAnimeListCache[cacheKey].orEmpty()
                 } else {
                     repository.getAllUserAnimeList(
-                        username = effectiveUsername,
                         status = if (status == "all") null else status,
                         sort = effectiveSort,
                         includeNsfw = includeNsfw
@@ -455,8 +416,6 @@ class UserListViewModel @Inject constructor(
         startDate: String? = null,
         finishDate: String? = null
     ) {
-        if (userListState.value.username != null) return
-
         viewModelScope.launch {
             try {
                 repository.updateMyListStatus(
@@ -473,8 +432,8 @@ class UserListViewModel @Inject constructor(
                     startDate = startDate,
                     finishDate = finishDate
                 )
-                globalStatsCache.remove(userListState.value.username ?: "@me")
-                loadUserList(userListState.value.status, userListState.value.username, forceRefresh = true)
+                globalStatsCache.remove("@me")
+                loadUserList(userListState.value.status, forceRefresh = true)
             } catch (_: Exception) {
             }
         }
@@ -511,7 +470,6 @@ class UserListViewModel @Inject constructor(
 
 data class UserListState(
     val status: String = "all",
-    val username: String? = null,
     val sort: String = "list_score",
     val counts: Map<String, Int> = emptyMap()
 )

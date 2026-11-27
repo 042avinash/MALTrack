@@ -4,13 +4,12 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.myapplication.data.model.AnimeDetailsResponse
-import com.example.myapplication.data.model.JikanFullUserProfile
+import com.example.myapplication.data.model.ProfileDisplayData
 import com.example.myapplication.data.model.UserProfile
 import com.example.myapplication.data.model.toProfileDisplayData
-import com.example.myapplication.data.remote.JikanFriend
+import com.example.myapplication.data.remote.JikanEdgeApiService
+import com.example.myapplication.data.remote.JikanEdgeFavoriteMedia
 import com.example.myapplication.data.repository.AnimeRepository
-import com.example.myapplication.data.repository.JikanProfileFetchException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
 import java.net.ConnectException
@@ -29,28 +28,31 @@ import retrofit2.HttpException
 
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
-    private val repository: AnimeRepository
+    private val repository: AnimeRepository,
+    private val jikanEdgeApiService: JikanEdgeApiService
 ) : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
         private const val PROFILE_CACHE_TTL_MS = 10 * 60 * 1000L
-        private const val FAVORITE_ANIME_CACHE_TTL_MS = 24 * 60 * 60 * 1000L
-        private const val VIEWER_NAME_CACHE_TTL_MS = 10 * 60 * 1000L
-        private const val VIEWER_FRIENDS_CACHE_TTL_MS = 10 * 60 * 1000L
         private val globalCachedProfiles = mutableMapOf<String, ProfileUiState.Success>()
         private val globalCachedProfileTimestamps = mutableMapOf<String, Long>()
-        private val globalFavoriteAnimeDetails = mutableMapOf<Int, Pair<Long, AnimeDetailsResponse>>()
-        private var globalViewerName: String? = null
-        private var globalViewerNameTimestamp: Long = 0L
-        private val globalViewerFriends = mutableMapOf<String, Pair<Long, Set<String>>>()
     }
 
     private val _uiState = MutableStateFlow<ProfileUiState>(ProfileUiState.Loading)
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+    private val _favoriteAnime = MutableStateFlow<List<JikanEdgeFavoriteMedia>>(emptyList())
+    val favoriteAnime: StateFlow<List<JikanEdgeFavoriteMedia>> = _favoriteAnime.asStateFlow()
+    private val _favoriteManga = MutableStateFlow<List<JikanEdgeFavoriteMedia>>(emptyList())
+    val favoriteManga: StateFlow<List<JikanEdgeFavoriteMedia>> = _favoriteManga.asStateFlow()
+    private val _favoritesLoading = MutableStateFlow(false)
+    val favoritesLoading: StateFlow<Boolean> = _favoritesLoading.asStateFlow()
+    private val _favoritesUnavailable = MutableStateFlow(false)
+    val favoritesUnavailable: StateFlow<Boolean> = _favoritesUnavailable.asStateFlow()
+    private var favoritesUsername: String? = null
+    private var favoritesJob: Job? = null
     private var loadJob: Job? = null
-    private var friendsJob: Job? = null
 
     fun retryProfile(username: String? = null) {
         val targetUsername = if (username == "null") null else username
@@ -83,7 +85,6 @@ class ProfileViewModel @Inject constructor(
         }
 
         loadJob?.cancel()
-        friendsJob?.cancel()
         loadJob = viewModelScope.launch {
             if (cachedState == null) {
                 _uiState.value = ProfileUiState.Loading
@@ -100,46 +101,22 @@ class ProfileViewModel @Inject constructor(
                     } else {
                         rawMalProfile
                     }
-                    globalViewerName = malProfile.name
-                    globalViewerNameTimestamp = SystemClock.elapsedRealtime()
-                    // MAL provides the signed-in profile and statistics; the public
-                    // favorites endpoint fills the anime and manga sections separately.
-                    val fullProfile = malProfile.toProfileDisplayData().copy(
-                        favorites = fetchProfileFavorites(malProfile.name)
-                    )
+                    val fullProfile = malProfile.toProfileDisplayData()
                     val successState = ProfileUiState.Success(
                         malUser = malProfile,
-                        jikanUser = fullProfile,
-                        friends = cachedState?.friends.orEmpty(),
-                        isOwnProfile = true,
-                        viewerIsFriendWithProfileOwner = null,
-                        friendsLoaded = cachedState?.friendsLoaded ?: false
+                        profileData = fullProfile
                     )
                     globalCachedProfiles[normalizedUsername] = successState
                     globalCachedProfileTimestamps[normalizedUsername] = SystemClock.elapsedRealtime()
                     _uiState.value = successState
                 } else {
-                    // Public MAL profile details are not exposed by the official API. Keep a
-                    // browsable shell if the optional Jikan enrichment service is unavailable.
-                    val fullProfile = runCatching {
-                        withTimeoutRetry { repository.getUserFullProfile(targetUsername) }
-                    }.getOrElse {
-                        JikanFullUserProfile(
-                            username = targetUsername,
-                            url = "https://myanimelist.net/profile/$targetUsername"
-                        )
-                    }
-                    val profileWithFavorites = fullProfile.copy(
-                        favorites = fetchProfileFavorites(targetUsername) ?: fullProfile.favorites
+                    val profileData = ProfileDisplayData(
+                        username = targetUsername,
+                        url = "https://myanimelist.net/profile/$targetUsername"
                     )
-                    val viewerIsFriendWithProfileOwner = resolveViewerFriendStatus(targetUsername)
                     val successState = ProfileUiState.Success(
                         malUser = null,
-                        jikanUser = profileWithFavorites,
-                        friends = cachedState?.friends.orEmpty(),
-                        isOwnProfile = false,
-                        viewerIsFriendWithProfileOwner = viewerIsFriendWithProfileOwner,
-                        friendsLoaded = cachedState?.friendsLoaded ?: false
+                        profileData = profileData
                     )
                     globalCachedProfiles[normalizedUsername] = successState
                     globalCachedProfileTimestamps[normalizedUsername] = SystemClock.elapsedRealtime()
@@ -157,53 +134,6 @@ class ProfileViewModel @Inject constructor(
                 )
             }
         }
-    }
-
-    private suspend fun fetchProfileFavorites(username: String): com.example.myapplication.data.model.JikanUserFavorites? {
-        return try {
-            withTimeoutRetry { repository.getUserFavorites(username) }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    fun loadFriends(username: String? = null, forceRefresh: Boolean = false) {
-        val state = _uiState.value as? ProfileUiState.Success ?: return
-        if (state.friendsLoading) return
-        if (!forceRefresh && state.friendsLoaded && state.friends.isNotEmpty()) return
-        val targetUsername = if (username == "null") null else username
-        val usernameToLoad = targetUsername ?: state.jikanUser.username
-
-        friendsJob?.cancel()
-        _uiState.value = state.copy(friendsLoading = true, friendsError = null)
-        friendsJob = viewModelScope.launch {
-            val result = runCatching { withTimeoutRetry { repository.getUserFriends(usernameToLoad) } }
-            val current = _uiState.value as? ProfileUiState.Success ?: return@launch
-            if (result.isSuccess) {
-                _uiState.value = current.copy(
-                    friends = result.getOrDefault(emptyList()),
-                    friendsLoading = false,
-                    friendsLoaded = true,
-                    friendsError = null
-                )
-            } else {
-                _uiState.value = current.copy(
-                    friendsLoading = false,
-                    friendsLoaded = true,
-                    friendsError = getFriendlyErrorMessage(result.exceptionOrNull() ?: Exception("Failed to load friends"))
-                )
-            }
-            updateCacheForCurrentProfile()
-        }
-    }
-
-    private fun updateCacheForCurrentProfile() {
-        val current = _uiState.value as? ProfileUiState.Success ?: return
-        val key = if (current.isOwnProfile) "__self__" else current.jikanUser.username
-        globalCachedProfiles[key] = current
-        globalCachedProfileTimestamps[key] = SystemClock.elapsedRealtime()
     }
 
     private suspend fun <T> withTimeoutRetry(block: suspend () -> T): T {
@@ -228,56 +158,47 @@ class ProfileViewModel @Inject constructor(
         return cause != null && isTimeoutError(cause)
     }
 
-    private suspend fun resolveViewerFriendStatus(targetUsername: String): Boolean? {
-        val viewerName = getCachedViewerName() ?: return null
-        val now = SystemClock.elapsedRealtime()
-        val cachedFriendUsernames = globalViewerFriends[viewerName]
-        val usernames = if (cachedFriendUsernames != null && now - cachedFriendUsernames.first < VIEWER_FRIENDS_CACHE_TTL_MS) {
-            cachedFriendUsernames.second
-        } else {
-            val freshUsernames = runCatching {
-                withTimeoutRetry { repository.getUserFriends(viewerName) }
-                    .map { it.user.username }
-                    .toSet()
-            }.getOrNull() ?: return null
-            globalViewerFriends[viewerName] = SystemClock.elapsedRealtime() to freshUsernames
-            freshUsernames
-        }
-        return usernames.any { it.equals(targetUsername, ignoreCase = true) }
-    }
-
-    private suspend fun getCachedViewerName(): String? {
-        val now = SystemClock.elapsedRealtime()
-        globalViewerName?.takeIf { now - globalViewerNameTimestamp < VIEWER_NAME_CACHE_TTL_MS }?.let {
-            return it
-        }
-        return runCatching { repository.getMyUserProfile().name }.getOrNull()?.also {
-            globalViewerName = it
-            globalViewerNameTimestamp = SystemClock.elapsedRealtime()
-        }
-    }
-
     fun clearErrorMessage() {
         _errorMessage.value = null
     }
 
-    suspend fun getFavoriteAnimeDetails(animeId: Int, forceRefresh: Boolean = false): AnimeDetailsResponse? {
-        val now = SystemClock.elapsedRealtime()
-        val cached = globalFavoriteAnimeDetails[animeId]
-        val hasFreshCache = cached != null && now - cached.first < FAVORITE_ANIME_CACHE_TTL_MS
-        if (!forceRefresh && hasFreshCache) {
-            return cached?.second
+    fun loadOwnFavorites(username: String, forceRefresh: Boolean = false) {
+        if (username.isBlank() || (!forceRefresh && favoritesUsername == username)) return
+        favoritesJob?.cancel()
+        favoritesUsername = username
+        _favoriteAnime.value = emptyList()
+        _favoritesUnavailable.value = false
+        _favoritesLoading.value = true
+        favoritesJob = viewModelScope.launch {
+            try {
+                val favorites = jikanEdgeApiService.getUserFavorites(username).data
+                _favoriteAnime.value = favorites.anime
+                _favoriteManga.value = favorites.manga
+                _favoritesUnavailable.value = false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _favoriteAnime.value = emptyList()
+                _favoriteManga.value = emptyList()
+                _favoritesUnavailable.value = true
+                Log.w(TAG, "Could not load Jikan-edge anime favorites", e)
+            } finally {
+                _favoritesLoading.value = false
+            }
         }
-        return runCatching {
-            withTimeoutRetry { repository.getAnimeDetails(animeId) }
-        }.getOrNull()?.also {
-            globalFavoriteAnimeDetails[animeId] = SystemClock.elapsedRealtime() to it
-        }
+    }
+
+    fun clearOwnAnimeFavorites() {
+        favoritesJob?.cancel()
+        favoritesUsername = null
+        _favoriteAnime.value = emptyList()
+        _favoriteManga.value = emptyList()
+        _favoritesLoading.value = false
+        _favoritesUnavailable.value = false
     }
 
     private fun getFriendlyErrorMessage(error: Throwable): String {
         val status = when (error) {
-            is JikanProfileFetchException -> error.status
             is HttpException -> error.code()
             else -> null
         }
@@ -294,7 +215,7 @@ class ProfileViewModel @Inject constructor(
         val detail = when {
             status == 404 -> "The user may not exist or the profile may be hidden."
             status == 429 -> "Please wait a bit and try again."
-            status != null && status in 500..599 -> "Jikan is currently having issues."
+            status != null && status in 500..599 -> "The profile service is currently having issues."
             isTimeoutError(error) -> "The request took too long."
             error is UnknownHostException -> "The device could not reach the network."
             error is ConnectException -> "The connection could not be established."
@@ -333,26 +254,6 @@ class ProfileViewModel @Inject constructor(
     }
 
     private fun diagnosticErrorSummary(error: Throwable, depth: Int = 0): String {
-        if (error is JikanProfileFetchException) {
-            val status = error.status?.toString() ?: "unknown"
-            val responseMessage = error.responseMessage?.takeIf { it.isNotBlank() }
-            val responseError = error.responseError?.takeIf { it.isNotBlank() }
-            return buildString {
-                append("JikanProfileFetchException(status=")
-                append(status)
-                append(", username=")
-                append(error.username)
-                append(")")
-                responseMessage?.let {
-                    append(": ")
-                    append(it)
-                }
-                if (responseError != null && responseError != responseMessage) {
-                    append(" | error=")
-                    append(responseError)
-                }
-            }
-        }
         val className = error::class.java.simpleName.ifBlank { "UnknownThrowable" }
         val message = error.message?.takeIf { it.isNotBlank() }?.trim()
         val current = buildString {
@@ -373,13 +274,7 @@ sealed interface ProfileUiState {
     data object Loading : ProfileUiState
     data class Success(
         val malUser: UserProfile?,
-        val jikanUser: JikanFullUserProfile,
-        val friends: List<JikanFriend>,
-        val isOwnProfile: Boolean,
-        val viewerIsFriendWithProfileOwner: Boolean? = null,
-        val friendsLoading: Boolean = false,
-        val friendsLoaded: Boolean = false,
-        val friendsError: String? = null
+        val profileData: ProfileDisplayData
     ) : ProfileUiState
     data class Error(
         val message: String,

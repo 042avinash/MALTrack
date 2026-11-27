@@ -5,11 +5,6 @@ import com.example.myapplication.data.model.AniListMedia
 import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.AnimeMyListStatusResponse
 import com.example.myapplication.data.model.AnimeResponse
-import com.example.myapplication.data.model.JikanFullUserProfile
-import com.example.myapplication.data.model.JikanFavoriteItem
-import com.example.myapplication.data.model.JikanUserFavorites
-import com.example.myapplication.data.model.JikanUserImages
-import com.example.myapplication.data.model.JikanImageFormat
 import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaData
 import com.example.myapplication.data.model.MangaResponse
@@ -23,18 +18,15 @@ import com.example.myapplication.data.model.UserMangaListResponse
 import com.example.myapplication.data.model.UserProfile
 import com.example.myapplication.data.remote.AnimeScheduleApiService
 import com.example.myapplication.data.remote.AnimeScheduleTimetableEntry
-import com.example.myapplication.data.remote.JikanApiService
-import com.example.myapplication.data.remote.JikanEdgeApiService
 import com.example.myapplication.data.remote.TenraiApiService
-import com.example.myapplication.data.remote.JikanCharactersResponse
-import com.example.myapplication.data.remote.JikanFriend
-import com.example.myapplication.data.remote.JikanMangaData
-import com.example.myapplication.data.remote.JikanMangaStatisticsResponse
-import com.example.myapplication.data.remote.JikanReviewsResponse
-import com.example.myapplication.data.remote.JikanAnimeStatisticsResponse
-import com.example.myapplication.data.remote.JikanStaffResponse
-import com.example.myapplication.data.remote.JikanStreamingResponse
-import com.example.myapplication.data.remote.JikanThemesResponse
+import com.example.myapplication.data.remote.TenraiCharactersResponse
+import com.example.myapplication.data.remote.TenraiMangaData
+import com.example.myapplication.data.remote.TenraiMangaStatisticsResponse
+import com.example.myapplication.data.remote.TenraiReviewsResponse
+import com.example.myapplication.data.remote.TenraiAnimeStatisticsResponse
+import com.example.myapplication.data.remote.TenraiStaffResponse
+import com.example.myapplication.data.remote.TenraiStreamingResponse
+import com.example.myapplication.data.remote.TenraiThemesResponse
 import com.example.myapplication.data.remote.MalApiService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -58,55 +50,30 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
-class JikanProfileFetchException(
-    val status: Int?,
-    val responseMessage: String?,
-    val responseError: String?,
-    val username: String
-) : IOException(
-    buildString {
-        append("Profile fetch failed for ")
-        append(username)
-        append(" (status=")
-        append(status?.toString() ?: "unknown")
-        append(")")
-        responseMessage?.takeIf { it.isNotBlank() }?.let {
-            append(": ")
-            append(it)
-        }
-        responseError?.takeIf { it.isNotBlank() && it != responseMessage }?.let {
-            append(" | error=")
-            append(it)
-        }
-    }
-)
-
 @Singleton
 class AnimeRepository @Inject constructor(
     private val apiService: MalApiService,
     private val animeScheduleApiService: AnimeScheduleApiService,
-    private val jikanApiService: JikanApiService,
-    private val jikanEdgeApiService: JikanEdgeApiService,
     private val tenraiApiService: TenraiApiService,
     private val prefsManager: UserPreferencesManager
 ) {
     companion object {
         private const val AIRING_SCHEDULE_BATCH_SIZE = 18
         private const val AIRING_SCHEDULE_CACHE_TTL_MS = 15 * 60 * 1000L
-        private const val JIKAN_MIN_REQUEST_INTERVAL_MS = 350L
-        private const val JIKAN_INITIAL_BACKOFF_MS = 1_500L
-        private const val JIKAN_MAX_BACKOFF_MS = 15_000L
+        private const val TENRAI_MIN_REQUEST_INTERVAL_MS = 350L
+        private const val TENRAI_INITIAL_BACKOFF_MS = 1_500L
+        private const val TENRAI_MAX_BACKOFF_MS = 15_000L
     }
 
     private val clientId = "16b21f717a3e9f733f121971c122db16"
     private val seasonalAnimeCache = mutableMapOf<String, AnimeResponse>()
-    private val publishingMangaCache = mutableMapOf<String, List<JikanMangaData>>()
+    private val publishingMangaCache = mutableMapOf<String, List<TenraiMangaData>>()
     private val airingScheduleCache = mutableMapOf<Int, Pair<Long, AniListMedia>>()
     private val airingScheduleCacheLock = Any()
     private var timetableCache: Pair<Long, Map<String, AnimeScheduleTimetableEntry>>? = null
-    private val jikanRequestMutex = Mutex()
-    private var lastJikanRequestAtMs = 0L
-    private var jikanBackoffUntilMs = 0L
+    private val tenraiRequestMutex = Mutex()
+    private var lastTenraiRequestAtMs = 0L
+    private var tenraiBackoffUntilMs = 0L
 
     private suspend fun isNsfw(): Boolean {
         return prefsManager.nsfwFlow.first()
@@ -118,7 +85,7 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getRandomAnimeId(): Int {
-        return withJikanThrottle {
+        return withTenraiThrottle {
             retryTimeoutRequest {
                 tenraiApiService.getRandomAnime().data.mal_id
             }
@@ -215,39 +182,38 @@ class AnimeRepository @Inject constructor(
         return cause != null && isTimeoutError(cause)
     }
 
-    private suspend fun <T> withJikanThrottle(block: suspend () -> T): T {
-        return jikanRequestMutex.withLock {
+    private suspend fun <T> withTenraiThrottle(block: suspend () -> T): T {
+        return tenraiRequestMutex.withLock {
             val now = SystemClock.elapsedRealtime()
-            val waitUntil = maxOf(lastJikanRequestAtMs + JIKAN_MIN_REQUEST_INTERVAL_MS, jikanBackoffUntilMs)
+            val waitUntil = maxOf(lastTenraiRequestAtMs + TENRAI_MIN_REQUEST_INTERVAL_MS, tenraiBackoffUntilMs)
             if (waitUntil > now) {
                 delay(waitUntil - now)
             }
-            lastJikanRequestAtMs = SystemClock.elapsedRealtime()
+            lastTenraiRequestAtMs = SystemClock.elapsedRealtime()
             try {
                 block()
             } catch (e: Throwable) {
-                registerJikanBackoffIfNeeded(e)
+                registerTenraiBackoffIfNeeded(e)
                 throw e
             }
         }
     }
 
-    private fun registerJikanBackoffIfNeeded(error: Throwable) {
+    private fun registerTenraiBackoffIfNeeded(error: Throwable) {
         val status = when (error) {
             is HttpException -> error.code()
-            is JikanProfileFetchException -> error.status
             else -> null
         }
         if (status != 429) return
 
         val now = SystemClock.elapsedRealtime()
-        val remaining = (jikanBackoffUntilMs - now).coerceAtLeast(0L)
+        val remaining = (tenraiBackoffUntilMs - now).coerceAtLeast(0L)
         val nextBackoff = if (remaining <= 0L) {
-            JIKAN_INITIAL_BACKOFF_MS
+            TENRAI_INITIAL_BACKOFF_MS
         } else {
-            (remaining * 2).coerceAtMost(JIKAN_MAX_BACKOFF_MS)
+            (remaining * 2).coerceAtMost(TENRAI_MAX_BACKOFF_MS)
         }
-        jikanBackoffUntilMs = maxOf(jikanBackoffUntilMs, now + nextBackoff)
+        tenraiBackoffUntilMs = maxOf(tenraiBackoffUntilMs, now + nextBackoff)
     }
 
     suspend fun getTopManga(limit: Int = 20, rankingType: String = "all"): MangaResponse {
@@ -255,16 +221,16 @@ class AnimeRepository @Inject constructor(
         else apiService.getMangaRankingWithLimit(clientId = clientId, limit = limit, rankingType = rankingType, nsfw = isNsfw())
     }
 
-    suspend fun getPublishingManga(loadAllPages: Boolean = false): List<JikanMangaData> {
+    suspend fun getPublishingManga(loadAllPages: Boolean = false): List<TenraiMangaData> {
         val cacheKey = "publishing|$loadAllPages"
         publishingMangaCache[cacheKey]?.let { return it }
 
-        val allItems = mutableListOf<JikanMangaData>()
+        val allItems = mutableListOf<TenraiMangaData>()
         var page = 1
 
         while (true) {
             val response = try {
-                withJikanThrottle {
+                withTenraiThrottle {
                     tenraiApiService.getTopManga(filter = "publishing", page = page)
                 }
             } catch (e: HttpException) {
@@ -492,40 +458,40 @@ class AnimeRepository @Inject constructor(
         apiService.deleteMyMangaListStatus(clientId = clientId, mangaId = mangaId)
     }
 
-    suspend fun getAnimeCharacters(id: Int): JikanCharactersResponse {
-        return withJikanThrottle { tenraiApiService.getAnimeCharacters(id) }
+    suspend fun getAnimeCharacters(id: Int): TenraiCharactersResponse {
+        return withTenraiThrottle { tenraiApiService.getAnimeCharacters(id) }
     }
 
-    suspend fun getMangaCharacters(id: Int): JikanCharactersResponse {
-        return withJikanThrottle { tenraiApiService.getMangaCharacters(id) }
+    suspend fun getMangaCharacters(id: Int): TenraiCharactersResponse {
+        return withTenraiThrottle { tenraiApiService.getMangaCharacters(id) }
     }
 
-    suspend fun getAnimeStaff(id: Int): JikanStaffResponse {
-        return withJikanThrottle { tenraiApiService.getAnimeStaff(id) }
+    suspend fun getAnimeStaff(id: Int): TenraiStaffResponse {
+        return withTenraiThrottle { tenraiApiService.getAnimeStaff(id) }
     }
 
-    suspend fun getAnimeThemes(id: Int): JikanThemesResponse {
-        return withJikanThrottle { tenraiApiService.getAnimeThemes(id) }
+    suspend fun getAnimeThemes(id: Int): TenraiThemesResponse {
+        return withTenraiThrottle { tenraiApiService.getAnimeThemes(id) }
     }
 
-    suspend fun getAnimeReviews(id: Int): JikanReviewsResponse {
-        return withJikanThrottle { tenraiApiService.getAnimeReviews(id, preliminary = true) }
+    suspend fun getAnimeReviews(id: Int): TenraiReviewsResponse {
+        return withTenraiThrottle { tenraiApiService.getAnimeReviews(id, preliminary = true) }
     }
 
-    suspend fun getMangaReviews(id: Int): JikanReviewsResponse {
-        return withJikanThrottle { tenraiApiService.getMangaReviews(id, preliminary = true) }
+    suspend fun getMangaReviews(id: Int): TenraiReviewsResponse {
+        return withTenraiThrottle { tenraiApiService.getMangaReviews(id, preliminary = true) }
     }
 
-    suspend fun getAnimeStreaming(id: Int): JikanStreamingResponse {
-        return withJikanThrottle { tenraiApiService.getAnimeStreaming(id) }
+    suspend fun getAnimeStreaming(id: Int): TenraiStreamingResponse {
+        return withTenraiThrottle { tenraiApiService.getAnimeStreaming(id) }
     }
 
-    suspend fun getAnimeStatistics(id: Int): JikanAnimeStatisticsResponse {
-        return withJikanThrottle { tenraiApiService.getAnimeStatistics(id) }
+    suspend fun getAnimeStatistics(id: Int): TenraiAnimeStatisticsResponse {
+        return withTenraiThrottle { tenraiApiService.getAnimeStatistics(id) }
     }
 
-    suspend fun getMangaStatistics(id: Int): JikanMangaStatisticsResponse {
-        return withJikanThrottle { tenraiApiService.getMangaStatistics(id) }
+    suspend fun getMangaStatistics(id: Int): TenraiMangaStatisticsResponse {
+        return withTenraiThrottle { tenraiApiService.getMangaStatistics(id) }
     }
 
     suspend fun getMyUserProfile(): UserProfile {
@@ -556,41 +522,7 @@ class AnimeRepository @Inject constructor(
         )
     }
 
-    suspend fun getUserFullProfile(username: String): JikanFullUserProfile {
-        val response = withJikanThrottle { jikanApiService.getUserFullProfile(username) }
-        return response.data ?: throw JikanProfileFetchException(
-            status = response.status,
-            responseMessage = response.message,
-            responseError = response.error,
-            username = username
-        )
-    }
-
-    suspend fun getUserFriends(username: String): List<JikanFriend> {
-        return withJikanThrottle { jikanApiService.getUserFriends(username).data }
-    }
-
-    suspend fun getUserFavorites(username: String): JikanUserFavorites {
-        val data = withJikanThrottle { jikanEdgeApiService.getUserFavorites(username).data }
-        fun List<com.example.myapplication.data.remote.JikanEdgeFavoriteItem>.toProfileFavorites() = map { favorite ->
-            JikanFavoriteItem(
-                mal_id = favorite.malId,
-                name = favorite.name,
-                title = favorite.title,
-                url = favorite.url,
-                images = favorite.imageUrl?.let { imageUrl ->
-                    JikanUserImages(jpg = JikanImageFormat(image_url = imageUrl))
-                }
-            )
-        }
-        return JikanUserFavorites(
-            anime = data.anime.toProfileFavorites(),
-            manga = data.manga.toProfileFavorites()
-        )
-    }
-
     suspend fun getUserAnimeList(
-        username: String? = null,
         status: String? = null,
         sort: String = "list_score",
         offset: Int = 0,
@@ -599,7 +531,6 @@ class AnimeRepository @Inject constructor(
     ): UserAnimeListResponse {
         return apiService.getUserAnimeList(
             clientId = clientId,
-            username = username ?: "@me",
             status = status,
             sort = sort,
             offset = offset,
@@ -609,26 +540,24 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getUserMangaList(
-        username: String? = null,
         status: String? = null,
         sort: String = "list_score",
         offset: Int = 0,
         limit: Int = 100,
         includeNsfw: Boolean? = null
     ): UserMangaListResponse {
-        return apiService.getUserMangaList(
+        val response = apiService.getUserMangaList(
             clientId = clientId,
-            username = username ?: "@me",
             status = status,
             sort = sort,
             offset = offset,
             limit = limit,
             nsfw = includeNsfw ?: isNsfw()
         )
+        return response
     }
 
     suspend fun getAllUserAnimeList(
-        username: String? = null,
         status: String? = null,
         sort: String = "list_score",
         includeNsfw: Boolean? = null
@@ -639,7 +568,6 @@ class AnimeRepository @Inject constructor(
 
         do {
             val response = getUserAnimeList(
-                username = username,
                 status = status,
                 sort = sort,
                 offset = offset,
@@ -654,7 +582,6 @@ class AnimeRepository @Inject constructor(
     }
 
     suspend fun getAllUserMangaList(
-        username: String? = null,
         status: String? = null,
         sort: String = "list_score",
         includeNsfw: Boolean? = null
@@ -665,7 +592,6 @@ class AnimeRepository @Inject constructor(
 
         do {
             val response = getUserMangaList(
-                username = username,
                 status = status,
                 sort = sort,
                 offset = offset,

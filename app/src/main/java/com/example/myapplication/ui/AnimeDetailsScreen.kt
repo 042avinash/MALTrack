@@ -105,13 +105,13 @@ import com.example.myapplication.data.model.AnimeDetailsResponse
 import com.example.myapplication.data.model.AnimeNode
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
-import com.example.myapplication.data.remote.JikanCharacterData
-import com.example.myapplication.data.remote.JikanReviewData
-import com.example.myapplication.data.remote.JikanAnimeScoreBucket
-import com.example.myapplication.data.remote.JikanStaffData
-import com.example.myapplication.data.remote.JikanStreamingData
-import com.example.myapplication.data.remote.JikanThemesData
-import com.example.myapplication.data.remote.JikanVoiceActor
+import com.example.myapplication.data.remote.TenraiCharacterData
+import com.example.myapplication.data.remote.TenraiReviewData
+import com.example.myapplication.data.remote.TenraiAnimeScoreBucket
+import com.example.myapplication.data.remote.TenraiStaffData
+import com.example.myapplication.data.remote.TenraiStreamingData
+import com.example.myapplication.data.remote.TenraiThemesData
+import com.example.myapplication.data.remote.TenraiVoiceActor
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -308,12 +308,12 @@ fun AnimeDetailsScreen(
 @Composable
 fun AnimeDetailsContent(
     details: AnimeDetailsResponse, 
-    characters: List<JikanCharacterData>,
-    staff: List<JikanStaffData>,
+    characters: List<TenraiCharacterData>,
+    staff: List<TenraiStaffData>,
     recommendations: List<Recommendation>,
-    themes: JikanThemesData?,
+    themes: TenraiThemesData?,
     isThemesLoaded: Boolean,
-    reviews: List<JikanReviewData>,
+    reviews: List<TenraiReviewData>,
     allReviewsCount: Int,
     isRecommendationsLoaded: Boolean,
     isRecommendationsLoading: Boolean,
@@ -325,8 +325,8 @@ fun AnimeDetailsContent(
     staffError: String?,
     isReviewsLoaded: Boolean,
     isReviewsLoading: Boolean,
-    streaming: List<JikanStreamingData>,
-    scoreDistribution: List<JikanAnimeScoreBucket>,
+    streaming: List<TenraiStreamingData>,
+    scoreDistribution: List<TenraiAnimeScoreBucket>,
     isCommunityStatsRefreshing: Boolean,
     isScoreDistributionLoading: Boolean,
     scoreDistributionError: String?,
@@ -1458,8 +1458,8 @@ fun AnimeDetailsContent(
         } else if (isReviewsLoading || isReviewsLoaded) {
             item {
                 val reviewMessage = when {
-                    isReviewsLoading -> "Fetching reviews from Jikan..."
-                    allReviewsCount > 0 -> "Jikan reports %,d reviews, but the review preview did not return entries yet.".format(allReviewsCount)
+                    isReviewsLoading -> "Fetching reviews from Tenrai..."
+                    allReviewsCount > 0 -> "Tenrai reports %,d reviews, but the review preview did not return entries yet.".format(allReviewsCount)
                     else -> "No public reviews are available for this anime yet."
                 }
                 Card(
@@ -2143,7 +2143,7 @@ fun AnimeDetailsContent(
 
                                     // Side-scrolling VAs on right
                                     val sortedVAs = remember(charData.voice_actors) {
-                                        charData.voice_actors.sortedWith(compareByDescending<JikanVoiceActor> { it.language == "Japanese" }
+                                        charData.voice_actors.sortedWith(compareByDescending<TenraiVoiceActor> { it.language == "Japanese" }
                                             .thenByDescending { it.language == "English" }
                                             .thenBy { it.language })
                                     }

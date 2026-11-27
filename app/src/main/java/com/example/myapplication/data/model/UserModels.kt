@@ -11,6 +11,7 @@ data class UserProfile(
     val gender: String? = null,
     val birthday: String? = null,
     val location: String? = null,
+    @SerialName("is_supporter") val isSupporter: Boolean? = null,
     @SerialName("joined_at") val joinedAt: String? = null,
     @SerialName("anime_statistics") val animeStatistics: AnimeStatistics? = null,
     @SerialName("manga_statistics") val mangaStatistics: MangaStatistics? = null
@@ -19,23 +20,23 @@ data class UserProfile(
 /**
  * Converts the authenticated MAL API response into the profile shape used by the UI.
  *
- * The profile screen used to make a second request to Jikan after loading this response.
- * Keeping this adapter local lets the signed-in profile work even when Jikan is unavailable.
+ * Converts account data from MAL API v2 into the profile presentation model.
  */
-fun UserProfile.toProfileDisplayData(): JikanFullUserProfile = JikanFullUserProfile(
+fun UserProfile.toProfileDisplayData(): ProfileDisplayData = ProfileDisplayData(
     mal_id = id,
     username = name,
     url = "https://myanimelist.net/profile/$name",
     images = picture?.takeIf { it.isNotBlank() }?.let { imageUrl ->
-        JikanUserImages(jpg = JikanImageFormat(image_url = imageUrl))
+        ProfileImages(jpg = ProfileImageFormat(image_url = imageUrl))
     },
     gender = gender,
     birthday = birthday,
     location = location,
+    is_supporter = isSupporter,
     joined = joinedAt,
-    statistics = JikanUserStatistics(
+    statistics = ProfileStatistics(
         anime = animeStatistics?.let { stats ->
-            JikanAnimeStats(
+            ProfileAnimeStats(
                 days_watched = stats.numDaysWatched,
                 mean_score = stats.meanScore,
                 watching = stats.numWatching,
@@ -49,7 +50,7 @@ fun UserProfile.toProfileDisplayData(): JikanFullUserProfile = JikanFullUserProf
             )
         },
         manga = mangaStatistics?.let { stats ->
-            JikanMangaStats(
+            ProfileMangaStats(
                 days_read = stats.numDaysRead,
                 mean_score = stats.meanScore,
                 reading = stats.numReading,
@@ -106,41 +107,41 @@ data class MangaStatistics(
 )
 
 @Serializable
-data class JikanFullUserProfile(
+data class ProfileDisplayData(
     val mal_id: Int? = null,
     val username: String,
     val url: String? = null,
-    val images: JikanUserImages? = null,
+    val images: ProfileImages? = null,
     val last_online: String? = null,
     val gender: String? = null,
     val birthday: String? = null,
     val location: String? = null,
+    val is_supporter: Boolean? = null,
     val joined: String? = null,
-    val statistics: JikanUserStatistics? = null,
-    val favorites: JikanUserFavorites? = null,
+    val statistics: ProfileStatistics? = null,
     val about: String? = null,
-    val external: List<JikanExternalLink>? = null
+    val external: List<ProfileExternalLink>? = null
 )
 
 @Serializable
-data class JikanUserImages(
-    val jpg: JikanImageFormat? = null,
-    val webp: JikanImageFormat? = null
+data class ProfileImages(
+    val jpg: ProfileImageFormat? = null,
+    val webp: ProfileImageFormat? = null
 )
 
 @Serializable
-data class JikanImageFormat(
+data class ProfileImageFormat(
     val image_url: String? = null
 )
 
 @Serializable
-data class JikanUserStatistics(
-    val anime: JikanAnimeStats? = null,
-    val manga: JikanMangaStats? = null
+data class ProfileStatistics(
+    val anime: ProfileAnimeStats? = null,
+    val manga: ProfileMangaStats? = null
 )
 
 @Serializable
-data class JikanAnimeStats(
+data class ProfileAnimeStats(
     val days_watched: Float = 0f,
     val mean_score: Float = 0f,
     val watching: Int = 0,
@@ -154,7 +155,7 @@ data class JikanAnimeStats(
 )
 
 @Serializable
-data class JikanMangaStats(
+data class ProfileMangaStats(
     val days_read: Float = 0f,
     val mean_score: Float = 0f,
     val reading: Int = 0,
@@ -169,26 +170,7 @@ data class JikanMangaStats(
 )
 
 @Serializable
-data class JikanUserFavorites(
-    val anime: List<JikanFavoriteItem>? = null,
-    val manga: List<JikanFavoriteItem>? = null,
-    val characters: List<JikanFavoriteItem>? = null,
-    val people: List<JikanFavoriteItem>? = null,
-    val studios: List<JikanFavoriteItem>? = null
-)
-
-@Serializable
-data class JikanFavoriteItem(
-    val mal_id: Int,
-    val type: String? = null,
-    val name: String? = null,
-    val title: String? = null,
-    val url: String? = null,
-    val images: JikanUserImages? = null
-)
-
-@Serializable
-data class JikanExternalLink(
+data class ProfileExternalLink(
     val name: String? = null,
     val url: String? = null
 )

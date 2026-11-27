@@ -11,7 +11,7 @@ import com.example.myapplication.data.model.MangaNode
 import com.example.myapplication.data.model.MainPicture
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.MyMangaListStatus
-import com.example.myapplication.data.remote.JikanMangaData
+import com.example.myapplication.data.remote.TenraiMangaData
 import com.example.myapplication.data.repository.AnimeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -1129,7 +1129,7 @@ class AnimeViewModel @Inject constructor(
 
     private fun getFriendlyErrorMessage(error: Throwable): String {
         return if (error is SocketTimeoutException) {
-            "Request timed out. MAL or Jikan may be responding slowly, too many requests may have fired close together, a request may have stalled while switching screens, or your network may be unstable."
+            "Request timed out. MAL or Tenrai may be responding slowly, too many requests may have fired close together, a request may have stalled while switching screens, or your network may be unstable."
         } else {
             error.message ?: "Something went wrong."
         }
@@ -1167,7 +1167,7 @@ class AnimeViewModel @Inject constructor(
         }.awaitAll()
     }
 
-    private fun JikanMangaData.toMangaData(): MangaData {
+    private fun TenraiMangaData.toMangaData(): MangaData {
         return MangaData(
             node = MangaNode(
                 id = this.mal_id,

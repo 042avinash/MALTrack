@@ -190,13 +190,12 @@ interface MalApiService {
     @GET("users/@me")
     suspend fun getMyUserProfile(
         @Header("X-MAL-CLIENT-ID") clientId: String,
-        @Query("fields") fields: String = "id,name,picture,gender,birthday,location,joined_at,anime_statistics,manga_statistics"
+        @Query("fields") fields: String = "id,name,picture,gender,birthday,location,joined_at,is_supporter,anime_statistics,manga_statistics"
     ): UserProfile
 
-    @GET("users/{username}/animelist")
+    @GET("users/@me/animelist")
     suspend fun getUserAnimeList(
         @Header("X-MAL-CLIENT-ID") clientId: String,
-        @Path("username") username: String = "@me",
         @Query("status") status: String? = null,
         @Query("sort") sort: String = "list_score",
         @Query("limit") limit: Int = 1000,
@@ -205,10 +204,9 @@ interface MalApiService {
         @Query("fields") fields: String = "list_status,main_picture,num_episodes,status,broadcast,start_date,mean,alternative_titles,num_list_users,media_type,nsfw"
     ): UserAnimeListResponse
 
-    @GET("users/{username}/mangalist")
+    @GET("users/@me/mangalist")
     suspend fun getUserMangaList(
         @Header("X-MAL-CLIENT-ID") clientId: String,
-        @Path("username") username: String = "@me",
         @Query("status") status: String? = null,
         @Query("sort") sort: String = "list_score",
         @Query("limit") limit: Int = 1000,

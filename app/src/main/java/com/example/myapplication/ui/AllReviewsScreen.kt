@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.TenraiReviewData
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,7 +103,7 @@ fun AllReviewsScreen(
 }
 
 @Composable
-fun ReviewItemCard(review: JikanReviewData) {
+fun ReviewItemCard(review: TenraiReviewData) {
     var expanded by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),

@@ -91,9 +91,9 @@ import com.example.myapplication.data.model.MangaDetailsResponse
 import com.example.myapplication.data.model.MangaNode
 import com.example.myapplication.data.model.MangaRecommendation
 import com.example.myapplication.data.model.MyMangaListStatus
-import com.example.myapplication.data.remote.JikanCharacterData
-import com.example.myapplication.data.remote.JikanAnimeScoreBucket
-import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.TenraiCharacterData
+import com.example.myapplication.data.remote.TenraiAnimeScoreBucket
+import com.example.myapplication.data.remote.TenraiReviewData
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -264,8 +264,8 @@ fun MangaDetailsContent(
     details: MangaDetailsResponse, 
     cardMeta: Map<Int, MangaCardMeta> = emptyMap(),
     recommendations: List<MangaRecommendation>,
-    reviews: List<JikanReviewData>,
-    characters: List<JikanCharacterData>,
+    reviews: List<TenraiReviewData>,
+    characters: List<TenraiCharacterData>,
     allReviewsCount: Int,
     isRecommendationsLoaded: Boolean,
     isRecommendationsLoading: Boolean,
@@ -274,7 +274,7 @@ fun MangaDetailsContent(
     isCharactersLoaded: Boolean,
     isCharactersLoading: Boolean,
     isCommunityStatsRefreshing: Boolean,
-    scoreDistribution: List<JikanAnimeScoreBucket>,
+    scoreDistribution: List<TenraiAnimeScoreBucket>,
     isScoreDistributionLoading: Boolean,
     recommendationsError: String?,
     reviewsError: String?,
@@ -998,9 +998,9 @@ fun MangaDetailsContent(
         } else if (isReviewsLoading || isReviewsLoaded || !reviewsError.isNullOrBlank()) {
             item {
                 val reviewMessage = when {
-                    isReviewsLoading -> "Fetching reviews from Jikan..."
+                    isReviewsLoading -> "Fetching reviews from Tenrai..."
                     !reviewsError.isNullOrBlank() -> "Could not refresh reviews right now. Please try again."
-                    allReviewsCount > 0 -> "Jikan reports %,d reviews, but the review preview did not return entries yet.".format(allReviewsCount)
+                    allReviewsCount > 0 -> "Tenrai reports %,d reviews, but the review preview did not return entries yet.".format(allReviewsCount)
                     else -> "No public reviews are available for this manga yet."
                 }
                 Card(

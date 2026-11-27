@@ -20,8 +20,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.Female
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Male
+import androidx.compose.material.icons.filled.Transgender
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Inventory2
@@ -73,7 +77,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -88,14 +91,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
-import com.example.myapplication.data.local.TitleLanguage
-import com.example.myapplication.data.model.AnimeDetailsResponse
-import com.example.myapplication.data.model.JikanFavoriteItem
-import com.example.myapplication.data.model.JikanFullUserProfile
+import com.example.myapplication.data.model.ProfileDisplayData
 import com.example.myapplication.data.model.UserProfile
-import com.example.myapplication.data.remote.JikanFriend
 import com.example.myapplication.data.model.AnimeStatistics
 import com.example.myapplication.data.model.MangaStatistics
+import com.example.myapplication.data.remote.JikanEdgeFavoriteMedia
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -108,40 +108,38 @@ import java.util.regex.Pattern
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel,
-    titleLanguage: TitleLanguage,
     username: String? = null,
     onBack: () -> Unit,
-    onUserClick: (String) -> Unit,
-    onListClick: (String) -> Unit,
-    onAnimeClick: (Int) -> Unit,
-    onMangaClick: (Int) -> Unit,
     onOpenSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val favoriteAnime by viewModel.favoriteAnime.collectAsState()
+    val favoriteManga by viewModel.favoriteManga.collectAsState()
+    val favoritesLoading by viewModel.favoritesLoading.collectAsState()
+    val favoritesUnavailable by viewModel.favoritesUnavailable.collectAsState()
     val context = LocalContext.current
     var selectedTabIndex by remember(username) { mutableIntStateOf(0) }
-    var showSearchDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(username) {
         viewModel.getProfile(username)
     }
 
+    LaunchedEffect(username, (uiState as? ProfileUiState.Success)?.malUser?.id) {
+        val ownProfile = username == null || username == "null"
+        val profileUser = (uiState as? ProfileUiState.Success)?.malUser
+        if (ownProfile && profileUser != null) {
+            viewModel.loadOwnFavorites(profileUser.name)
+        } else if (!ownProfile) {
+            viewModel.clearOwnAnimeFavorites()
+        }
+    }
+
     LaunchedEffect(errorMessage) {
         val message = errorMessage ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
         viewModel.clearErrorMessage()
-    }
-
-    if (showSearchDialog) {
-        SearchUserDialog(
-            onDismiss = { showSearchDialog = false },
-            onSearch = { 
-                onUserClick(it)
-                showSearchDialog = false
-            }
-        )
     }
 
     Scaffold(
@@ -151,7 +149,7 @@ fun ProfileScreen(
         topBar = {
             val isOwnProfile = username == null || username == "null"
             val currentProfile = uiState as? ProfileUiState.Success
-            val currentProfileUsername = currentProfile?.jikanUser?.username
+            val currentProfileUsername = currentProfile?.profileData?.username
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(28.dp),
@@ -188,7 +186,7 @@ fun ProfileScreen(
                     if (currentProfileUsername != null) {
                         FilledTonalButton(
                             onClick = {
-                                val url = currentProfile?.jikanUser?.url
+                                val url = currentProfile?.profileData?.url
                                     ?: "https://myanimelist.net/profile/$currentProfileUsername"
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                             },
@@ -211,7 +209,14 @@ fun ProfileScreen(
     ) { paddingValues ->
         PullToRefreshBox(
             isRefreshing = uiState is ProfileUiState.Loading,
-            onRefresh = { viewModel.getProfile(username, forceRefresh = true) },
+            onRefresh = {
+                viewModel.getProfile(username, forceRefresh = true)
+                if (username == null || username == "null") {
+                    (uiState as? ProfileUiState.Success)?.malUser?.name?.let {
+                        viewModel.loadOwnFavorites(it, forceRefresh = true)
+                    }
+                }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -224,22 +229,17 @@ fun ProfileScreen(
                     is ProfileUiState.Success -> {
                         ProfileContent(
                             malUser = state.malUser,
-                            jikanUser = state.jikanUser,
+                            profileData = state.profileData,
                             selectedTabIndex = selectedTabIndex,
-                            titleLanguage = titleLanguage,
-                            friends = state.friends,
-                            friendsLoading = state.friendsLoading,
-                            friendsError = state.friendsError,
-                            onLoadFriends = { viewModel.loadFriends(username) },
-                            onRefreshFriends = { viewModel.loadFriends(username, forceRefresh = true) },
-                            onAnimeClick = onAnimeClick,
-                            onMangaClick = onMangaClick,
-                            onUserClick = onUserClick,
-                            onListClick = onListClick,
-                            isOwnProfile = state.isOwnProfile,
-                            viewerIsFriendWithProfileOwner = state.viewerIsFriendWithProfileOwner,
-                            onFindUserClick = { showSearchDialog = true },
-                            loadFavoriteAnimeDetails = { animeId -> viewModel.getFavoriteAnimeDetails(animeId) }
+                            favoriteAnime = if (username == null || username == "null") favoriteAnime else emptyList(),
+                            favoriteManga = if (username == null || username == "null") favoriteManga else emptyList(),
+                            favoritesLoading = favoritesLoading,
+                            favoritesUnavailable = favoritesUnavailable,
+                            onRetryFavorites = {
+                                state.malUser?.name?.let {
+                                    viewModel.loadOwnFavorites(it, forceRefresh = true)
+                                }
+                            }
                         )
                     }
                     is ProfileUiState.Error -> {
@@ -438,45 +438,19 @@ private fun rememberProfileShimmerBrush(): Brush {
 @Composable
 fun ProfileContent(
     malUser: UserProfile?, 
-    jikanUser: JikanFullUserProfile, 
+    profileData: ProfileDisplayData,
     selectedTabIndex: Int,
-    titleLanguage: TitleLanguage,
-    friends: List<JikanFriend>,
-    friendsLoading: Boolean,
-    friendsError: String?,
-    onLoadFriends: () -> Unit,
-    onRefreshFriends: () -> Unit,
-    onAnimeClick: (Int) -> Unit,
-    onMangaClick: (Int) -> Unit,
-    onUserClick: (String) -> Unit,
-    onListClick: (String) -> Unit,
-    isOwnProfile: Boolean,
-    viewerIsFriendWithProfileOwner: Boolean?,
-    onFindUserClick: () -> Unit,
-    loadFavoriteAnimeDetails: suspend (Int) -> AnimeDetailsResponse?
+    favoriteAnime: List<JikanEdgeFavoriteMedia> = emptyList(),
+    favoriteManga: List<JikanEdgeFavoriteMedia> = emptyList(),
+    favoritesLoading: Boolean = false,
+    favoritesUnavailable: Boolean = false,
+    onRetryFavorites: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var showAboutDialog by remember { mutableStateOf(false) }
-    var showFriendsDialog by remember { mutableStateOf(false) }
-    var showFriendsSection by remember { mutableStateOf(false) }
     var selectedSignal by remember { mutableStateOf<ProfileSignalCard?>(null) }
-    val signalCards = remember(jikanUser.statistics, jikanUser.joined) { buildProfileSignalCards(jikanUser.statistics, jikanUser.joined) }
+    val signalCards = remember(profileData.statistics, profileData.joined) { buildProfileSignalCards(profileData.statistics, profileData.joined) }
     val profileListState = rememberLazyListState()
 
-    if (showAboutDialog) {
-        AboutDialog(about = jikanUser.about ?: "No about information provided.", onDismiss = { showAboutDialog = false })
-    }
-
-    if (showFriendsDialog) {
-        FriendsDialog(
-            friends = friends,
-            onDismiss = { showFriendsDialog = false },
-            onUserClick = {
-                showFriendsDialog = false
-                onUserClick(it)
-            }
-        )
-    }
     selectedSignal?.let { signal ->
         AlertDialog(
             onDismissRequest = { selectedSignal = null },
@@ -512,117 +486,92 @@ fun ProfileContent(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(144.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    FilledTonalIconButton(
-                        onClick = onFindUserClick,
-                        modifier = Modifier
-                            .size(88.dp)
-                            .align(Alignment.CenterStart)
-                            .offset(x = 32.dp)
-                            .zIndex(1f)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Find user"
-                            )
-                            Text(
-                                text = when {
-                                    isOwnProfile -> "You"
-                                    viewerIsFriendWithProfileOwner == true -> "Friend"
-                                    viewerIsFriendWithProfileOwner == false -> "Not friends"
-                                    else -> "Friend status"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(128.dp)
-                            .zIndex(2f),
-                        contentAlignment = Alignment.BottomEnd
+                    Column(
+                        modifier = Modifier.width(136.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(128.dp)
-                                .clip(CircleShape)
-                                .border(3.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                                .padding(4.dp)
-                        )
-                        {
-                            UserAvatar(
-                                imageUrl = malUser?.picture ?: jikanUser.images?.jpg?.image_url,
-                                contentDescription = "Profile Picture",
-                                size = 120.dp
-                            )
-                        }
-                        IconButton(
-                            onClick = { showAboutDialog = true },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                                .padding(4.dp)
+                                .size(136.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = "About Me",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(136.dp)
+                                    .clip(CircleShape)
+                                    .border(3.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                                    .padding(4.dp)
+                            ) {
+                                UserAvatar(
+                                    imageUrl = malUser?.picture ?: profileData.images?.jpg?.image_url,
+                                    contentDescription = "Profile Picture",
+                                    size = 128.dp
+                                )
+                            }
+                            if (profileData.is_supporter == true) {
+                                Surface(
+                                    modifier = Modifier.align(Alignment.BottomCenter),
+                                    shape = RoundedCornerShape(50),
+                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.WorkspacePremium,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                        Text(
+                                            text = "MAL Supporter",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
-                    FilledTonalIconButton(
-                        onClick = { onListClick(jikanUser.username) },
-                        modifier = Modifier
-                            .size(88.dp)
-                            .align(Alignment.CenterEnd)
-                            .offset(x = (-32).dp)
-                            .zIndex(1f)
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                painter = painterResource(com.example.myapplication.R.drawable.ic_patient_list),
-                                contentDescription = "View List"
-                            )
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(10.dp)
+                        ) {
                             Text(
-                                text = "View List",
-                                style = MaterialTheme.typography.labelSmall,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2
+                                text = profileData.username,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
+                            profileData.gender?.takeIf { it.isNotBlank() }?.let { value ->
+                                ProfileInfoItem(icon = genderIcon(value), text = value)
+                            }
+                            profileData.birthday?.takeIf { it.isNotBlank() }?.let { value ->
+                                ProfileInfoItem(icon = Icons.Default.Cake, text = value)
+                            }
+                            profileData.location?.takeIf { it.isNotBlank() }?.let { value ->
+                                ProfileInfoItem(icon = Icons.Default.LocationOn, text = value)
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(text = jikanUser.username, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-
-                val infoParts = mutableListOf<String>()
-                jikanUser.gender?.let { infoParts.add(it) }
-                jikanUser.location?.let { infoParts.add(it) }
-                if (infoParts.isNotEmpty()) {
-                    Text(
-                        text = infoParts.joinToString(" • "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                val validExternalLinks = jikanUser.external
+                val validExternalLinks = profileData.external
                     .orEmpty()
                     .filter { link ->
                         val url = link.url?.trim().orEmpty()
@@ -654,132 +603,125 @@ fun ProfileContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                FilledTonalButton(
-                    onClick = {
-                        if (showFriendsSection) {
-                            showFriendsSection = false
-                        } else {
-                            onLoadFriends()
-                            showFriendsSection = true
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (friendsLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    } else {
-                        Icon(
-                            imageVector = if (showFriendsSection) Icons.Default.Group else Icons.Default.PersonAdd,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
-                    Text(if (showFriendsSection) "Hide Friends" else "Load Friends")
-                }
-
-            }
-        }
-        // Friends section remains below the top profile action row.
-
-        if (showFriendsSection) {
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Friends", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (friends.size > 8) {
-                                AssistChip(
-                                    onClick = { showFriendsDialog = true },
-                                    label = { Text("More") },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.ArrowForward,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                )
-                            }
-                            AssistChip(
-                                onClick = onRefreshFriends,
-                                enabled = !friendsLoading,
-                                label = { Text("Refresh") }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    when {
-                        friendsLoading && friends.isEmpty() -> CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        friendsError != null -> {
-                            Text(text = friendsError, color = MaterialTheme.colorScheme.error)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            AccentTextButton(onClick = onRefreshFriends) { Text("Retry Friends") }
-                        }
-                        friends.isEmpty() -> Text("No friends to show.")
-                        else -> {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                items(friends.take(8)) { friend ->
-                                    Column(
-                                        modifier = Modifier
-                                            .width(70.dp)
-                                            .clickable { onUserClick(friend.user.username) },
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        UserAvatar(
-                                            imageUrl = friend.user.images.jpg?.image_url,
-                                            contentDescription = friend.user.username,
-                                            size = 60.dp
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = friend.user.username,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
 
         if (selectedTabIndex == 0) {
             animeProfileItems(
-                user = jikanUser,
+                user = profileData,
                 malStats = malUser?.animeStatistics,
-                titleLanguage = titleLanguage,
                 signalCards = signalCards.filter { it.section == null || it.section == "Anime" },
                 onSignalClick = { selectedSignal = it },
-                onAnimeClick = onAnimeClick,
-                loadFavoriteAnimeDetails = loadFavoriteAnimeDetails
+                favoriteAnime = favoriteAnime.takeIf { malUser != null },
+                favoritesLoading = favoritesLoading,
+                favoritesUnavailable = favoritesUnavailable,
+                onRetryFavorites = onRetryFavorites,
+                onFavoriteAnimeClick = { media ->
+                    val url = media.url ?: "https://myanimelist.net/anime/${media.malId}"
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }
             )
         } else {
             mangaProfileItems(
-                user = jikanUser,
+                user = profileData,
                 malStats = malUser?.mangaStatistics,
-                titleLanguage = titleLanguage,
                 signalCards = signalCards.filter { it.section == null || it.section == "Manga" },
                 onSignalClick = { selectedSignal = it },
-                onMangaClick = onMangaClick
+                favoriteManga = favoriteManga.takeIf { malUser != null },
+                favoritesLoading = favoritesLoading,
+                favoritesUnavailable = favoritesUnavailable,
+                onRetryFavorites = onRetryFavorites,
+                onFavoriteMangaClick = { media ->
+                    val url = media.url ?: "https://myanimelist.net/manga/${media.malId}"
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }
             )
         }
 
+    }
+}
+
+@Composable
+private fun FavoriteMediaSection(
+    title: String,
+    media: List<JikanEdgeFavoriteMedia>,
+    isLoading: Boolean,
+    unavailable: Boolean,
+    onRetry: () -> Unit,
+    onMediaClick: (JikanEdgeFavoriteMedia) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        when {
+            isLoading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            unavailable -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Favorites are temporarily unavailable.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onRetry) { Text("Retry") }
+            }
+            media.isEmpty() -> Text(
+                text = "No favorite ${title.removePrefix("Favorite ").lowercase()} found.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+            )
+            else -> LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(media, key = { it.malId }) { item ->
+                    Card(
+                        modifier = Modifier
+                            .width(108.dp)
+                            .aspectRatio(0.78f)
+                            .clickable { onMediaClick(item) },
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AsyncImage(
+                                model = item.imageUrl,
+                                contentDescription = item.displayTitle,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomStart)
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))
+                                        )
+                                    )
+                                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = item.displayTitle.ifBlank { "Anime ${item.malId}" },
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -829,7 +771,34 @@ private fun ProfileSignalPill(
     }
 }
 
-private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.JikanUserStatistics?, joined: String?): List<ProfileSignalCard> {
+@Composable
+private fun ProfileInfoItem(icon: ImageVector, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onPrimary
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun genderIcon(gender: String): ImageVector = when (gender.trim().lowercase()) {
+    "male", "man" -> Icons.Default.Male
+    "female", "woman" -> Icons.Default.Female
+    "trans", "transgender", "nonbinary", "non-binary", "non binary" -> Icons.Default.Transgender
+    else -> Icons.Default.Person
+}
+
+private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.ProfileStatistics?, joined: String?): List<ProfileSignalCard> {
     val anime = stats?.anime
     val manga = stats?.manga
     if (anime == null && manga == null) return emptyList()
@@ -1049,7 +1018,7 @@ private fun buildProfileSignalCards(stats: com.example.myapplication.data.model.
 
 private fun profileSignalMetric(
     card: ProfileSignalCard,
-    stats: com.example.myapplication.data.model.JikanUserStatistics?,
+    stats: com.example.myapplication.data.model.ProfileStatistics?,
     joined: String?
 ): String {
     val title = card.title
@@ -1124,122 +1093,16 @@ private fun parseJoinedDate(joined: String): LocalDate? {
     return null
 }
 
-@Composable
-private fun FriendsDialog(
-    friends: List<JikanFriend>,
-    onDismiss: () -> Unit,
-    onUserClick: (String) -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.9f),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Friends",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    AccentTextButton(onClick = onDismiss) {
-                        Text("Close")
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                val friendsListState = rememberLazyListState()
-                LazyColumn(
-                    state = friendsListState,
-                    modifier = Modifier.verticalScrollbar(friendsListState),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 12.dp)
-                ) {
-                    items(friends) { friend ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .clickable { onUserClick(friend.user.username) }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            UserAvatar(
-                                imageUrl = friend.user.images.jpg?.image_url,
-                                contentDescription = friend.user.username,
-                                size = 56.dp
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = friend.user.username,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                friend.last_online?.let {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Schedule,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(12.dp),
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = formatLastOnline(it),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            Text(
-                                text = "View",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun formatLastOnline(raw: String): String {
-    val zonedDateTime = runCatching {
-        OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.systemDefault())
-    }.getOrElse { return raw }
-
-    val formatter = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a")
-    return zonedDateTime.format(formatter)
-}
-
 fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
-    user: JikanFullUserProfile,
+    user: ProfileDisplayData,
     malStats: AnimeStatistics?,
-    titleLanguage: TitleLanguage,
     signalCards: List<ProfileSignalCard>,
     onSignalClick: (ProfileSignalCard) -> Unit,
-    onAnimeClick: (Int) -> Unit,
-    loadFavoriteAnimeDetails: suspend (Int) -> AnimeDetailsResponse?
+    favoriteAnime: List<JikanEdgeFavoriteMedia>? = null,
+    favoritesLoading: Boolean = false,
+    favoritesUnavailable: Boolean = false,
+    onRetryFavorites: () -> Unit = {},
+    onFavoriteAnimeClick: (JikanEdgeFavoriteMedia) -> Unit = {}
 ) {
     val stats = user.statistics?.anime
     
@@ -1299,21 +1162,21 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
     }
 
     item {
-        Column(modifier = Modifier.padding(16.dp)) {
-            val favorites = user.favorites?.anime.orEmpty()
-            if (favorites.isNotEmpty()) {
-                FavoriteMediaSection(
-                    title = "Favorite Anime",
-                    items = favorites,
-                    titleLanguage = titleLanguage,
-                    loadFullAnimeDetails = loadFavoriteAnimeDetails,
-                    onItemClick = onAnimeClick
-                )
-            } else {
+        if (favoriteAnime != null) {
+            FavoriteMediaSection(
+                title = "Favorite Anime",
+                media = favoriteAnime,
+                isLoading = favoritesLoading,
+                unavailable = favoritesUnavailable,
+                onRetry = onRetryFavorites,
+                onMediaClick = onFavoriteAnimeClick
+            )
+        } else {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text("Favorite Anime", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Favorite anime aren't available for this profile.",
+                    "Favorite anime aren't available from MAL API v2.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1323,12 +1186,15 @@ fun androidx.compose.foundation.lazy.LazyListScope.animeProfileItems(
 }
 
 fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
-    user: JikanFullUserProfile,
+    user: ProfileDisplayData,
     malStats: MangaStatistics?,
-    titleLanguage: TitleLanguage,
     signalCards: List<ProfileSignalCard>,
     onSignalClick: (ProfileSignalCard) -> Unit,
-    onMangaClick: (Int) -> Unit
+    favoriteManga: List<JikanEdgeFavoriteMedia>? = null,
+    favoritesLoading: Boolean = false,
+    favoritesUnavailable: Boolean = false,
+    onRetryFavorites: () -> Unit = {},
+    onFavoriteMangaClick: (JikanEdgeFavoriteMedia) -> Unit = {}
 ) {
     val stats = user.statistics?.manga
 
@@ -1389,53 +1255,27 @@ fun androidx.compose.foundation.lazy.LazyListScope.mangaProfileItems(
     }
 
     item {
-        Column(modifier = Modifier.padding(16.dp)) {
-            val favorites = user.favorites?.manga.orEmpty()
-            if (favorites.isNotEmpty()) {
-                FavoriteMediaSection(
-                    title = "Favorite Manga",
-                    items = favorites,
-                    titleLanguage = titleLanguage,
-                    loadFullAnimeDetails = null,
-                    onItemClick = onMangaClick
-                )
-            } else {
+        if (favoriteManga != null) {
+            FavoriteMediaSection(
+                title = "Favorite Manga",
+                media = favoriteManga,
+                isLoading = favoritesLoading,
+                unavailable = favoritesUnavailable,
+                onRetry = onRetryFavorites,
+                onMediaClick = onFavoriteMangaClick
+            )
+        } else {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text("Favorite Manga", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Favorite manga aren't available for this profile.",
+                    "Favorite manga aren't available from MAL API v2.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
-}
-
-@Composable
-fun SearchUserDialog(onDismiss: () -> Unit, onSearch: (String) -> Unit) {
-    var username by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Search User") },
-        text = {
-            OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("Username") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            Button(onClick = { if (username.isNotBlank()) onSearch(username) }) {
-                Text("Go")
-            }
-        },
-        dismissButton = {
-            AccentTextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
 }
 
 data class StatPiece(val value: Int, val color: Color, val label: String)
@@ -1507,91 +1347,6 @@ fun DetailRow(label: String, value: String) {
     ) {
         Text(text = label, style = MaterialTheme.typography.bodyMedium)
         Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-fun FavoriteMediaSection(
-    title: String,
-    items: List<JikanFavoriteItem>,
-    titleLanguage: TitleLanguage,
-    loadFullAnimeDetails: (suspend (Int) -> AnimeDetailsResponse?)? = null,
-    onItemClick: (Int) -> Unit
-) {
-    val favoritesRowState = rememberLazyListState()
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(
-            state = favoritesRowState,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(items) { item ->
-                val fallbackTitle = when (titleLanguage) {
-                    TitleLanguage.ENGLISH -> item.name?.takeIf { it.isNotBlank() }
-                        ?: item.title?.takeIf { it.isNotBlank() }
-                        ?: "Unknown"
-                    TitleLanguage.JAPANESE -> item.name?.takeIf { it.isNotBlank() }
-                        ?: item.title?.takeIf { it.isNotBlank() }
-                        ?: "Unknown"
-                    TitleLanguage.ROMAJI -> item.title?.takeIf { it.isNotBlank() }
-                        ?: item.name?.takeIf { it.isNotBlank() }
-                        ?: "Unknown"
-                }
-                val resolvedDetails by produceState<AnimeDetailsResponse?>(
-                    initialValue = null,
-                    key1 = item.mal_id,
-                    key2 = titleLanguage
-                ) {
-                    value = runCatching {
-                        loadFullAnimeDetails?.invoke(item.mal_id)
-                    }.getOrNull()
-                }
-                val displayTitle = resolvedDetails?.getPreferredTitle(titleLanguage) ?: fallbackTitle
-                Card(
-                    modifier = Modifier
-                        .width(108.dp)
-                        .aspectRatio(0.78f)
-                        .clickable { onItemClick(item.mal_id) },
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        AsyncImage(
-                            model = item.images?.jpg?.image_url,
-                            contentDescription = displayTitle,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .fillMaxWidth()
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color.Black.copy(alpha = 0.88f)
-                                        )
-                                    )
-                                )
-                                .padding(horizontal = 8.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = displayTitle,
-                                color = Color.White,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Box(Modifier.fillMaxWidth().height(10.dp).horizontalScrollbar(favoritesRowState))
     }
 }
 

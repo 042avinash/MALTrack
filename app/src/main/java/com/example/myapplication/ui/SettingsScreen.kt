@@ -84,6 +84,9 @@ fun SettingsScreen(
     val defaultMangaSort by viewModel.defaultMangaSort.collectAsState()
     val defaultAnimeDiscoverySort by viewModel.defaultAnimeDiscoverySort.collectAsState()
     val defaultMangaDiscoverySort by viewModel.defaultMangaDiscoverySort.collectAsState()
+    val listSectionScopeValue by viewModel.listSectionScope.collectAsState()
+    val listSortingScopeValue by viewModel.listSortingScope.collectAsState()
+    val discoverySortingScopeValue by viewModel.discoverySortingScope.collectAsState()
     val listStyleIsGrid by viewModel.listStyleIsGrid.collectAsState()
     val episodeNotificationsEnabled by viewModel.episodeNotificationsEnabled.collectAsState()
     val homeContinueWatchingEnabled by viewModel.homeContinueWatchingEnabled.collectAsState()
@@ -155,6 +158,9 @@ fun SettingsScreen(
     var showListSectionDialog by remember { mutableStateOf(false) }
     var showListSortingDialog by remember { mutableStateOf(false) }
     var showDiscoverySortingDialog by remember { mutableStateOf(false) }
+    val listSectionScope = settingsMediaScope(listSectionScopeValue)
+    val listSortingScope = settingsMediaScope(listSortingScopeValue)
+    val discoverySortingScope = settingsMediaScope(discoverySortingScopeValue)
     var showListStyleDialog by remember { mutableStateOf(false) }
     var showHomeSectionsDialog by remember { mutableStateOf(false) }
     var showHomeSearchDefaultDialog by remember { mutableStateOf(false) }
@@ -271,22 +277,30 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(
-                                text = "Download latest version",
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                style = MaterialTheme.typography.labelMedium
-                            )
                             Icon(
                                 imageVector = Icons.Default.Link,
-                                contentDescription = "Download latest version",
+                                contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Latest release",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                style = MaterialTheme.typography.labelMedium
                             )
                         }
                     }
                 }
 
                 if (selectedSettingsPage == "Appearance") {
+                SettingsSection(title = "Page Styling") {
+                    SettingClickableItem(
+                        icon = Icons.Default.GridView,
+                        title = "Page Style",
+                        subtitle = if (listStyleIsGrid) "Grid · Applied everywhere" else "List · Applied everywhere",
+                        onClick = { showListStyleDialog = true }
+                    )
+                }
                 Text(
                     text = "Color Mode",
                     style = MaterialTheme.typography.bodyLarge,
@@ -390,15 +404,6 @@ fun SettingsScreen(
                         title = "Default Home Search",
                         subtitle = if (homeDefaultSearchAnime) "Anime" else "Manga",
                         onClick = { showHomeSearchDefaultDialog = true }
-                    )
-                }
-
-                SettingsSection(title = "Page Styling") {
-                    SettingClickableItem(
-                        icon = Icons.Default.GridView,
-                        title = "Page Style",
-                        subtitle = if (listStyleIsGrid) "Grid · Applied everywhere" else "List · Applied everywhere",
-                        onClick = { showListStyleDialog = true }
                     )
                 }
 
@@ -641,9 +646,9 @@ fun SettingsScreen(
                     HorizontalDivider()
                     SettingClickableItem(
                         icon = Icons.Default.Info,
-                        title = "Jikan",
-                        subtitle = "Public MyAnimeList profile data · Open documentation",
-                        onClick = { openApiDocumentation(context, "https://docs.jikan.moe/") }
+                        title = "Jikan Edge",
+                        subtitle = "Profile anime and manga favorites · Open service",
+                        onClick = { openApiDocumentation(context, "https://jikan.lucashdo.com/") }
                     )
                     HorizontalDivider()
                     SettingClickableItem(
@@ -658,13 +663,6 @@ fun SettingsScreen(
                         title = "AnimeSchedule",
                         subtitle = "Airing schedule data · Open documentation",
                         onClick = { openApiDocumentation(context, "https://animeschedule.net/api/v3/documentation") }
-                    )
-                    HorizontalDivider()
-                    SettingClickableItem(
-                        icon = Icons.Default.Info,
-                        title = "jikan-edge",
-                        subtitle = "Public user favorites · Open documentation",
-                        onClick = { openApiDocumentation(context, "https://jikan.lucashdo.com/docs") }
                     )
                 }
                 }
@@ -850,6 +848,8 @@ fun SettingsScreen(
         ListSectionDefaultsDialog(
             animeStatus = defaultAnimeStatus,
             mangaStatus = defaultMangaStatus,
+            scope = listSectionScope,
+            onScopeChange = { viewModel.setListSectionScope(it.name) },
             onDismiss = { showListSectionDialog = false },
             onSave = { scope, section ->
                 if (scope != SettingsMediaScope.MANGA) {
@@ -867,6 +867,8 @@ fun SettingsScreen(
         ListSortingDefaultsDialog(
             animeSort = defaultAnimeSort,
             mangaSort = defaultMangaSort,
+            scope = listSortingScope,
+            onScopeChange = { viewModel.setListSortingScope(it.name) },
             onDismiss = { showListSortingDialog = false },
             onSave = { scope, sort ->
                 if (scope != SettingsMediaScope.MANGA) {
@@ -884,6 +886,8 @@ fun SettingsScreen(
         DiscoverySortingDefaultsDialog(
             animeSort = defaultAnimeDiscoverySort,
             mangaSort = defaultMangaDiscoverySort,
+            scope = discoverySortingScope,
+            onScopeChange = { viewModel.setDiscoverySortingScope(it.name) },
             onDismiss = { showDiscoverySortingDialog = false },
             onSave = { scope, sort ->
                 if (scope != SettingsMediaScope.MANGA) viewModel.setDefaultAnimeDiscoverySort(sort)
@@ -1434,6 +1438,9 @@ fun LanguageDialog(currentValue: TitleLanguage, onDismiss: () -> Unit, onSelect:
 
 private enum class SettingsMediaScope { ANIME, MANGA, BOTH }
 
+private fun settingsMediaScope(value: String): SettingsMediaScope =
+    runCatching { SettingsMediaScope.valueOf(value) }.getOrDefault(SettingsMediaScope.ANIME)
+
 private fun listSectionLabel(section: String): String = when (section) {
     "all" -> "All"
     "watching" -> "Watching"
@@ -1493,10 +1500,11 @@ private fun MediaScopeSelector(scope: SettingsMediaScope, onSelect: (SettingsMed
 private fun ListSectionDefaultsDialog(
     animeStatus: String,
     mangaStatus: String,
+    scope: SettingsMediaScope,
+    onScopeChange: (SettingsMediaScope) -> Unit,
     onDismiss: () -> Unit,
     onSave: (SettingsMediaScope, String) -> Unit
 ) {
-    var scope by remember { mutableStateOf(SettingsMediaScope.ANIME) }
     var selectedSection by remember(animeStatus, mangaStatus) {
         mutableStateOf(canonicalListSection(animeStatus))
     }
@@ -1522,7 +1530,7 @@ private fun ListSectionDefaultsDialog(
                 Text("Apply to", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 MediaScopeSelector(scope = scope, onSelect = {
-                    scope = it
+                    onScopeChange(it)
                     selectedSection = canonicalListSection(if (it == SettingsMediaScope.MANGA) mangaStatus else animeStatus)
                 })
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -1550,10 +1558,11 @@ private fun ListSectionDefaultsDialog(
 private fun ListSortingDefaultsDialog(
     animeSort: String,
     mangaSort: String,
+    scope: SettingsMediaScope,
+    onScopeChange: (SettingsMediaScope) -> Unit,
     onDismiss: () -> Unit,
     onSave: (SettingsMediaScope, String) -> Unit
 ) {
-    var scope by remember { mutableStateOf(SettingsMediaScope.ANIME) }
     var selectedSort by remember(animeSort, mangaSort) { mutableStateOf(canonicalSort(animeSort)) }
     val options = listOf(
         "list_score" to "Score",
@@ -1569,7 +1578,7 @@ private fun ListSortingDefaultsDialog(
                 Text("Apply to", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 MediaScopeSelector(scope = scope, onSelect = {
-                    scope = it
+                    onScopeChange(it)
                     selectedSort = canonicalSort(if (it == SettingsMediaScope.MANGA) mangaSort else animeSort)
                 })
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -1593,10 +1602,11 @@ private fun ListSortingDefaultsDialog(
 private fun DiscoverySortingDefaultsDialog(
     animeSort: String,
     mangaSort: String,
+    scope: SettingsMediaScope,
+    onScopeChange: (SettingsMediaScope) -> Unit,
     onDismiss: () -> Unit,
     onSave: (SettingsMediaScope, String) -> Unit
 ) {
-    var scope by remember { mutableStateOf(SettingsMediaScope.ANIME) }
     var selectedSort by remember(animeSort, mangaSort) {
         mutableStateOf(if (animeSort in listOf("members", "score")) animeSort else "members")
     }
@@ -1609,7 +1619,7 @@ private fun DiscoverySortingDefaultsDialog(
                 Text("Apply to", style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 MediaScopeSelector(scope = scope, onSelect = {
-                    scope = it
+                    onScopeChange(it)
                     selectedSort = if (it == SettingsMediaScope.MANGA) mangaSort else animeSort
                 })
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))

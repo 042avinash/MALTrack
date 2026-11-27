@@ -4,7 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.os.SystemClock
-import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.TenraiReviewData
 import com.example.myapplication.data.repository.AnimeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +22,7 @@ class AllReviewsViewModel @Inject constructor(
         private const val CACHE_TTL_MS = 10 * 60 * 1000L
         private const val HEAVY_RETRY_COUNT = 2
         private const val HEAVY_RETRY_DELAY_MS = 800L
-        private val reviewsCache = mutableMapOf<Int, Pair<Long, List<JikanReviewData>>>()
+        private val reviewsCache = mutableMapOf<Int, Pair<Long, List<TenraiReviewData>>>()
     }
 
     private val animeId: Int = checkNotNull(savedStateHandle["animeId"])
@@ -92,6 +92,6 @@ class AllReviewsViewModel @Inject constructor(
 
 sealed interface AllReviewsUiState {
     data object Loading : AllReviewsUiState
-    data class Success(val reviews: List<JikanReviewData>) : AllReviewsUiState
+    data class Success(val reviews: List<TenraiReviewData>) : AllReviewsUiState
     data class Error(val message: String) : AllReviewsUiState
 }

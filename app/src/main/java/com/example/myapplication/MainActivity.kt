@@ -91,10 +91,7 @@ class MainActivity : ComponentActivity() {
                                     currentDestination?.route?.startsWith("manga_details") != true &&
                                     currentDestination?.route?.startsWith("all_reviews") != true
                 val isHomeRootRoute = currentDestination?.route?.startsWith("anime_list") == true
-                val userListUsernameArg = navBackStackEntry?.arguments?.getString("username")
-                val isOwnUserListRootRoute =
-                    currentDestination?.route?.startsWith("user_list") == true &&
-                        (userListUsernameArg.isNullOrBlank() || userListUsernameArg == "null")
+                val isOwnUserListRootRoute = currentDestination?.route?.startsWith("user_list") == true
                 val profileUsernameArg = navBackStackEntry?.arguments?.getString("username")
                 val isOwnProfileRootRoute =
                     currentDestination?.route?.startsWith("profile_route") == true &&
@@ -292,10 +289,7 @@ class MainActivity : ComponentActivity() {
                             currentDestination?.route?.startsWith("manga_details") != true &&
                             currentDestination?.route?.startsWith("all_reviews") != true
                         val isHomeRootRoute = currentDestination?.route?.startsWith("anime_list") == true
-                        val userListUsernameArg = navBackStackEntry?.arguments?.getString("username")
-                        val isOwnUserListRootRoute =
-                            currentDestination?.route?.startsWith("user_list") == true &&
-                                (userListUsernameArg.isNullOrBlank() || userListUsernameArg == "null")
+                        val isOwnUserListRootRoute = currentDestination?.route?.startsWith("user_list") == true
                         val profileUsernameArg = navBackStackEntry?.arguments?.getString("username")
                         val isOwnProfileRootRoute =
                             currentDestination?.route?.startsWith("profile_route") == true &&
@@ -534,16 +528,14 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                     composable(
-                                        route = "user_list?mainTab={mainTab}&subTab={subTab}&username={username}",
+                                        route = "user_list?mainTab={mainTab}&subTab={subTab}",
                                         arguments = listOf(
                                             navArgument("mainTab") { defaultValue = 0; type = NavType.IntType },
-                                            navArgument("subTab") { defaultValue = 0; type = NavType.IntType },
-                                            navArgument("username") { nullable = true; defaultValue = null }
+                                            navArgument("subTab") { defaultValue = 0; type = NavType.IntType }
                                         )
                                     ) { backStackEntry ->
                                         val mainTab = backStackEntry.arguments?.getInt("mainTab") ?: 0
                                         val subTab = backStackEntry.arguments?.getInt("subTab") ?: 0
-                                        val username = backStackEntry.arguments?.getString("username")
                                         val userListViewModel: UserListViewModel = hiltViewModel()
                                         val userMangaListViewModel: UserMangaListViewModel = hiltViewModel()
 
@@ -553,7 +545,6 @@ class MainActivity : ComponentActivity() {
                                             titleLanguage = titleLanguage,
                                             initialMainTab = mainTab,
                                             initialSubTab = subTab,
-                                            username = username,
                                             onAnimeClick = { animeId ->
                                                 navigateToExistingOrPush("anime_details/$animeId")
                                             },
@@ -629,21 +620,8 @@ class MainActivity : ComponentActivity() {
                                         val profileViewModel: ProfileViewModel = hiltViewModel()
                                 ProfileScreen(
                                     viewModel = profileViewModel,
-                                    titleLanguage = titleLanguage,
                                     username = username,
                                     onBack = { navController.popBackStack() },
-                                            onUserClick = { clickedUser ->
-                                                navigateToExistingOrPush("profile_route?username=$clickedUser")
-                                            },
-                                            onListClick = { listUser ->
-                                                navigateToExistingOrPush("user_list?mainTab=0&subTab=0&username=$listUser")
-                                            },
-                                            onAnimeClick = { animeId ->
-                                                navigateToExistingOrPush("anime_details/$animeId")
-                                            },
-                                            onMangaClick = { mangaId ->
-                                                navigateToExistingOrPush("manga_details/$mangaId")
-                                            },
                                             onOpenSettings = { navigateSingleTop("settings") }
                                         )
                                     }
@@ -717,8 +695,7 @@ class MainActivity : ComponentActivity() {
                 val uri = Uri.parse("app://maltrack/$route")
                 val mainTab = uri.getQueryParameter("mainTab")?.toIntOrNull() ?: 0
                 val subTab = uri.getQueryParameter("subTab")?.toIntOrNull() ?: 0
-                val username = normalizeUsername(uri.getQueryParameter("username"))
-                "user_list:$mainTab:$subTab:${username ?: "@me"}"
+                "user_list:$mainTab:$subTab"
             }
             route.startsWith("anime_list") -> {
                 val uri = Uri.parse("app://maltrack/$route")
@@ -753,8 +730,7 @@ class MainActivity : ComponentActivity() {
             destinationRoute.startsWith("user_list") -> {
                 val mainTab = args?.getInt("mainTab") ?: 0
                 val subTab = args?.getInt("subTab") ?: 0
-                val username = normalizeUsername(args?.getString("username"))
-                "user_list:$mainTab:$subTab:${username ?: "@me"}"
+                "user_list:$mainTab:$subTab"
             }
             destinationRoute.startsWith("anime_list") -> {
                 val initialTab = args?.getInt("initialTab") ?: 0

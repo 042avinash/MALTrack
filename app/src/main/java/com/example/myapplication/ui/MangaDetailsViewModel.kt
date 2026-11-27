@@ -10,9 +10,9 @@ import com.example.myapplication.data.model.MangaRecommendation
 import com.example.myapplication.data.model.MyMangaListStatus
 import com.example.myapplication.data.model.Statistics
 import com.example.myapplication.data.model.StatusStatistics
-import com.example.myapplication.data.remote.JikanAnimeScoreBucket
-import com.example.myapplication.data.remote.JikanCharacterData
-import com.example.myapplication.data.remote.JikanReviewData
+import com.example.myapplication.data.remote.TenraiAnimeScoreBucket
+import com.example.myapplication.data.remote.TenraiCharacterData
+import com.example.myapplication.data.remote.TenraiReviewData
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.local.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -294,7 +294,7 @@ class MangaDetailsViewModel @Inject constructor(
             val latest = _uiState.value as? MangaDetailsUiState.Success ?: return@launch
             val buckets = statsPayload?.scores.orEmpty()
             val hasGoodData = !buckets.isNullOrEmpty() && buckets.any { it.votes > 0 || it.percentage > 0.0 }
-            val jikanBackedStatus = statsPayload?.let {
+            val tenraiBackedStatus = statsPayload?.let {
                 StatusStatistics(
                     watching = it.reading,
                     completed = it.completed,
@@ -303,10 +303,10 @@ class MangaDetailsViewModel @Inject constructor(
                     planToWatch = it.plan_to_read
                 )
             }
-            val mergedDetails = if (latest.details.statistics == null && jikanBackedStatus != null) {
+            val mergedDetails = if (latest.details.statistics == null && tenraiBackedStatus != null) {
                 latest.details.copy(
                     statistics = Statistics(
-                        status = jikanBackedStatus,
+                        status = tenraiBackedStatus,
                         numListUsers = statsPayload.total ?: latest.details.numListUsers
                     )
                 )
@@ -452,9 +452,9 @@ sealed interface MangaDetailsUiState {
         val details: MangaDetailsResponse,
         val cardMeta: Map<Int, MangaCardMeta> = emptyMap(),
         val recommendations: List<MangaRecommendation> = emptyList(),
-        val reviews: List<JikanReviewData> = emptyList(),
-        val characters: List<JikanCharacterData> = emptyList(),
-        val scoreDistribution: List<JikanAnimeScoreBucket> = emptyList(),
+        val reviews: List<TenraiReviewData> = emptyList(),
+        val characters: List<TenraiCharacterData> = emptyList(),
+        val scoreDistribution: List<TenraiAnimeScoreBucket> = emptyList(),
         val allReviewsCount: Int = 0,
         val isRecommendationsLoaded: Boolean = false,
         val isRecommendationsLoading: Boolean = false,

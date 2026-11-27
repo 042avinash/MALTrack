@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -127,14 +128,13 @@ fun UserListScreen(
     titleLanguage: TitleLanguage,
     initialMainTab: Int = 0,
     initialSubTab: Int = 0,
-    username: String? = null,
     onAnimeClick: (Int) -> Unit,
     onMangaClick: (Int) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenHomeSearch: (String, Boolean) -> Unit
 ) {
     val context = LocalContext.current
-    var isAnimeView by rememberSaveable(username, initialMainTab) {
+    var isAnimeView by rememberSaveable(initialMainTab) {
         mutableStateOf(initialMainTab == 0)
     }
 
@@ -144,7 +144,6 @@ fun UserListScreen(
                 viewModel = animeViewModel,
                 titleLanguage = titleLanguage,
                 initialSubTab = initialSubTab,
-                username = username,
                 onAnimeClick = onAnimeClick,
                 onTypeSwitch = {
                     isAnimeView = false
@@ -158,7 +157,6 @@ fun UserListScreen(
                 viewModel = mangaViewModel,
                 titleLanguage = titleLanguage,
                 initialSubTab = initialSubTab,
-                username = username,
                 onMangaClick = onMangaClick,
                 onTypeSwitch = {
                     isAnimeView = true
@@ -183,10 +181,9 @@ fun ListActionToolbar(
     onRecentSearchSelected: (String) -> Unit,
     onOpenSettings: () -> Unit,
     isAnime: Boolean,
-    isOwnList: Boolean,
     onTypeSwitch: () -> Unit
 ) {
-    val listOwnerLabel = if (isOwnList) "Your" else "User"
+    val listOwnerLabel = "Your"
     val mediaLabel = if (isAnime) "Anime" else "Manga"
     val filteredRecent = remember(searchQuery, recentSearches) {
         val query = searchQuery.trim()
@@ -353,7 +350,6 @@ fun UserAnimeSection(
     viewModel: UserListViewModel,
     titleLanguage: TitleLanguage,
     initialSubTab: Int,
-    username: String? = null,
     onAnimeClick: (Int) -> Unit,
     onTypeSwitch: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -387,21 +383,21 @@ fun UserAnimeSection(
     var isSearchExpanded by remember { mutableStateOf(false) }
     var showSortDialog by remember { mutableStateOf(false) }
     var isSearchTransitionLoading by remember { mutableStateOf(false) }
-    var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
-    var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
+    var isTabTransitionLoading by rememberSaveable { mutableStateOf(false) }
+    var loadedStatuses by rememberSaveable { mutableStateOf(setOf<String>()) }
     var pendingAnimeEdit by remember { mutableStateOf<UserAnimeData?>(null) }
-    var isPullRefreshing by rememberSaveable(username) { mutableStateOf(false) }
-    var pullRefreshRequestToken by rememberSaveable(username) { mutableStateOf(0) }
+    var isPullRefreshing by rememberSaveable { mutableStateOf(false) }
+    var pullRefreshRequestToken by rememberSaveable { mutableStateOf(0) }
 
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
     val defaultIsGridView by viewModel.getGridModeFlow().collectAsState(initial = false)
-    val pageGridModes = remember(username) { mutableStateMapOf<String, Boolean>() }
+    val pageGridModes = remember { mutableStateMapOf<String, Boolean>() }
     val isGridView = pageGridModes[currentStatus] ?: defaultIsGridView
     val currentSort = if (userListState.status == currentStatus) userListState.sort else viewModel.getSavedSortMode(currentStatus)
 
-    val effectiveUsername = (if (username == "null") null else username) ?: "@me"
+    val effectiveUsername = "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
     val currentStatusLoadKey = "$currentStatus|$nsfwEnabled"
     val currentStatusItems = loadedLists.entries.firstOrNull {
@@ -417,7 +413,7 @@ fun UserAnimeSection(
     LaunchedEffect(pullRefreshRequestToken) {
         if (pullRefreshRequestToken <= 0) return@LaunchedEffect
         isPullRefreshing = true
-        viewModel.refreshStatus(currentStatus, username = username)
+        viewModel.refreshStatus(currentStatus)
     }
 
     LaunchedEffect(isPullRefreshing, loadingStatuses, refreshLoadingKey) {
@@ -426,23 +422,23 @@ fun UserAnimeSection(
         }
     }
 
-    LaunchedEffect(settledPage, username, nsfwEnabled) {
+    LaunchedEffect(settledPage, nsfwEnabled) {
         if (currentStatusLoadKey !in loadedStatuses) {
             isTabTransitionLoading = true
-            viewModel.loadUserList(currentStatus, username = username, forceRefresh = false)
+            viewModel.loadUserList(currentStatus, forceRefresh = false)
         } else {
             isTabTransitionLoading = false
         }
     }
 
-    LaunchedEffect(username) {
+    LaunchedEffect(Unit) {
         searchQuery = ""
         submittedSearchQuery = ""
         isSearchExpanded = false
         viewModel.clearSearch()
     }
 
-    LaunchedEffect(submittedSearchQuery, currentStatus, username, userListState.sort) {
+    LaunchedEffect(submittedSearchQuery, currentStatus, userListState.sort) {
         val query = submittedSearchQuery.trim()
         if (query.isBlank()) {
             isSearchTransitionLoading = false
@@ -451,7 +447,6 @@ fun UserAnimeSection(
             viewModel.searchUserList(
                 query = query,
                 status = currentStatus,
-                username = username,
                 sort = userListState.sort
             )
         }
@@ -506,7 +501,6 @@ fun UserAnimeSection(
                     },
                     onOpenSettings = onOpenSettings,
                     isAnime = true,
-                    isOwnList = username.isNullOrBlank() || username == "@me",
                     onTypeSwitch = onTypeSwitch
                 )
                 TabRow(
@@ -569,11 +563,11 @@ fun UserAnimeSection(
                 val pageSort = if (pageStatus == userListState.status) userListState.sort else null
                 val pageIsGridView = pageGridModes[pageStatus] ?: defaultIsGridView
                 val pageListState = rememberSaveable(
-                    key = "anime_list_${username ?: "@me"}_$pageStatus",
+                    key = "anime_list_$pageStatus",
                     saver = LazyListState.Saver
                 ) { LazyListState() }
                 val pageGridState = rememberSaveable(
-                    key = "anime_grid_${username ?: "@me"}_$pageStatus",
+                    key = "anime_grid_$pageStatus",
                     saver = LazyGridState.Saver
                 ) { LazyGridState() }
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus), nsfwEnabled).joinToString("|")
@@ -600,7 +594,7 @@ fun UserAnimeSection(
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     UserAnimeList(
-                        listKey = "anime_${username ?: "@me"}_$pageStatus",
+                        listKey = "anime_$pageStatus",
                         animeList = pageItems,
                         airingDetails = airingDetails,
                         titleLanguage = titleLanguage,
@@ -609,7 +603,6 @@ fun UserAnimeSection(
                         searchResults = if (page == activePage) searchState.results else emptyList(),
                         isSearchLoading = page == activePage && submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
-                        isOwnList = username == null,
                         onSwitchToAll = {
                             coroutineScope.launch { pagerState.animateScrollToPage(0) }
                         },
@@ -653,7 +646,7 @@ fun UserAnimeSection(
                     "start_date" -> "anime_start_date"
                     else -> sort
                 }
-                viewModel.loadUserList(currentStatus, username = username, sort = mediaSort)
+                viewModel.loadUserList(currentStatus, sort = mediaSort)
                 showSortDialog = false
             }
         )
@@ -691,7 +684,6 @@ fun UserMangaSection(
     viewModel: UserMangaListViewModel,
     titleLanguage: TitleLanguage,
     initialSubTab: Int,
-    username: String? = null,
     onMangaClick: (Int) -> Unit,
     onTypeSwitch: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -724,21 +716,21 @@ fun UserMangaSection(
     var isSearchExpanded by remember { mutableStateOf(false) }
     var showSortDialog by remember { mutableStateOf(false) }
     var isSearchTransitionLoading by remember { mutableStateOf(false) }
-    var isTabTransitionLoading by rememberSaveable(username) { mutableStateOf(false) }
-    var loadedStatuses by rememberSaveable(username) { mutableStateOf(setOf<String>()) }
+    var isTabTransitionLoading by rememberSaveable { mutableStateOf(false) }
+    var loadedStatuses by rememberSaveable { mutableStateOf(setOf<String>()) }
     var pendingMangaEdit by remember { mutableStateOf<UserMangaData?>(null) }
-    var isPullRefreshing by rememberSaveable(username) { mutableStateOf(false) }
-    var pullRefreshRequestToken by rememberSaveable(username) { mutableStateOf(0) }
+    var isPullRefreshing by rememberSaveable { mutableStateOf(false) }
+    var pullRefreshRequestToken by rememberSaveable { mutableStateOf(0) }
 
     val settledPage = pagerState.settledPage
     val activePage = pagerState.currentPage
     val currentStatus = statuses[activePage]
     val defaultIsGridView by viewModel.getGridModeFlow().collectAsState(initial = false)
-    val pageGridModes = remember(username) { mutableStateMapOf<String, Boolean>() }
+    val pageGridModes = remember { mutableStateMapOf<String, Boolean>() }
     val isGridView = pageGridModes[currentStatus] ?: defaultIsGridView
     val currentSort = if (userMangaListState.status == currentStatus) userMangaListState.sort else viewModel.getSavedSortMode(currentStatus)
 
-    val effectiveUsername = (if (username == "null") null else username) ?: "@me"
+    val effectiveUsername = "@me"
     val refreshLoadingKey = listOf(effectiveUsername, currentStatus).joinToString("|")
     val currentStatusLoadKey = "$currentStatus|$nsfwEnabled"
     val currentStatusItems = loadedLists.entries.firstOrNull {
@@ -754,7 +746,7 @@ fun UserMangaSection(
     LaunchedEffect(pullRefreshRequestToken) {
         if (pullRefreshRequestToken <= 0) return@LaunchedEffect
         isPullRefreshing = true
-        viewModel.refreshStatus(currentStatus, username = username)
+        viewModel.refreshStatus(currentStatus)
     }
 
     LaunchedEffect(isPullRefreshing, loadingStatuses, refreshLoadingKey) {
@@ -763,23 +755,23 @@ fun UserMangaSection(
         }
     }
 
-    LaunchedEffect(settledPage, username, nsfwEnabled) {
+    LaunchedEffect(settledPage, nsfwEnabled) {
         if (currentStatusLoadKey !in loadedStatuses) {
             isTabTransitionLoading = true
-            viewModel.loadUserMangaList(currentStatus, username = username, forceRefresh = false)
+            viewModel.loadUserMangaList(currentStatus, forceRefresh = false)
         } else {
             isTabTransitionLoading = false
         }
     }
 
-    LaunchedEffect(username) {
+    LaunchedEffect(Unit) {
         searchQuery = ""
         submittedSearchQuery = ""
         isSearchExpanded = false
         viewModel.clearSearch()
     }
 
-    LaunchedEffect(submittedSearchQuery, currentStatus, username, userMangaListState.sort) {
+    LaunchedEffect(submittedSearchQuery, currentStatus, userMangaListState.sort) {
         val query = submittedSearchQuery.trim()
         if (query.isBlank()) {
             isSearchTransitionLoading = false
@@ -788,7 +780,6 @@ fun UserMangaSection(
             viewModel.searchUserList(
                 query = query,
                 status = currentStatus,
-                username = username,
                 sort = userMangaListState.sort
             )
         }
@@ -843,7 +834,6 @@ fun UserMangaSection(
                     },
                     onOpenSettings = onOpenSettings,
                     isAnime = false,
-                    isOwnList = username.isNullOrBlank() || username == "@me",
                     onTypeSwitch = onTypeSwitch
                 )
                 TabRow(
@@ -906,11 +896,11 @@ fun UserMangaSection(
                 val pageSort = if (pageStatus == userMangaListState.status) userMangaListState.sort else null
                 val pageIsGridView = pageGridModes[pageStatus] ?: defaultIsGridView
                 val pageListState = rememberSaveable(
-                    key = "manga_list_${username ?: "@me"}_$pageStatus",
+                    key = "manga_list_$pageStatus",
                     saver = LazyListState.Saver
                 ) { LazyListState() }
                 val pageGridState = rememberSaveable(
-                    key = "manga_grid_${username ?: "@me"}_$pageStatus",
+                    key = "manga_grid_$pageStatus",
                     saver = LazyGridState.Saver
                 ) { LazyGridState() }
                 val pageCacheKey = listOf(effectiveUsername, pageStatus, pageSort ?: viewModel.getSavedSortMode(pageStatus), nsfwEnabled).joinToString("|")
@@ -937,7 +927,7 @@ fun UserMangaSection(
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     UserMangaList(
-                        listKey = "manga_${username ?: "@me"}_$pageStatus",
+                        listKey = "manga_$pageStatus",
                         mangaList = pageItems,
                         titleLanguage = titleLanguage,
                         currentStatus = pageStatus,
@@ -945,7 +935,6 @@ fun UserMangaSection(
                         searchResults = if (page == activePage) searchState.results else emptyList(),
                         isSearchLoading = page == activePage && submittedSearchQuery.isNotBlank() && (searchState.isLoading || isSearchTransitionLoading),
                         isGridView = pageIsGridView,
-                        isOwnList = username == null,
                         onSwitchToAll = {
                             coroutineScope.launch { pagerState.animateScrollToPage(0) }
                         },
@@ -989,7 +978,7 @@ fun UserMangaSection(
                     "start_date" -> "manga_start_date"
                     else -> sort
                 }
-                viewModel.loadUserMangaList(currentStatus, username = username, sort = mediaSort)
+                viewModel.loadUserMangaList(currentStatus, sort = mediaSort)
                 showSortDialog = false
             }
         )
@@ -1024,6 +1013,28 @@ fun UserMangaSection(
 }
 
 @Composable
+private fun UserListSearchEmptyState(
+    searchQuery: String,
+    onSwitchToAll: () -> Unit,
+    onSearchOnMal: (String) -> Unit,
+    onSwitchMedia: () -> Unit,
+    switchMediaLabel: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 48.dp, bottom = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("No matches found")
+        Button(onClick = onSwitchToAll) { Text("Search in All") }
+        Button(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
+        Button(onClick = onSwitchMedia) { Text(switchMediaLabel) }
+    }
+}
+
+@Composable
 fun UserAnimeList(
     listKey: String,
     animeList: List<UserAnimeData>,
@@ -1034,7 +1045,6 @@ fun UserAnimeList(
     searchResults: List<UserAnimeData>,
     isSearchLoading: Boolean,
     isGridView: Boolean,
-    isOwnList: Boolean = true,
     onSwitchToAll: () -> Unit,
     onSearchOnMal: (String) -> Unit,
     onSwitchToManga: () -> Unit,
@@ -1058,25 +1068,14 @@ fun UserAnimeList(
         ) {
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("No matches found")
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (currentStatus != "all") {
-                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
-                                }
-                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                AccentTextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
-                            }
-                        }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        UserListSearchEmptyState(
+                            searchQuery = searchQuery,
+                            onSwitchToAll = onSwitchToAll,
+                            onSearchOnMal = onSearchOnMal,
+                            onSwitchMedia = onSwitchToManga,
+                            switchMediaLabel = "Switch to Manga"
+                        )
                     }
                 } else {
                     items(
@@ -1090,10 +1089,9 @@ fun UserAnimeList(
                             anilistMedia = anilistMedia,
                             nowEpochSeconds = nowEpochSeconds,
                             titleLanguage = titleLanguage,
-                            isOwnList = isOwnList,
                             onClick = { onAnimeClick(item.node.id) },
-                            onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
-                            onEditStatus = { if (isOwnList) onAnimeEdit(item) }
+                            onPlusOne = { onAnimePlusOne(item) },
+                            onEditStatus = { onAnimeEdit(item) }
                         )
                     }
                 }
@@ -1109,10 +1107,9 @@ fun UserAnimeList(
                         anilistMedia = anilistMedia,
                         nowEpochSeconds = nowEpochSeconds,
                         titleLanguage = titleLanguage,
-                        isOwnList = isOwnList,
                         onClick = { onAnimeClick(item.node.id) },
-                        onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
-                        onEditStatus = { if (isOwnList) onAnimeEdit(item) }
+                        onPlusOne = { onAnimePlusOne(item) },
+                        onEditStatus = { onAnimeEdit(item) }
                     )
                 }
             }
@@ -1127,24 +1124,13 @@ fun UserAnimeList(
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
                     item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("No matches found")
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (currentStatus != "all") {
-                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
-                                }
-                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                AccentTextButton(onClick = onSwitchToManga) { Text("Switch to Manga") }
-                            }
-                        }
+                        UserListSearchEmptyState(
+                            searchQuery = searchQuery,
+                            onSwitchToAll = onSwitchToAll,
+                            onSearchOnMal = onSearchOnMal,
+                            onSwitchMedia = onSwitchToManga,
+                            switchMediaLabel = "Switch to Manga"
+                        )
                     }
                 } else {
                     items(
@@ -1158,10 +1144,9 @@ fun UserAnimeList(
                             anilistMedia = anilistMedia,
                             nowEpochSeconds = nowEpochSeconds,
                             titleLanguage = titleLanguage,
-                            isOwnList = isOwnList,
                             onClick = { onAnimeClick(item.node.id) },
-                            onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
-                            onEditStatus = { if (isOwnList) onAnimeEdit(item) }
+                            onPlusOne = { onAnimePlusOne(item) },
+                            onEditStatus = { onAnimeEdit(item) }
                         )
                     }
                 }
@@ -1177,10 +1162,9 @@ fun UserAnimeList(
                         anilistMedia = anilistMedia,
                         nowEpochSeconds = nowEpochSeconds,
                         titleLanguage = titleLanguage,
-                        isOwnList = isOwnList,
                         onClick = { onAnimeClick(item.node.id) },
-                        onPlusOne = { if (isOwnList) onAnimePlusOne(item) },
-                        onEditStatus = { if (isOwnList) onAnimeEdit(item) }
+                        onPlusOne = { onAnimePlusOne(item) },
+                        onEditStatus = { onAnimeEdit(item) }
                     )
                 }
             }
@@ -1198,7 +1182,6 @@ fun UserMangaList(
     searchResults: List<UserMangaData>,
     isSearchLoading: Boolean,
     isGridView: Boolean,
-    isOwnList: Boolean = true,
     onSwitchToAll: () -> Unit,
     onSearchOnMal: (String) -> Unit,
     onSwitchToAnime: () -> Unit,
@@ -1221,23 +1204,14 @@ fun UserMangaList(
         ) {
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("No matches found")
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (currentStatus != "all") {
-                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
-                                }
-                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                AccentTextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
-                            }
-                        }
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        UserListSearchEmptyState(
+                            searchQuery = searchQuery,
+                            onSwitchToAll = onSwitchToAll,
+                            onSearchOnMal = onSearchOnMal,
+                            onSwitchMedia = onSwitchToAnime,
+                            switchMediaLabel = "Switch to Anime"
+                        )
                     }
                 } else {
                     items(
@@ -1248,10 +1222,9 @@ fun UserMangaList(
                         UserMangaGridItem(
                             data = item,
                             titleLanguage = titleLanguage,
-                            isOwnList = isOwnList,
                             onClick = { onMangaClick(item.node.id) },
-                            onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
-                            onEditStatus = { if (isOwnList) onMangaEdit(item) }
+                            onPlusOne = { onMangaPlusOne(item) },
+                            onEditStatus = { onMangaEdit(item) }
                         )
                     }
                 }
@@ -1264,10 +1237,9 @@ fun UserMangaList(
                     UserMangaGridItem(
                         data = item,
                         titleLanguage = titleLanguage,
-                        isOwnList = isOwnList,
                         onClick = { onMangaClick(item.node.id) },
-                        onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
-                        onEditStatus = { if (isOwnList) onMangaEdit(item) }
+                        onPlusOne = { onMangaPlusOne(item) },
+                        onEditStatus = { onMangaEdit(item) }
                     )
                 }
             }
@@ -1282,22 +1254,13 @@ fun UserMangaList(
             if (isSearching) {
                 if (!isSearchLoading && searchResults.isEmpty()) {
                     item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 48.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text("No matches found")
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (currentStatus != "all") {
-                                    AccentTextButton(onClick = onSwitchToAll) { Text("Search in All") }
-                                }
-                                AccentTextButton(onClick = { onSearchOnMal(searchQuery) }) { Text("Search on MAL") }
-                                AccentTextButton(onClick = onSwitchToAnime) { Text("Switch to Anime") }
-                            }
-                        }
+                        UserListSearchEmptyState(
+                            searchQuery = searchQuery,
+                            onSwitchToAll = onSwitchToAll,
+                            onSearchOnMal = onSearchOnMal,
+                            onSwitchMedia = onSwitchToAnime,
+                            switchMediaLabel = "Switch to Anime"
+                        )
                     }
                 } else {
                     items(
@@ -1308,10 +1271,9 @@ fun UserMangaList(
                         UserMangaItem(
                             data = item,
                             titleLanguage = titleLanguage,
-                            isOwnList = isOwnList,
                             onClick = { onMangaClick(item.node.id) },
-                            onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
-                            onEditStatus = { if (isOwnList) onMangaEdit(item) }
+                            onPlusOne = { onMangaPlusOne(item) },
+                            onEditStatus = { onMangaEdit(item) }
                         )
                     }
                 }
@@ -1324,10 +1286,9 @@ fun UserMangaList(
                     UserMangaItem(
                         data = item,
                         titleLanguage = titleLanguage,
-                        isOwnList = isOwnList,
                         onClick = { onMangaClick(item.node.id) },
-                        onPlusOne = { if (isOwnList) onMangaPlusOne(item) },
-                        onEditStatus = { if (isOwnList) onMangaEdit(item) }
+                        onPlusOne = { onMangaPlusOne(item) },
+                        onEditStatus = { onMangaEdit(item) }
                     )
                 }
             }
@@ -1537,7 +1498,6 @@ fun UserAnimeItem(
     anilistMedia: AniListMedia?,
     nowEpochSeconds: Long,
     titleLanguage: TitleLanguage,
-    isOwnList: Boolean = true,
     onClick: () -> Unit,
     onPlusOne: () -> Unit,
     onEditStatus: () -> Unit
@@ -1563,7 +1523,7 @@ fun UserAnimeItem(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) showQuickActions = true }
+                    onLongClick = { showQuickActions = true }
                 ),
             verticalAlignment = Alignment.Top
         ) {
@@ -1751,7 +1711,6 @@ fun UserAnimeItem(
 fun UserMangaItem(
     data: UserMangaData,
     titleLanguage: TitleLanguage,
-    isOwnList: Boolean = true,
     onClick: () -> Unit,
     onPlusOne: () -> Unit,
     onEditStatus: () -> Unit
@@ -1777,7 +1736,7 @@ fun UserMangaItem(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) showQuickActions = true }
+                    onLongClick = { showQuickActions = true }
                 ),
             verticalAlignment = Alignment.Top
         ) {
@@ -1908,7 +1867,6 @@ fun UserAnimeGridItem(
     anilistMedia: AniListMedia?,
     nowEpochSeconds: Long,
     titleLanguage: TitleLanguage,
-    isOwnList: Boolean = true,
     onClick: () -> Unit,
     onPlusOne: () -> Unit,
     onEditStatus: () -> Unit
@@ -1934,7 +1892,7 @@ fun UserAnimeGridItem(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) showQuickActions = true }
+                    onLongClick = { showQuickActions = true }
                 ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -2132,7 +2090,6 @@ private fun formatCountdownDuration(timeUntil: Long): String {
 fun UserMangaGridItem(
     data: UserMangaData, 
     titleLanguage: TitleLanguage,
-    isOwnList: Boolean = true,
     onClick: () -> Unit,
     onPlusOne: () -> Unit,
     onEditStatus: () -> Unit
@@ -2158,7 +2115,7 @@ fun UserMangaGridItem(
                 .alpha(alpha)
                 .combinedClickable(
                     onClick = onClick,
-                    onLongClick = { if (isOwnList) showQuickActions = true }
+                    onLongClick = { showQuickActions = true }
                 ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {

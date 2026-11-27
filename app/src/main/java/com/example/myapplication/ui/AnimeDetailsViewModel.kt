@@ -11,12 +11,12 @@ import com.example.myapplication.data.model.Broadcast
 import com.example.myapplication.data.model.NextAiringEpisode
 import com.example.myapplication.data.model.MyListStatus
 import com.example.myapplication.data.model.Recommendation
-import com.example.myapplication.data.remote.JikanCharacterData
-import com.example.myapplication.data.remote.JikanReviewData
-import com.example.myapplication.data.remote.JikanStaffData
-import com.example.myapplication.data.remote.JikanAnimeScoreBucket
-import com.example.myapplication.data.remote.JikanStreamingData
-import com.example.myapplication.data.remote.JikanThemesData
+import com.example.myapplication.data.remote.TenraiCharacterData
+import com.example.myapplication.data.remote.TenraiReviewData
+import com.example.myapplication.data.remote.TenraiStaffData
+import com.example.myapplication.data.remote.TenraiAnimeScoreBucket
+import com.example.myapplication.data.remote.TenraiStreamingData
+import com.example.myapplication.data.remote.TenraiThemesData
 import com.example.myapplication.data.repository.AnimeRepository
 import com.example.myapplication.data.local.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -661,14 +661,14 @@ sealed interface AnimeDetailsUiState {
     data object Loading : AnimeDetailsUiState
     data class Success(
         val details: AnimeDetailsResponse,
-        val characters: List<JikanCharacterData>,
-        val staff: List<JikanStaffData>,
+        val characters: List<TenraiCharacterData>,
+        val staff: List<TenraiStaffData>,
         val recommendations: List<Recommendation>,
-        val themes: JikanThemesData?,
-        val reviews: List<JikanReviewData>,
+        val themes: TenraiThemesData?,
+        val reviews: List<TenraiReviewData>,
         val allReviewsCount: Int,
-        val streaming: List<JikanStreamingData>,
-        val scoreDistribution: List<JikanAnimeScoreBucket> = emptyList(),
+        val streaming: List<TenraiStreamingData>,
+        val scoreDistribution: List<TenraiAnimeScoreBucket> = emptyList(),
         val airingMedia: AniListMedia?,
         val recommendationMeta: Map<Int, RecommendationCardMeta> = emptyMap(),
         val isSupplementaryLoaded: Boolean = false,
@@ -700,11 +700,11 @@ data class RecommendationCardMeta(
 )
 
 private data class SupplementaryAnimeData(
-    val characters: List<JikanCharacterData>,
-    val streaming: List<JikanStreamingData>
+    val characters: List<TenraiCharacterData>,
+    val streaming: List<TenraiStreamingData>
 )
 
 private data class ScoreDistributionFetchResult(
-    val data: List<JikanAnimeScoreBucket>,
+    val data: List<TenraiAnimeScoreBucket>,
     val errorMessage: String?
 )

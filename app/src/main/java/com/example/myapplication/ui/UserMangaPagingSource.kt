@@ -7,7 +7,6 @@ import com.example.myapplication.data.repository.AnimeRepository
 
 class UserMangaPagingSource(
     private val repository: AnimeRepository,
-    private val username: String?,
     private val status: String?,
     private val sort: String
 ) : PagingSource<Int, UserMangaData>() {
@@ -16,7 +15,6 @@ class UserMangaPagingSource(
         val offset = params.key ?: 0
         return try {
             val response = repository.getUserMangaList(
-                username = username,
                 status = if (status == "all") null else status,
                 sort = sort,
                 offset = offset,

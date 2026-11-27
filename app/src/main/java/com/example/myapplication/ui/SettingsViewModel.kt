@@ -86,6 +86,22 @@ class SettingsViewModel @Inject constructor(
         initialValue = "members"
     )
 
+    val listSectionScope = prefsManager.listSectionScopeFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "ANIME"
+    )
+    val listSortingScope = prefsManager.listSortingScopeFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "ANIME"
+    )
+    val discoverySortingScope = prefsManager.discoverySortingScopeFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "ANIME"
+    )
+
     val lastUsedSection = prefsManager.lastUsedSectionFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -211,6 +227,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setDefaultMangaDiscoverySort(sort: String) {
         viewModelScope.launch { prefsManager.saveDefaultMangaDiscoverySort(sort) }
+    }
+
+    fun setListSectionScope(scope: String) {
+        viewModelScope.launch { prefsManager.setListSectionScope(scope) }
+    }
+
+    fun setListSortingScope(scope: String) {
+        viewModelScope.launch { prefsManager.setListSortingScope(scope) }
+    }
+
+    fun setDiscoverySortingScope(scope: String) {
+        viewModelScope.launch { prefsManager.setDiscoverySortingScope(scope) }
     }
 
     fun setLastUsedSection(route: String) {
