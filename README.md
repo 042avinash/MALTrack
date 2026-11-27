@@ -115,6 +115,9 @@ The `HiddenGem` card suppresses `Beloved` for manga to avoid showing contradicto
 
 ## Previous Versions
 
+<details>
+<summary>Show previous version changelogs</summary>
+
 ## v1.5.0 Highlights
 
 - **Related and Recommendation Lists**:
@@ -685,6 +688,8 @@ Only the top 5 qualifying cards render for each anime.
   - Repository + caching improvements for repeated navigation and data reuse
   - Better state persistence and session continuity
 
+</details>
+
 ## Tech Stack
 
 - Kotlin
@@ -695,20 +700,35 @@ Only the top 5 qualifying cards render for each anime.
 - DataStore (preferences/tokens)
 - WorkManager (notifications/background work)
 
+## Architecture
+
+MALTrack is organized into a Compose presentation layer, data access, local storage, dependency injection, and background notification work.
+
+- **UI and navigation**: `MainActivity` hosts app navigation. Compose screens render state and send user actions to their ViewModels.
+- **ViewModels**: expose screen state with `StateFlow`, coordinate loading and edits, and call the repository or their specific services. `ProfileViewModel` also loads the signed-in profile's favorites from Jikan Edge.
+- **Repository and APIs**: `AnimeRepository` coordinates MyAnimeList API v2, Tenrai, and AnimeSchedule, with shared caching and throttling for catalogue and schedule data.
+- **Networking and dependency injection**: Retrofit services use Kotlinx Serialization. Hilt providers in `NetworkModule` configure clients and inject services; the MAL client adds the current bearer token from `TokenManager`.
+- **Local state**: DataStore-backed `UserPreferencesManager` stores app preferences, while `TokenManager` stores OAuth tokens.
+- **Background work**: WorkManager runs airing-notification checks through `AiringNotificationWorker` and its scheduler.
+
 ## Project Structure
 
 ```text
 app/src/main/java/com/example/myapplication/
 |- data/
-|  |- local/         # DataStore preferences and token storage
-|  |- model/         # API and app models
-|  |- remote/        # Retrofit API definitions
-|  |- repository/    # Repository logic
-|- di/               # Hilt modules
-|- notifications/    # WorkManager notification logic
-|- ui/               # Compose screens and ViewModels
-|- MainActivity.kt   # App navigation shell
-|- MalApplication.kt # Application setup
+|  |- local/         # DataStore preferences, OAuth tokens, and title helpers
+|  |- model/         # Anime, manga, profile, and list data models
+|  |- remote/        # Retrofit services and remote response models
+|  |- repository/    # Catalogue, list, profile-stat, and schedule data access
+|- di/               # Hilt network and app dependency providers
+|- notifications/    # WorkManager airing notification worker and scheduler
+|- ui/
+|  |- theme/         # Color palettes, theme setup, and typography
+|  |- *Screen.kt     # Compose screens for Home, lists, details, profile, and settings
+|  |- *ViewModel.kt  # Screen state and UI actions
+|  |- Scrollbars.kt  # Shared interactive scrollbars
+|- MainActivity.kt   # App startup and navigation shell
+|- MalApplication.kt # Hilt application setup
 ```
 
 ## Build
